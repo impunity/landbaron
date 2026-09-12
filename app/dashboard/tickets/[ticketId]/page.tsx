@@ -59,29 +59,57 @@ const sanitizeTicketDescription = (description?: string | null) => {
   }
 
   return description
-    .replace(/(^|\n)\s*Photo:\s*https?:\/\/[^\s)]+/gi, '$1')
+    .replace(/(^|\n)\s*Photo:\s*.*$/gim, '$1')
     .replace(/(^|\n)\s*Assigned to:\s*.*$/gm, '$1')
     .replace(/https?:\/\/[^\s)]+/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 };
 
-const parsePhotoUrls = (description?: string | null) => {
-  if (!description) return [];
+const parsePhotoEntries = (description?: string | null) => {
+  if (!description) return [] as Array<{ name: string; url: string }>;
 
-  const matches = description.match(/https?:\/\/[^\s)]+/gi) ?? [];
-  return [...new Set(matches.map((match) => match.replace(/[.,;!?]+$/, '')))].filter(Boolean);
+  const entries: Array<{ name: string; url: string }> = [];
+
+  for (const line of description.split(/\n+/)) {
+    const entryMatch = line.match(/^Photo:\s*(.*?)\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+    if (entryMatch) {
+      const name = entryMatch[1].trim() || 'photo';
+      const url = entryMatch[2].trim();
+      entries.push({ name, url });
+      continue;
+    }
+
+    const legacyMatch = line.match(/^Photo:\s*(https?:\/\/[^\s)]+)\s*$/i);
+    if (legacyMatch) {
+      entries.push({ name: 'photo', url: legacyMatch[1].trim() });
+    }
+  }
+
+  const urlMatches = description.match(/https?:\/\/[^\s)]+/gi) ?? [];
+  for (const url of urlMatches) {
+    const trimmedUrl = url.replace(/[.,;!?]+$/, '');
+    if (!entries.some((entry) => entry.url === trimmedUrl)) {
+      entries.push({ name: 'photo', url: trimmedUrl });
+    }
+  }
+
+  return entries;
 };
 
-const getPhotoFileName = (photoUrl: string) => {
+const getPhotoFileName = (photoUrl: string, fallbackName?: string) => {
+  if (fallbackName && fallbackName.trim()) {
+    return fallbackName.trim();
+  }
+
   try {
     const url = new URL(photoUrl);
     const pathName = url.pathname.split('/').filter(Boolean).at(-1) ?? photoUrl;
     const decodedName = decodeURIComponent(pathName);
     return decodedName.replace(/^[0-9]+-[a-f0-9]+-?/i, '').replace(/^\d+-/, '');
   } catch {
-    const fallbackName = photoUrl.split('/').filter(Boolean).at(-1) ?? photoUrl;
-    return fallbackName.replace(/^[0-9]+-[a-f0-9]+-?/i, '').replace(/^\d+-/, '');
+    const fallbackNameFromUrl = photoUrl.split('/').filter(Boolean).at(-1) ?? photoUrl;
+    return fallbackNameFromUrl.replace(/^[0-9]+-[a-f0-9]+-?/i, '').replace(/^\d+-/, '');
   }
 };
 
@@ -244,7 +272,7 @@ export default function TicketDetailPage() {
     loadTicketDetail(ticketId);
   }, [ticketId, session]);
 
-  const selectedPhotos = useMemo(() => parsePhotoUrls(ticket?.description ?? ''), [ticket]);
+  const selectedPhotos = useMemo(() => parsePhotoEntries(ticket?.description ?? ''), [ticket]);
 
   const handleTicketUpdate = async (updates: { notes?: string; status?: string; assigned_to?: string }) => {
     if (!ticketId) {
@@ -444,18 +472,18 @@ export default function TicketDetailPage() {
                 <div className="rounded-xl border border-slate-200 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Photos</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {selectedPhotos.map((photoUrl) => {
-                      const photoName = getPhotoFileName(photoUrl);
+                    {selectedPhotos.map((photoEntry) => {
+                      const photoName = getPhotoFileName(photoEntry.url, photoEntry.name);
 
                       return (
                         <a
-                          key={photoUrl}
-                          href={photoUrl}
+                          key={photoEntry.url}
+                          href={photoEntry.url}
                           target="_blank"
                           rel="noreferrer"
                           className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
                         >
-                          <img src={photoUrl} alt={photoName} className="h-48 w-full object-cover" />
+                          <img src={photoEntry.url} alt={photoName} className="h-48 w-full object-cover" />
                           <div className="border-t border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
                             {photoName}
                           </div>

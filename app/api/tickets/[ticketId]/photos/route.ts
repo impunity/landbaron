@@ -63,9 +63,10 @@ export async function POST(
     }
 
     const existingDescription = existingTicket?.description ?? '';
+    const photoLabel = file.name.trim() || 'photo';
     const nextDescription = existingDescription.trim()
-      ? `${existingDescription.trim()}\n\nPhoto: ${publicUrl}`
-      : `Photo: ${publicUrl}`;
+      ? `${existingDescription.trim()}\n\nPhoto: ${photoLabel} | ${publicUrl}`
+      : `Photo: ${photoLabel} | ${publicUrl}`;
 
     const { error: updateError } = await supabaseAdmin
       .from('tickets')
