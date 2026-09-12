@@ -122,26 +122,6 @@ const initialFormState: TicketFormState = {
   description: '',
 };
 
-const STAFF_STORAGE_KEY = 'landbaron-staff-roster';
-
-const getStoredStaff = (): StaffMember[] => {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STAFF_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSessionState] = useState<SessionUser | null>(null);
@@ -240,19 +220,38 @@ export default function DashboardPage() {
       return;
     }
 
-    const storedStaff = getStoredStaff();
-    setStaffMembers(storedStaff);
-    setStaffHydrated(true);
-    loadTickets();
+    const loadStaffMembers = async () => {
+      if (session.role !== 'owner') {
+        setStaffMembers([]);
+        setStaffHydrated(true);
+        loadTickets();
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/staff', {
+          headers: {
+            'x-user-role': session.role,
+          },
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error || 'Unable to load staff members.');
+        }
+
+        setStaffMembers(Array.isArray(result.staff) ? result.staff : []);
+      } catch (loadStaffError) {
+        console.error(loadStaffError);
+        setStaffMembers([]);
+      } finally {
+        setStaffHydrated(true);
+        loadTickets();
+      }
+    };
+
+    void loadStaffMembers();
   }, [session]);
-
-  useEffect(() => {
-    if (!session || !staffHydrated || typeof window === 'undefined') {
-      return;
-    }
-
-    window.localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembers));
-  }, [session, staffHydrated, staffMembers]);
 
   const visibleTickets = useMemo(() => getVisibleTickets(tickets, session), [tickets, session]);
 
@@ -322,45 +321,84 @@ export default function DashboardPage() {
     router.push(`/dashboard/tickets/${ticketId}`);
   };
 
-  const handleAddStaffMember = () => {
+  const handleAddStaffMember = async () => {
     const trimmedName = newStaffName.trim();
     const trimmedEmail = newStaffEmail.trim();
 
-    if (!trimmedName || !trimmedEmail) {
+    if (!trimmedName || !trimmedEmail || session?.role !== 'owner') {
       return;
     }
 
-    const staffEntry: StaffMember = {
-      id: `${trimmedEmail.toLowerCase()}-${Date.now()}`,
-      name: trimmedName,
-      email: trimmedEmail.toLowerCase(),
-      role: newStaffRole,
-    };
+    try {
+      const response = await fetch('/api/staff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': session.role,
+        },
+        body: JSON.stringify({
+          name: trimmedName,
+          email: trimmedEmail.toLowerCase(),
+          role: newStaffRole,
+        }),
+      });
 
-    setStaffMembers((current: StaffMember[]) => {
-      const existing = current.find(
-        (member: StaffMember) => member.email.toLowerCase() === trimmedEmail.toLowerCase(),
-      );
-      if (existing) {
-        return current.map((member: StaffMember) =>
-          member.email.toLowerCase() === trimmedEmail.toLowerCase()
-            ? { ...member, name: trimmedName, role: newStaffRole }
-            : member,
-        );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Staff could not be saved.');
       }
 
-      return [staffEntry, ...current];
-    });
+      const nextMember = result.staff as StaffMember | null;
+      setStaffMembers((current: StaffMember[]) => {
+        if (!nextMember) {
+          return current;
+        }
 
-    setNewStaffName('');
-    setNewStaffEmail('');
-    setNewStaffRole('Maintenance');
+        const existingIndex = current.findIndex(
+          (member: StaffMember) => member.email.toLowerCase() === nextMember.email.toLowerCase(),
+        );
+
+        if (existingIndex >= 0) {
+          const updated = [...current];
+          updated[existingIndex] = nextMember;
+          return updated;
+        }
+
+        return [nextMember, ...current];
+      });
+
+      setNewStaffName('');
+      setNewStaffEmail('');
+      setNewStaffRole('Maintenance');
+    } catch (staffError) {
+      console.error(staffError);
+    }
   };
 
-  const handleRemoveStaffMember = (email: string) => {
-    setStaffMembers((current: StaffMember[]) =>
-      current.filter((member: StaffMember) => member.email.toLowerCase() !== email.toLowerCase()),
-    );
+  const handleRemoveStaffMember = async (email: string) => {
+    if (session?.role !== 'owner') {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/staff?email=${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-role': session.role,
+        },
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || 'Staff member could not be removed.');
+      }
+
+      setStaffMembers((current: StaffMember[]) =>
+        current.filter((member: StaffMember) => member.email.toLowerCase() !== email.toLowerCase()),
+      );
+    } catch (removeError) {
+      console.error(removeError);
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
