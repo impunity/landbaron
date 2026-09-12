@@ -18,8 +18,9 @@ const getDescriptionParts = (description?: string | null) => {
   const baseParts: string[] = [];
 
   for (const section of sections) {
-    if (/^Assigned to:/i.test(section)) {
-      assignment = section.replace(/^Assigned to:\s*/i, '').trim();
+    const assignmentMatch = section.match(/^Assigned to:\s*(.+)$/i);
+    if (assignmentMatch) {
+      assignment = assignmentMatch[1].trim();
       continue;
     }
 

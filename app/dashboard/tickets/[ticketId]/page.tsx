@@ -53,6 +53,17 @@ const normalizePriority = (priority?: string | null) => {
   return value;
 };
 
+const sanitizeTicketDescription = (description?: string | null) => {
+  if (!description) {
+    return '';
+  }
+
+  return description
+    .replace(/https?:\/\/[^\s)]+/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 const parsePhotoUrls = (description?: string | null) => {
   if (!description) return [];
 
@@ -105,13 +116,20 @@ const parseAssignment = (description?: string | null) => {
     return { label: 'Unassigned', value: '' };
   }
 
-  const assignmentMatch = description.match(/^Assigned to:\s*(.+?)\n{2,}[\s\S]*$/i);
-  if (!assignmentMatch) {
-    return { label: 'Unassigned', value: '' };
+  const sections = description
+    .split(/\n{2,}/)
+    .map((section) => section.trim())
+    .filter(Boolean);
+
+  for (const section of sections) {
+    const assignmentMatch = section.match(/^Assigned to:\s*(.+)$/i);
+    if (assignmentMatch) {
+      const value = assignmentMatch[1].trim();
+      return { label: value || 'Unassigned', value };
+    }
   }
 
-  const value = assignmentMatch[1].trim();
-  return { label: value || 'Unassigned', value };
+  return { label: 'Unassigned', value: '' };
 };
 
 export default function TicketDetailPage() {
@@ -423,7 +441,7 @@ export default function TicketDetailPage() {
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Description</p>
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                  {ticket.description ?? 'No issue description provided.'}
+                  {sanitizeTicketDescription(ticket.description) || 'No issue description provided.'}
                 </p>
               </div>
 

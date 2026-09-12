@@ -88,6 +88,17 @@ const normalizePriority = (priority?: string | null) => {
   return value;
 };
 
+const sanitizeTicketDescription = (description?: string | null) => {
+  if (!description) {
+    return '';
+  }
+
+  return description
+    .replace(/https?:\/\/[^\s)]+/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 const parsePhotoUrls = (description?: string | null) => {
   if (!description) return [];
 
@@ -796,7 +807,7 @@ export default function DashboardPage() {
                         </div>
 
                         <p className="max-w-2xl text-sm text-slate-600">
-                          {ticket.description ?? 'No description provided.'}
+                          {sanitizeTicketDescription(ticket.description) || 'No description provided.'}
                         </p>
 
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
