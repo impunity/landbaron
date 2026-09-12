@@ -4,19 +4,26 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getDescriptionParts = (description?: string | null) => {
   if (!description) {
-    return { base: '', notes: '', hasNotes: false };
+    return { base: '', notes: '', assignment: '', hasNotes: false, hasAssignment: false };
   }
 
-  const noteMatch = description.match(/(?:^|\n\n)Owner notes:\n([\s\S]*)$/i);
+  const cleaned = description.trim();
+  const assignmentMatch = cleaned.match(/^Assigned to:\s*(.+?)\n{2,}([\s\S]*)$/i);
+  const noteMatch = cleaned.match(/(?:^|\n\n)Owner notes:\n([\s\S]*)$/i);
 
-  if (!noteMatch) {
-    return { base: description.trim(), notes: '', hasNotes: false };
-  }
+  const baseWithoutAssignment = assignmentMatch ? assignmentMatch[2].trim() : cleaned;
+  const baseWithoutNotes = noteMatch ? (baseWithoutAssignment.slice(0, noteMatch.index ?? 0) ?? '').trim() : baseWithoutAssignment;
 
-  const base = (description.slice(0, noteMatch.index ?? 0) ?? '').replace(/\n{3,}$/g, '').trim();
-  const notes = noteMatch[1].trim();
+  const assignment = assignmentMatch ? assignmentMatch[1].trim() : '';
+  const notes = noteMatch ? noteMatch[1].trim() : '';
 
-  return { base, notes, hasNotes: Boolean(notes) };
+  return {
+    base: baseWithoutNotes.replace(/\n{3,}/g, '\n\n').trim(),
+    notes,
+    assignment,
+    hasNotes: Boolean(notes),
+    hasAssignment: Boolean(assignment),
+  };
 };
 
 export async function GET(
@@ -63,7 +70,7 @@ export async function PATCH(
 ) {
   try {
     const { ticketId } = await params;
-    const { notes, status } = await request.json();
+    const { notes, status, assigned_to } = await request.json();
 
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -87,24 +94,68 @@ export async function PATCH(
       }
     }
 
-    if (typeof notes === 'string') {
-      const { data: existingTicket, error: fetchError } = await supabaseAdmin
-        .from('tickets')
-        .select('description')
-        .eq('id', ticketId)
-        .maybeSingle();
+    const { data: existingTicket, error: fetchError } = await supabaseAdmin
+      .from('tickets')
+      .select('description')
+      .eq('id', ticketId)
+      .maybeSingle();
 
-      if (fetchError) {
-        throw fetchError;
+    if (fetchError) {
+      throw fetchError;
+    }
+
+    const currentDescription = existingTicket?.description ?? '';
+    const parsedDescription = getDescriptionParts(currentDescription);
+    const baseDescription = parsedDescription.base;
+    const currentNotes = parsedDescription.notes;
+    const currentAssignment = parsedDescription.assignment;
+
+    const nextDescriptionParts: string[] = [];
+
+    if (typeof assigned_to === 'string') {
+      const trimmedAssignee = assigned_to.trim();
+      const nextAssignment = trimmedAssignee ? `Assigned to: ${trimmedAssignee}` : '';
+
+      if (nextAssignment) {
+        nextDescriptionParts.push(nextAssignment);
       }
+    } else if (currentAssignment) {
+      nextDescriptionParts.push(`Assigned to: ${currentAssignment}`);
+    }
 
-      const { base: baseDescription } = getDescriptionParts(existingTicket?.description ?? '');
+    let nextBaseDescription = baseDescription;
+    let nextNotes = currentNotes;
+
+    if (typeof notes === 'string') {
       const trimmedNotes = notes.trim();
-      const nextDescription = trimmedNotes
-        ? `${baseDescription ? `${baseDescription}\n\n` : ''}Owner notes:\n${trimmedNotes}`
-        : baseDescription;
+      nextNotes = trimmedNotes;
+    }
 
-      updates.description = nextDescription || null;
+    if (nextBaseDescription) {
+      nextDescriptionParts.push(nextBaseDescription);
+    }
+
+    if (nextNotes) {
+      nextDescriptionParts.push(`Owner notes:\n${nextNotes}`);
+    }
+
+    if (typeof assigned_to === 'string' && !assigned_to.trim()) {
+      const index = nextDescriptionParts.findIndex((part) => part.startsWith('Assigned to:'));
+      if (index >= 0) {
+        nextDescriptionParts.splice(index, 1);
+      }
+    }
+
+    if (typeof assigned_to === 'string') {
+      updates.description = nextDescriptionParts.join('\n\n') || null;
+    }
+
+    if (typeof notes === 'string') {
+      updates.description = nextDescriptionParts.join('\n\n') || null;
+    }
+
+    if (typeof assigned_to === 'string' && !assigned_to.trim() && !currentNotes && !baseDescription) {
+      updates.description = null;
     }
 
     if (Object.keys(updates).length === 0) {

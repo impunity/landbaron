@@ -21,6 +21,13 @@ type TicketRow = {
   owner_notes?: string | null;
 };
 
+type StaffMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Owner' | 'Maintenance' | 'Contractor';
+};
+
 const normalizeStatus = (status?: string | null) => {
   if (!status) return 'Open';
 
@@ -61,6 +68,40 @@ const labelMap: Record<string, string> = {
   Closed: 'Dismissed',
 };
 
+const STAFF_STORAGE_KEY = 'landbaron-staff-roster';
+
+const getStoredStaff = (): StaffMember[] => {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STAFF_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const parseAssignment = (description?: string | null) => {
+  if (!description) {
+    return { label: 'Unassigned', value: '' };
+  }
+
+  const assignmentMatch = description.match(/^Assigned to:\s*(.+?)\n{2,}[\s\S]*$/i);
+  if (!assignmentMatch) {
+    return { label: 'Unassigned', value: '' };
+  }
+
+  const value = assignmentMatch[1].trim();
+  return { label: value || 'Unassigned', value };
+};
+
 export default function TicketDetailPage() {
   const router = useRouter();
   const params = useParams<{ ticketId: string }>();
@@ -73,6 +114,8 @@ export default function TicketDetailPage() {
   const [detailSaving, setDetailSaving] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [statusDraft, setStatusDraft] = useState<string>('Open');
+  const [assignedStaff, setAssignedStaff] = useState('');
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
 
@@ -141,6 +184,7 @@ export default function TicketDetailPage() {
       const nextTicket = result.ticket ?? null;
       const description = nextTicket?.description ?? '';
       const noteMatch = description.match(/Owner notes:\n([\s\S]*)$/i);
+      const assignment = parseAssignment(description);
 
       if (session?.role === 'tenant') {
         const allowed = description.toLowerCase().includes(`email: ${session.email.toLowerCase()}`);
@@ -152,6 +196,7 @@ export default function TicketDetailPage() {
       setTicket(nextTicket);
       setStatusDraft(normalizeStatus(nextTicket?.status ?? 'Open'));
       setNoteDraft(noteMatch ? noteMatch[1].trim() : '');
+      setAssignedStaff(assignment.value);
     } catch (detailError) {
       console.error(detailError);
       setError('Unable to load ticket details right now.');
@@ -160,6 +205,10 @@ export default function TicketDetailPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setStaffMembers(getStoredStaff());
+  }, []);
 
   useEffect(() => {
     if (!ticketId) {
@@ -172,7 +221,7 @@ export default function TicketDetailPage() {
 
   const selectedPhotos = useMemo(() => parsePhotoUrls(ticket?.description ?? ''), [ticket]);
 
-  const handleTicketUpdate = async (updates: { notes?: string; status?: string }) => {
+  const handleTicketUpdate = async (updates: { notes?: string; status?: string; assigned_to?: string }) => {
     if (!ticketId) {
       return;
     }
@@ -451,6 +500,29 @@ export default function TicketDetailPage() {
                     ))}
                   </select>
                 </div>
+
+                <div className="mt-4">
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Assign to
+                  </label>
+                  <select
+                    value={assignedStaff}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setAssignedStaff(nextValue);
+                      void handleTicketUpdate({ assigned_to: nextValue, status: statusDraft, notes: noteDraft });
+                    }}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  >
+                    <option value="">Unassigned</option>
+                    {staffMembers.map((member) => (
+                      <option key={member.id} value={`${member.name} <${member.email}>`}>
+                        {member.name} ({member.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <p className="mt-3 text-xs text-slate-500">Updated {new Date(ticket.updated_at).toLocaleDateString()}</p>
                 {ticket.resolved_at && (
                   <p className="mt-1 text-xs text-emerald-700">
@@ -481,7 +553,7 @@ export default function TicketDetailPage() {
                 <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => handleTicketUpdate({ status: statusDraft, notes: noteDraft })}
+                    onClick={() => handleTicketUpdate({ status: statusDraft, notes: noteDraft, assigned_to: assignedStaff })}
                     disabled={detailSaving}
                     className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >

@@ -30,6 +30,13 @@ type TicketFormState = {
   description: string;
 };
 
+type StaffMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Owner' | 'Maintenance' | 'Contractor';
+};
+
 const statusStyles: Record<string, string> = {
   Open: 'bg-rose-100 text-rose-700 ring-rose-200',
   'In Progress': 'bg-amber-100 text-amber-700 ring-amber-200',
@@ -95,6 +102,26 @@ const initialFormState: TicketFormState = {
   description: '',
 };
 
+const STAFF_STORAGE_KEY = 'landbaron-staff-roster';
+
+const getStoredStaff = (): StaffMember[] => {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STAFF_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSessionState] = useState<SessionUser | null>(null);
@@ -108,6 +135,10 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState<StaffMember['role']>('Maintenance');
 
   useEffect(() => {
     const client = supabase;
@@ -188,8 +219,15 @@ export default function DashboardPage() {
       return;
     }
 
+    setStaffMembers(getStoredStaff());
     loadTickets();
   }, [session]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembers));
+    }
+  }, [staffMembers]);
 
   const visibleTickets = useMemo(() => getVisibleTickets(tickets, session), [tickets, session]);
 
@@ -257,6 +295,41 @@ export default function DashboardPage() {
 
   const openTicketView = (ticketId: string) => {
     router.push(`/dashboard/tickets/${ticketId}`);
+  };
+
+  const handleAddStaffMember = () => {
+    const trimmedName = newStaffName.trim();
+    const trimmedEmail = newStaffEmail.trim();
+
+    if (!trimmedName || !trimmedEmail) {
+      return;
+    }
+
+    const staffEntry: StaffMember = {
+      id: `${trimmedEmail.toLowerCase()}-${Date.now()}`,
+      name: trimmedName,
+      email: trimmedEmail.toLowerCase(),
+      role: newStaffRole,
+    };
+
+    setStaffMembers((current: StaffMember[]) => {
+      const existing = current.find(
+        (member: StaffMember) => member.email.toLowerCase() === trimmedEmail.toLowerCase(),
+      );
+      if (existing) {
+        return current.map((member: StaffMember) =>
+          member.email.toLowerCase() === trimmedEmail.toLowerCase()
+            ? { ...member, name: trimmedName, role: newStaffRole }
+            : member,
+        );
+      }
+
+      return [staffEntry, ...current];
+    });
+
+    setNewStaffName('');
+    setNewStaffEmail('');
+    setNewStaffRole('Maintenance');
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -501,6 +574,64 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </section>
+        )}
+
+        {session.role === 'owner' && (
+          <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Staff</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">Who can be assigned</h2>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_0.8fr_auto]">
+              <input
+                value={newStaffName}
+                onChange={(event) => setNewStaffName(event.target.value)}
+                placeholder="Name"
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+              />
+              <input
+                value={newStaffEmail}
+                onChange={(event) => setNewStaffEmail(event.target.value)}
+                placeholder="email@example.com"
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+              />
+              <select
+                value={newStaffRole}
+                onChange={(event) => setNewStaffRole(event.target.value as StaffMember['role'])}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+              >
+                <option value="Maintenance">Maintenance</option>
+                <option value="Contractor">Contractor</option>
+                <option value="Owner">Owner</option>
+              </select>
+              <button
+                type="button"
+                onClick={handleAddStaffMember}
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                Add staff
+              </button>
+            </div>
+
+            {staffMembers.length > 0 ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {staffMembers.map((member) => (
+                  <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-sm font-semibold text-slate-900">{member.name}</p>
+                    <p className="mt-1 text-xs text-slate-500">{member.email}</p>
+                    <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                      {member.role}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">No staff added yet.</p>
+            )}
           </section>
         )}
 
