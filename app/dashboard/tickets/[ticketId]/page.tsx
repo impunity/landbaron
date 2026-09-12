@@ -60,6 +60,18 @@ const parsePhotoUrls = (description?: string | null) => {
   return [...new Set(matches.map((match) => match.replace(/[.,;!?]+$/, '')))].filter(Boolean);
 };
 
+const getPhotoFileName = (photoUrl: string) => {
+  try {
+    const url = new URL(photoUrl);
+    const pathName = url.pathname.split('/').filter(Boolean).at(-1) ?? photoUrl;
+    const decodedName = decodeURIComponent(pathName);
+    return decodedName.replace(/^[0-9]+-[a-f0-9]+-?/i, '').replace(/^\d+-/, '');
+  } catch {
+    const fallbackName = photoUrl.split('/').filter(Boolean).at(-1) ?? photoUrl;
+    return fallbackName.replace(/^[0-9]+-[a-f0-9]+-?/i, '').replace(/^\d+-/, '');
+  }
+};
+
 const labelMap: Record<string, string> = {
   Open: 'Open',
   'In Progress': 'In Progress',
@@ -419,17 +431,24 @@ export default function TicketDetailPage() {
                 <div className="rounded-xl border border-slate-200 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Photos</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {selectedPhotos.map((photoUrl) => (
-                      <a
-                        key={photoUrl}
-                        href={photoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
-                      >
-                        <img src={photoUrl} alt="Ticket attachment" className="h-48 w-full object-cover" />
-                      </a>
-                    ))}
+                    {selectedPhotos.map((photoUrl) => {
+                      const photoName = getPhotoFileName(photoUrl);
+
+                      return (
+                        <a
+                          key={photoUrl}
+                          href={photoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+                        >
+                          <img src={photoUrl} alt={photoName} className="h-48 w-full object-cover" />
+                          <div className="border-t border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
+                            {photoName}
+                          </div>
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
               )}
