@@ -106,6 +106,15 @@ const parsePhotoUrls = (description?: string | null) => {
   return [...new Set(matches.map((match) => match.replace(/[.,;!?]+$/, '')))].filter(Boolean);
 };
 
+const parseAssignmentFromDescription = (description?: string | null) => {
+  if (!description) {
+    return 'Unassigned';
+  }
+
+  const assignmentMatch = description.match(/(?:^|\n)Assigned to:\s*([^\n]+)/i);
+  return assignmentMatch ? assignmentMatch[1].trim() : 'Unassigned';
+};
+
 const initialFormState: TicketFormState = {
   severity: '',
   email: '',
@@ -788,6 +797,7 @@ export default function DashboardPage() {
               {filteredTickets.map((ticket) => {
                 const status = normalizeStatus(ticket.status);
                 const displayPriority = normalizePriority(ticket.priority);
+                const assignmentLabel = parseAssignmentFromDescription(ticket.description);
 
                 return (
                   <article
@@ -815,6 +825,7 @@ export default function DashboardPage() {
                             {ticket.category ?? 'General'}
                           </span>
                           <span>{displayPriority} priority</span>
+                          <span>Assigned to: {assignmentLabel}</span>
                           <span>Updated {new Date(ticket.updated_at).toLocaleDateString()}</span>
                         </div>
                       </div>
