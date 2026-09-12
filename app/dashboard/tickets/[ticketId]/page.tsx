@@ -59,6 +59,8 @@ const sanitizeTicketDescription = (description?: string | null) => {
   }
 
   return description
+    .replace(/(^|\n)\s*Photo:\s*https?:\/\/[^\s)]+/gi, '$1')
+    .replace(/(^|\n)\s*Assigned to:\s*.*$/gm, '$1')
     .replace(/https?:\/\/[^\s)]+/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -116,20 +118,13 @@ const parseAssignment = (description?: string | null) => {
     return { label: 'Unassigned', value: '' };
   }
 
-  const sections = description
-    .split(/\n{2,}/)
-    .map((section) => section.trim())
-    .filter(Boolean);
-
-  for (const section of sections) {
-    const assignmentMatch = section.match(/^Assigned to:\s*(.+)$/i);
-    if (assignmentMatch) {
-      const value = assignmentMatch[1].trim();
-      return { label: value || 'Unassigned', value };
-    }
+  const assignmentMatch = description.match(/(?:^|\n)Assigned to:\s*([^\n]+)/i);
+  if (!assignmentMatch) {
+    return { label: 'Unassigned', value: '' };
   }
 
-  return { label: 'Unassigned', value: '' };
+  const value = assignmentMatch[1].trim();
+  return { label: value || 'Unassigned', value };
 };
 
 export default function TicketDetailPage() {
