@@ -147,6 +147,9 @@ export default function DashboardPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [staffHydrated, setStaffHydrated] = useState(false);
+  const [staffSubmitting, setStaffSubmitting] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
+  const [staffSuccess, setStaffSuccess] = useState<string | null>(null);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
   const [newStaffRole, setNewStaffRole] = useState<StaffMember['role']>('Maintenance');
@@ -336,8 +339,19 @@ export default function DashboardPage() {
     const trimmedEmail = newStaffEmail.trim();
 
     if (!trimmedName || !trimmedEmail || session?.role !== 'owner') {
+      setStaffError('Name, email, and owner access are required.');
       return;
     }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(trimmedEmail)) {
+      setStaffError('Please enter a valid email address.');
+      return;
+    }
+
+    setStaffSubmitting(true);
+    setStaffError(null);
+    setStaffSuccess(null);
 
     try {
       const response = await fetch('/api/staff', {
@@ -377,18 +391,29 @@ export default function DashboardPage() {
         return [nextMember, ...current];
       });
 
+      setStaffSuccess(`Added ${trimmedName} to the staff roster.`);
       setNewStaffName('');
       setNewStaffEmail('');
       setNewStaffRole('Maintenance');
     } catch (staffError) {
+      const message = staffError instanceof Error && staffError.message
+        ? staffError.message
+        : 'Staff could not be saved. Check that the staff_members table exists in Supabase.';
+      setStaffError(message);
       console.error(staffError);
+    } finally {
+      setStaffSubmitting(false);
     }
   };
 
   const handleRemoveStaffMember = async (email: string) => {
     if (session?.role !== 'owner') {
+      setStaffError('Only owners can remove staff members.');
       return;
     }
+
+    setStaffError(null);
+    setStaffSuccess(null);
 
     try {
       const response = await fetch(`/api/staff?email=${encodeURIComponent(email)}`, {
@@ -406,7 +431,12 @@ export default function DashboardPage() {
       setStaffMembers((current: StaffMember[]) =>
         current.filter((member: StaffMember) => member.email.toLowerCase() !== email.toLowerCase()),
       );
+      setStaffSuccess('Staff member removed.');
     } catch (removeError) {
+      const message = removeError instanceof Error && removeError.message
+        ? removeError.message
+        : 'Staff member could not be removed.';
+      setStaffError(message);
       console.error(removeError);
     }
   };
@@ -690,11 +720,18 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={handleAddStaffMember}
-                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
+                disabled={staffSubmitting}
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Add staff
+                {staffSubmitting ? 'Saving...' : 'Add staff'}
               </button>
             </div>
+
+            {(staffError || staffSuccess) && (
+              <div className={`mt-4 rounded-xl border px-3 py-2 text-sm ${staffError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                {staffError ?? staffSuccess}
+              </div>
+            )}
 
             {staffMembers.length > 0 ? (
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
