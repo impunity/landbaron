@@ -43,7 +43,7 @@ const labelMap: Record<string, string> = {
   'In Progress': 'In Progress',
   'Waiting on Parts': 'Waiting on Parts',
   Resolved: 'Resolved',
-  Closed: 'Closed',
+  Closed: 'Dismissed',
 };
 
 const filterTabs = [
@@ -51,6 +51,7 @@ const filterTabs = [
   { key: 'Open', label: 'Open' },
   { key: 'In Progress', label: 'In Progress' },
   { key: 'Resolved', label: 'Resolved' },
+  { key: 'Closed', label: 'Dismissed' },
 ] as const;
 
 type FilterKey = (typeof filterTabs)[number]['key'];
@@ -63,7 +64,7 @@ const normalizeStatus = (status?: string | null) => {
   if (value.toLowerCase() === 'in progress') return 'In Progress';
   if (value.toLowerCase() === 'waiting on parts') return 'Waiting on Parts';
   if (value.toLowerCase() === 'resolved') return 'Resolved';
-  if (value.toLowerCase() === 'closed') return 'Closed';
+  if (value.toLowerCase() === 'closed' || value.toLowerCase() === 'dismissed') return 'Closed';
 
   return value;
 };
@@ -78,6 +79,13 @@ const normalizePriority = (priority?: string | null) => {
   if (value.toLowerCase() === 'emergency') return 'Emergency';
 
   return value;
+};
+
+const parsePhotoUrls = (description?: string | null) => {
+  if (!description) return [];
+
+  const matches = description.match(/https?:\/\/[^\s)]+/gi) ?? [];
+  return [...new Set(matches.map((match) => match.replace(/[.,;!?]+$/, '')))].filter(Boolean);
 };
 
 const initialFormState: TicketFormState = {
@@ -100,16 +108,18 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
-  const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [detailSaving, setDetailSaving] = useState(false);
-  const [noteDraft, setNoteDraft] = useState('');
-  const [statusDraft, setStatusDraft] = useState<string>('Open');
 
   useEffect(() => {
+    const client = supabase;
+
+    if (!client) {
+      setError('Supabase is not configured for this environment yet.');
+      setLoading(false);
+      return;
+    }
+
     const syncSession = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await client.auth.getSession();
       const sessionUser = data.session?.user;
 
       if (!sessionUser) {
@@ -127,7 +137,7 @@ export default function DashboardPage() {
 
     syncSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
       const nextUser = nextSession?.user;
 
       if (!nextUser) {
@@ -196,8 +206,43 @@ export default function DashboardPage() {
       open: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Open').length,
       inProgress: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'In Progress').length,
       resolved: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Resolved').length,
+      dismissed: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Closed').length,
       total: visibleTickets.length,
     }),
+    [visibleTickets],
+  );
+
+  const propertySummary = useMemo(() => {
+    const grouped = new Map<string, { count: number; active: number }>();
+
+    visibleTickets.forEach((ticket) => {
+      const property = ticket.property_id?.trim() || 'Unassigned';
+      const current = grouped.get(property) ?? { count: 0, active: 0 };
+      const status = normalizeStatus(ticket.status);
+
+      current.count += 1;
+      if (status !== 'Resolved' && status !== 'Closed') {
+        current.active += 1;
+      }
+
+      grouped.set(property, current);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([property, data]) => ({
+        property,
+        count: data.count,
+        active: data.active,
+      }))
+      .sort((a, b) => b.active - a.active || b.count - a.count)
+      .slice(0, 4);
+  }, [visibleTickets]);
+
+  const recentActivity = useMemo(
+    () =>
+      [...visibleTickets]
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, 4),
     [visibleTickets],
   );
 
@@ -210,77 +255,8 @@ export default function DashboardPage() {
     setFormSuccess(null);
   };
 
-  const loadTicketDetail = async (ticketId: string) => {
-    setSelectedTicketId(ticketId);
-    setDetailLoading(true);
-    setDetailError(null);
-
-    try {
-      const response = await fetch(`/api/tickets/${ticketId}`);
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result?.error || 'Could not load ticket details.');
-      }
-
-      const ticket = result.ticket ?? null;
-      const description = ticket?.description ?? '';
-      const noteMatch = description.match(/Owner notes:\n([\s\S]*)$/i);
-
-      if (session?.role === 'tenant') {
-        const allowed = description.toLowerCase().includes(`email: ${session.email.toLowerCase()}`);
-        if (!allowed) {
-          throw new Error('You can only view your own tickets.');
-        }
-      }
-
-      setSelectedTicket(ticket);
-      setStatusDraft(normalizeStatus(ticket?.status ?? 'Open'));
-      setNoteDraft(noteMatch ? noteMatch[1].trim() : '');
-    } catch (detailError) {
-      console.error(detailError);
-      setDetailError('Unable to load ticket details right now.');
-      setSelectedTicket(null);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const handleTicketUpdate = async (updates: { notes?: string; status?: string }) => {
-    if (!selectedTicketId) {
-      return;
-    }
-
-    setDetailSaving(true);
-    setDetailError(null);
-
-    try {
-      const response = await fetch(`/api/tickets/${selectedTicketId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
-
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result?.error || 'Ticket update failed.');
-      }
-
-      await loadTickets();
-      await loadTicketDetail(selectedTicketId);
-    } catch (updateError) {
-      console.error(updateError);
-      setDetailError(
-        updateError instanceof Error && updateError.message
-          ? updateError.message
-          : 'Ticket update failed. Please try again.',
-      );
-    } finally {
-      setDetailSaving(false);
-    }
+  const openTicketView = (ticketId: string) => {
+    router.push(`/dashboard/tickets/${ticketId}`);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -381,12 +357,26 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white">
+            <div
+              className={[
+                'rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em]',
+                session.role === 'owner'
+                  ? 'bg-slate-900 text-white'
+                  : session.role === 'maintenance' || session.role === 'contractor'
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-slate-200 text-slate-700',
+              ].join(' ')}
+            >
               {getRoleLabel(session.role)}
             </div>
             <button
               type="button"
               onClick={async () => {
+                if (!supabase) {
+                  router.push('/login');
+                  return;
+                }
+
                 await supabase.auth.signOut();
                 router.push('/login');
               }}
@@ -514,7 +504,7 @@ export default function DashboardPage() {
           </section>
         )}
 
-        <section className="mb-8 grid gap-4 md:grid-cols-3">
+        <section className="mb-8 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Total</p>
             <p className="mt-2 text-3xl font-semibold">{summary.total}</p>
@@ -526,6 +516,68 @@ export default function DashboardPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Resolved</p>
             <p className="mt-2 text-3xl font-semibold text-emerald-600">{summary.resolved}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">Dismissed</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-700">{summary.dismissed}</p>
+          </div>
+        </section>
+
+        <section className="mb-8 grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Portfolio snapshot
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">Active property load</h2>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {propertySummary.map((entry) => (
+                <div key={entry.property} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {entry.property}
+                  </p>
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <div>
+                      <p className="text-2xl font-semibold text-slate-900">{entry.count}</p>
+                      <p className="text-xs text-slate-500">total issues</p>
+                    </div>
+                    <span className="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
+                      {entry.active} active
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Recent activity
+            </p>
+            <div className="mt-4 space-y-3">
+              {recentActivity.map((ticket) => (
+                <button
+                  key={ticket.id}
+                  type="button"
+                  onClick={() => openTicketView(ticket.id)}
+                  className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-slate-100"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">{ticket.title}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {ticket.property_id ?? 'Unassigned'} • {normalizeStatus(ticket.status)}
+                    </p>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    {new Date(ticket.updated_at).toLocaleDateString()}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -576,7 +628,7 @@ export default function DashboardPage() {
                 return (
                   <article
                     key={ticket.id}
-                    onClick={() => loadTicketDetail(ticket.id)}
+                    onClick={() => openTicketView(ticket.id)}
                     className="cursor-pointer p-5 transition hover:bg-slate-50"
                   >
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -616,144 +668,6 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
-
-        {selectedTicket && (
-          <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Ticket details
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">{selectedTicket.title}</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedTicket(null)}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-              >
-                Close
-              </button>
-            </div>
-
-            {detailLoading ? (
-              <div className="text-sm text-slate-500">Loading ticket details...</div>
-            ) : detailError ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                {detailError}
-              </div>
-            ) : (
-              <div className="grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
-                <div className="space-y-5">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Description
-                    </p>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                      {selectedTicket.description ?? 'No issue description provided.'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 p-4">
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Owner notes
-                    </label>
-                    <textarea
-                      rows={5}
-                      value={noteDraft}
-                      onChange={(event) => setNoteDraft(event.target.value)}
-                      placeholder="Add internal notes for the owner or maintenance team..."
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                    />
-                    <div className="mt-3 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleTicketUpdate({ notes: noteDraft })}
-                        disabled={detailSaving}
-                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {detailSaving ? 'Saving...' : 'Save notes'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <aside className="space-y-4">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Status
-                    </p>
-                    <div className="mt-3">
-                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                        Update status
-                      </label>
-                      <select
-                        value={statusDraft}
-                        onChange={(event) => setStatusDraft(event.target.value)}
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                      >
-                        {Object.keys(labelMap).map((statusOption) => (
-                          <option key={statusOption} value={statusOption}>
-                            {labelMap[statusOption]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <p className="mt-3 text-xs text-slate-500">
-                      Updated {new Date(selectedTicket.updated_at).toLocaleDateString()}
-                    </p>
-                    {selectedTicket.resolved_at && (
-                      <p className="mt-1 text-xs text-emerald-700">
-                        Resolved {new Date(selectedTicket.resolved_at).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Ticket info
-                    </p>
-                    <dl className="mt-3 space-y-2 text-sm text-slate-700">
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500">Priority</dt>
-                        <dd>{normalizePriority(selectedTicket.priority)}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500">Category</dt>
-                        <dd>{selectedTicket.category ?? 'General'}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500">Property</dt>
-                        <dd>{selectedTicket.property_id ?? 'Unassigned'}</dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleTicketUpdate({ status: statusDraft, notes: noteDraft })}
-                      disabled={detailSaving}
-                      className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {detailSaving ? 'Updating...' : 'Save changes'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStatusDraft('Resolved');
-                        handleTicketUpdate({ status: 'Resolved', notes: noteDraft });
-                      }}
-                      disabled={detailSaving}
-                      className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {detailSaving ? 'Updating...' : 'Resolve ticket'}
-                    </button>
-                  </div>
-                </aside>
-              </div>
-            )}
-          </section>
-        )}
       </div>
     </main>
   );

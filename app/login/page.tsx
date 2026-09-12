@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
@@ -9,14 +9,58 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const client = supabase;
+
+    if (!client) {
+      setCheckingSession(false);
+      return;
+    }
+
+    client.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) {
+          return;
+        }
+
+        if (data.session) {
+          router.replace('/dashboard');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setCheckingSession(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
 
+    const client = supabase;
+
+    if (!client) {
+      setError('Supabase is not configured for this environment yet.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const redirectTo = `${window.location.origin}/dashboard`;
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      const siteUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        'https://landbaron.vercel.app';
+      const redirectTo = `${siteUrl.replace(/\/$/, '')}/dashboard`;
+
+      const { error: oauthError } = await client.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
@@ -26,8 +70,6 @@ export default function LoginPage() {
       if (oauthError) {
         throw oauthError;
       }
-
-      router.push('/dashboard');
     } catch (loginError) {
       console.error(loginError);
       setError('Google sign-in could not be started. Please try again.');
@@ -35,6 +77,17 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-10">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Landbaron.ai</p>
+          <p className="mt-4 text-base text-slate-700">Checking your sign-in state...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-10">

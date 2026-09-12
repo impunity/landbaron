@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'contractor' | 'tenant';
+export type UserRole = 'owner' | 'maintenance' | 'tenant' | 'contractor';
 
 export type SessionUser = {
   id: string;
@@ -13,7 +13,9 @@ const parseEmailList = (value?: string) => (value ?? '')
   .filter(Boolean);
 
 const ownerEmails = parseEmailList(process.env.NEXT_PUBLIC_OWNER_EMAILS ?? 'owner@demo.local');
-const contractorEmails = parseEmailList(process.env.NEXT_PUBLIC_CONTRACTOR_EMAILS ?? 'contractor@demo.local');
+const maintenanceEmails = parseEmailList(
+  process.env.NEXT_PUBLIC_MAINTENANCE_EMAILS ?? process.env.NEXT_PUBLIC_CONTRACTOR_EMAILS ?? 'maintenance@demo.local',
+);
 const tenantEmails = parseEmailList(process.env.NEXT_PUBLIC_TENANT_EMAILS ?? 'sam@example.com');
 
 export function getUserRoleByEmail(email?: string | null): UserRole {
@@ -21,15 +23,15 @@ export function getUserRoleByEmail(email?: string | null): UserRole {
   if (!normalized) return 'tenant';
 
   if (ownerEmails.includes(normalized)) return 'owner';
-  if (contractorEmails.includes(normalized)) return 'contractor';
+  if (maintenanceEmails.includes(normalized)) return 'maintenance';
   if (tenantEmails.includes(normalized)) return 'tenant';
 
   return 'tenant';
 }
 
 export function getRoleLabel(role: UserRole) {
-  if (role === 'owner') return 'Owner';
-  if (role === 'contractor') return 'Contractor';
+  if (role === 'owner') return 'Owner / Manager';
+  if (role === 'maintenance' || role === 'contractor') return 'Maintenance Person';
   return 'Tenant';
 }
 
@@ -41,15 +43,8 @@ export function getVisibleTickets<T extends { description?: string | null; statu
     return [];
   }
 
-  if (user.role === 'owner') {
+  if (user.role === 'owner' || user.role === 'maintenance' || user.role === 'contractor') {
     return tickets;
-  }
-
-  if (user.role === 'contractor') {
-    return tickets.filter((ticket) => {
-      const status = String(ticket.status ?? 'Open').trim();
-      return status !== 'Resolved' && status !== 'Closed';
-    });
   }
 
   const tenantEmail = user.email.trim().toLowerCase();

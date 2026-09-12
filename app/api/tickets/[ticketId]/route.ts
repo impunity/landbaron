@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+const getDescriptionParts = (description?: string | null) => {
+  if (!description) {
+    return { base: '', notes: '', hasNotes: false };
+  }
+
+  const noteMatch = description.match(/(?:^|\n\n)Owner notes:\n([\s\S]*)$/i);
+
+  if (!noteMatch) {
+    return { base: description.trim(), notes: '', hasNotes: false };
+  }
+
+  const base = (description.slice(0, noteMatch.index ?? 0) ?? '').replace(/\n{3,}$/g, '').trim();
+  const notes = noteMatch[1].trim();
+
+  return { base, notes, hasNotes: Boolean(notes) };
+};
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ ticketId: string }> },
@@ -65,7 +82,7 @@ export async function PATCH(
       }
       updates.status = normalizedStatus;
 
-      if (normalizedStatus === 'Resolved') {
+      if (normalizedStatus === 'Resolved' || normalizedStatus === 'Closed') {
         updates.resolved_at = new Date().toISOString();
       }
     }
@@ -81,13 +98,13 @@ export async function PATCH(
         throw fetchError;
       }
 
-      const currentDescription = existingTicket?.description ?? '';
+      const { base: baseDescription } = getDescriptionParts(existingTicket?.description ?? '');
       const trimmedNotes = notes.trim();
-      const noteText = trimmedNotes
-        ? `${currentDescription ? `${currentDescription.trim()}\n\n` : ''}Owner notes:\n${trimmedNotes}`
-        : currentDescription;
+      const nextDescription = trimmedNotes
+        ? `${baseDescription ? `${baseDescription}\n\n` : ''}Owner notes:\n${trimmedNotes}`
+        : baseDescription;
 
-      updates.description = noteText;
+      updates.description = nextDescription || null;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -108,6 +125,46 @@ export async function PATCH(
     console.error('PATCH /api/tickets/[ticketId] failed:', error);
     return NextResponse.json(
       { error: 'Ticket update failed. Please try again.' },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ ticketId: string }> },
+) {
+  try {
+    const { ticketId } = await params;
+    const userEmail = request.headers.get('x-user-email')?.trim().toLowerCase();
+    const userRole = request.headers.get('x-user-role')?.trim().toLowerCase();
+    const allowedOwnerEmails = (process.env.NEXT_PUBLIC_OWNER_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Supabase service role is not configured.' },
+        { status: 500 },
+      );
+    }
+
+    if (!userEmail || userRole !== 'owner' || !allowedOwnerEmails.includes(userEmail)) {
+      return NextResponse.json({ error: 'Only the owner can delete tickets.' }, { status: 403 });
+    }
+
+    const { error } = await supabaseAdmin.from('tickets').delete().eq('id', ticketId);
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('DELETE /api/tickets/[ticketId] failed:', error);
+    return NextResponse.json(
+      { error: 'Ticket could not be deleted.' },
       { status: 500 },
     );
   }
