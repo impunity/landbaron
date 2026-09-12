@@ -12,6 +12,7 @@ type TicketRow = {
   id: string;
   title: string;
   description: string | null;
+  assigned_to?: string | null;
   status: TicketStatus | string | null;
   priority: string | null;
   category: string | null;
@@ -113,6 +114,15 @@ const parseAssignmentFromDescription = (description?: string | null) => {
 
   const assignmentMatch = description.match(/(?:^|\n)Assigned to:\s*([^\n]+)/i);
   return assignmentMatch ? assignmentMatch[1].trim() : 'Unassigned';
+};
+
+const getTicketAssignmentLabel = (ticket?: Pick<TicketRow, 'assigned_to' | 'description'> | null) => {
+  const directAssignment = ticket?.assigned_to?.trim();
+  if (directAssignment) {
+    return directAssignment;
+  }
+
+  return parseAssignmentFromDescription(ticket?.description ?? null);
 };
 
 const initialFormState: TicketFormState = {
@@ -835,7 +845,7 @@ export default function DashboardPage() {
               {filteredTickets.map((ticket) => {
                 const status = normalizeStatus(ticket.status);
                 const displayPriority = normalizePriority(ticket.priority);
-                const assignmentLabel = parseAssignmentFromDescription(ticket.description);
+                const assignmentLabel = getTicketAssignmentLabel(ticket);
 
                 return (
                   <article

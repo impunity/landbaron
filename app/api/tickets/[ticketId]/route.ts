@@ -140,7 +140,7 @@ export async function PATCH(
 
     const { data: existingTicket, error: fetchError } = await supabaseAdmin
       .from('tickets')
-      .select('description')
+      .select('description, assigned_to')
       .eq('id', ticketId)
       .maybeSingle();
 
@@ -153,13 +153,17 @@ export async function PATCH(
     const baseDescription = parsedDescription.base;
     const currentNotes = parsedDescription.notes;
     const currentAssignment = parsedDescription.assignment;
+    const existingAssignment = typeof existingTicket?.assigned_to === 'string' ? existingTicket.assigned_to.trim() : '';
 
     const nextAssignment =
-      typeof assigned_to === 'string' ? assigned_to.trim() : currentAssignment || '';
+      typeof assigned_to === 'string'
+        ? assigned_to.trim()
+        : existingAssignment || currentAssignment || '';
     const nextNotes =
       typeof notes === 'string' ? notes.trim().replace(/^Owner notes:\s*/i, '').trim() : currentNotes;
 
     if (typeof assigned_to === 'string' || typeof notes === 'string') {
+      updates.assigned_to = nextAssignment || null;
       updates.description = buildDescription({
         baseDescription,
         notes: nextNotes,

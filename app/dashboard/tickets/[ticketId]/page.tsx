@@ -121,26 +121,6 @@ const labelMap: Record<string, string> = {
   Closed: 'Dismissed',
 };
 
-const STAFF_STORAGE_KEY = 'landbaron-staff-roster';
-
-const getStoredStaff = (): StaffMember[] => {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STAFF_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
 const parseAssignment = (description?: string | null) => {
   if (!description) {
     return { label: 'Unassigned', value: '' };
@@ -237,7 +217,10 @@ export default function TicketDetailPage() {
       const nextTicket = result.ticket ?? null;
       const description = nextTicket?.description ?? '';
       const noteMatch = description.match(/Owner notes:\n([\s\S]*)$/i);
-      const assignment = parseAssignment(description);
+      const assignmentValue =
+        typeof nextTicket?.assigned_to === 'string' && nextTicket.assigned_to.trim()
+          ? nextTicket.assigned_to.trim()
+          : parseAssignment(description).value;
 
       if (session?.role === 'tenant') {
         const allowed = description.toLowerCase().includes(`email: ${session.email.toLowerCase()}`);
@@ -249,7 +232,7 @@ export default function TicketDetailPage() {
       setTicket(nextTicket);
       setStatusDraft(normalizeStatus(nextTicket?.status ?? 'Open'));
       setNoteDraft(noteMatch ? noteMatch[1].trim() : '');
-      setAssignedStaff(assignment.value);
+      setAssignedStaff(assignmentValue);
     } catch (detailError) {
       console.error(detailError);
       setError('Unable to load ticket details right now.');
@@ -260,8 +243,33 @@ export default function TicketDetailPage() {
   };
 
   useEffect(() => {
-    setStaffMembers(getStoredStaff());
-  }, []);
+    if (!session || session.role !== 'owner') {
+      setStaffMembers([]);
+      return;
+    }
+
+    const loadStaffMembers = async () => {
+      try {
+        const response = await fetch('/api/staff', {
+          headers: {
+            'x-user-role': session.role,
+          },
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error || 'Unable to load staff members.');
+        }
+
+        setStaffMembers(Array.isArray(result.staff) ? result.staff : []);
+      } catch (error) {
+        console.error(error);
+        setStaffMembers([]);
+      }
+    };
+
+    void loadStaffMembers();
+  }, [session]);
 
   useEffect(() => {
     if (!ticketId) {
