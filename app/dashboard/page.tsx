@@ -136,6 +136,7 @@ export default function DashboardPage() {
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [staffHydrated, setStaffHydrated] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
   const [newStaffRole, setNewStaffRole] = useState<StaffMember['role']>('Maintenance');
@@ -219,15 +220,19 @@ export default function DashboardPage() {
       return;
     }
 
-    setStaffMembers(getStoredStaff());
+    const storedStaff = getStoredStaff();
+    setStaffMembers(storedStaff);
+    setStaffHydrated(true);
     loadTickets();
   }, [session]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembers));
+    if (!session || !staffHydrated || typeof window === 'undefined') {
+      return;
     }
-  }, [staffMembers]);
+
+    window.localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembers));
+  }, [session, staffHydrated, staffMembers]);
 
   const visibleTickets = useMemo(() => getVisibleTickets(tickets, session), [tickets, session]);
 
@@ -330,6 +335,12 @@ export default function DashboardPage() {
     setNewStaffName('');
     setNewStaffEmail('');
     setNewStaffRole('Maintenance');
+  };
+
+  const handleRemoveStaffMember = (email: string) => {
+    setStaffMembers((current: StaffMember[]) =>
+      current.filter((member: StaffMember) => member.email.toLowerCase() !== email.toLowerCase()),
+    );
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -621,11 +632,22 @@ export default function DashboardPage() {
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {staffMembers.map((member) => (
                   <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-sm font-semibold text-slate-900">{member.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{member.email}</p>
-                    <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
-                      {member.role}
-                    </span>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{member.name}</p>
+                        <p className="mt-1 text-xs text-slate-500">{member.email}</p>
+                        <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                          {member.role}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveStaffMember(member.email)}
+                        className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

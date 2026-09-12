@@ -8,22 +8,65 @@ const getDescriptionParts = (description?: string | null) => {
   }
 
   const cleaned = description.trim();
-  const assignmentMatch = cleaned.match(/^Assigned to:\s*(.+?)\n{2,}([\s\S]*)$/i);
-  const noteMatch = cleaned.match(/(?:^|\n\n)Owner notes:\n([\s\S]*)$/i);
+  const sections = cleaned
+    .split(/\n{2,}/)
+    .map((section) => section.trim())
+    .filter(Boolean);
 
-  const baseWithoutAssignment = assignmentMatch ? assignmentMatch[2].trim() : cleaned;
-  const baseWithoutNotes = noteMatch ? (baseWithoutAssignment.slice(0, noteMatch.index ?? 0) ?? '').trim() : baseWithoutAssignment;
+  let assignment = '';
+  let notes = '';
+  const baseParts: string[] = [];
 
-  const assignment = assignmentMatch ? assignmentMatch[1].trim() : '';
-  const notes = noteMatch ? noteMatch[1].trim() : '';
+  for (const section of sections) {
+    if (/^Assigned to:/i.test(section)) {
+      assignment = section.replace(/^Assigned to:\s*/i, '').trim();
+      continue;
+    }
+
+    if (/^Owner notes:/i.test(section)) {
+      notes = section.replace(/^Owner notes:\s*/i, '').trim();
+      continue;
+    }
+
+    baseParts.push(section.replace(/^Owner notes:\s*/i, '').replace(/^Assigned to:\s*/i, '').trim());
+  }
 
   return {
-    base: baseWithoutNotes.replace(/\n{3,}/g, '\n\n').trim(),
+    base: baseParts.filter(Boolean).join('\n\n').replace(/\n{3,}/g, '\n\n').trim(),
     notes,
     assignment,
     hasNotes: Boolean(notes),
     hasAssignment: Boolean(assignment),
   };
+};
+
+const buildDescription = ({
+  baseDescription,
+  notes,
+  assignment,
+}: {
+  baseDescription: string;
+  notes?: string | null;
+  assignment?: string | null;
+}) => {
+  const nextDescriptionParts: string[] = [];
+
+  const nextAssignment = assignment?.trim();
+  if (nextAssignment) {
+    nextDescriptionParts.push(`Assigned to: ${nextAssignment}`);
+  }
+
+  const nextBaseDescription = baseDescription.trim();
+  if (nextBaseDescription) {
+    nextDescriptionParts.push(nextBaseDescription);
+  }
+
+  const nextNotes = notes?.trim();
+  if (nextNotes) {
+    nextDescriptionParts.push(`Owner notes:\n${nextNotes}`);
+  }
+
+  return nextDescriptionParts.join('\n\n') || null;
 };
 
 export async function GET(
@@ -110,52 +153,17 @@ export async function PATCH(
     const currentNotes = parsedDescription.notes;
     const currentAssignment = parsedDescription.assignment;
 
-    const nextDescriptionParts: string[] = [];
+    const nextAssignment =
+      typeof assigned_to === 'string' ? assigned_to.trim() : currentAssignment || '';
+    const nextNotes =
+      typeof notes === 'string' ? notes.trim().replace(/^Owner notes:\s*/i, '').trim() : currentNotes;
 
-    if (typeof assigned_to === 'string') {
-      const trimmedAssignee = assigned_to.trim();
-      const nextAssignment = trimmedAssignee ? `Assigned to: ${trimmedAssignee}` : '';
-
-      if (nextAssignment) {
-        nextDescriptionParts.push(nextAssignment);
-      }
-    } else if (currentAssignment) {
-      nextDescriptionParts.push(`Assigned to: ${currentAssignment}`);
-    }
-
-    let nextBaseDescription = baseDescription;
-    let nextNotes = currentNotes;
-
-    if (typeof notes === 'string') {
-      const trimmedNotes = notes.trim();
-      nextNotes = trimmedNotes;
-    }
-
-    if (nextBaseDescription) {
-      nextDescriptionParts.push(nextBaseDescription);
-    }
-
-    if (nextNotes) {
-      nextDescriptionParts.push(`Owner notes:\n${nextNotes}`);
-    }
-
-    if (typeof assigned_to === 'string' && !assigned_to.trim()) {
-      const index = nextDescriptionParts.findIndex((part) => part.startsWith('Assigned to:'));
-      if (index >= 0) {
-        nextDescriptionParts.splice(index, 1);
-      }
-    }
-
-    if (typeof assigned_to === 'string') {
-      updates.description = nextDescriptionParts.join('\n\n') || null;
-    }
-
-    if (typeof notes === 'string') {
-      updates.description = nextDescriptionParts.join('\n\n') || null;
-    }
-
-    if (typeof assigned_to === 'string' && !assigned_to.trim() && !currentNotes && !baseDescription) {
-      updates.description = null;
+    if (typeof assigned_to === 'string' || typeof notes === 'string') {
+      updates.description = buildDescription({
+        baseDescription,
+        notes: nextNotes,
+        assignment: nextAssignment,
+      });
     }
 
     if (Object.keys(updates).length === 0) {
