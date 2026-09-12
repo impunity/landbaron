@@ -57,7 +57,7 @@ export default function LoginPage() {
     try {
       const siteUrl =
         process.env.NEXT_PUBLIC_SITE_URL ||
-        'https://landbaron.vercel.app';
+        (typeof window !== 'undefined' ? window.location.origin : 'https://landbaron.vercel.app');
       const redirectTo = `${siteUrl.replace(/\/$/, '')}/dashboard`;
 
       const { error: oauthError } = await client.auth.signInWithOAuth({
