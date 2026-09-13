@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const name = String(body?.name ?? '').trim();
     const email = String(body?.email ?? '').trim().toLowerCase();
+    const phoneNumber = typeof body?.phone_number === 'string' ? body.phone_number.trim() : '';
     const role = normalizeRole(body?.role);
     const avatarUrl = typeof body?.avatar_url === 'string' && body.avatar_url.trim()
       ? body.avatar_url.trim()
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
         {
           name,
           email,
+          phone_number: phoneNumber || null,
           role,
           avatar_url: avatarUrl,
         },
@@ -151,7 +153,9 @@ export async function PATCH(request: NextRequest) {
     const userRole = request.headers.get('x-user-role')?.trim().toLowerCase();
     const userEmail = request.headers.get('x-user-email')?.trim().toLowerCase();
     const body = await request.json();
-    const email = String(body?.email ?? '').trim().toLowerCase();
+    const currentEmail = String(body?.current_email ?? body?.email ?? '').trim().toLowerCase();
+    const nextEmail = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : undefined;
+    const email = currentEmail || nextEmail;
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required.' }, { status: 400 });
@@ -159,7 +163,7 @@ export async function PATCH(request: NextRequest) {
 
     const hasNameOrRoleUpdate = typeof body?.name === 'string' || typeof body?.role === 'string';
     const isOwner = userRole === 'owner';
-    const isSelf = userEmail && userEmail === email;
+    const isSelf = userEmail && userEmail === currentEmail;
 
     if (!isOwner && !isSelf) {
       return NextResponse.json({ error: 'Only the owner or that staff member can update this staff profile.' }, { status: 403 });
@@ -172,11 +176,14 @@ export async function PATCH(request: NextRequest) {
     const updates: Record<string, string | null> = { updated_at: new Date().toISOString() };
     const name = typeof body?.name === 'string' ? body.name.trim() : undefined;
     const role = typeof body?.role === 'string' ? normalizeRole(body.role) : undefined;
+    const phoneNumber = typeof body?.phone_number === 'string' ? body.phone_number.trim() : undefined;
     const avatarUrl = body?.avatar_url === null ? null : typeof body?.avatar_url === 'string' ? body.avatar_url.trim() || null : undefined;
 
     if (name) updates.name = name;
     if (role) updates.role = role;
+    if (phoneNumber !== undefined) updates.phone_number = phoneNumber || null;
     if (avatarUrl !== undefined) updates.avatar_url = avatarUrl;
+    if (nextEmail && nextEmail !== currentEmail) updates.email = nextEmail;
 
     if (Object.keys(updates).length <= 1) {
       return NextResponse.json({ error: 'No staff fields were provided to update.' }, { status: 400 });
@@ -185,7 +192,7 @@ export async function PATCH(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('staff_members')
       .update(updates)
-      .eq('email', email)
+      .eq('email', currentEmail)
       .select();
 
     if (error) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
@@ -10,8 +10,16 @@ type StaffMember = {
   id: string;
   name: string;
   email: string;
+  phone_number?: string | null;
   role: 'Owner' | 'Maintenance' | 'Contractor';
   avatar_url?: string | null;
+};
+
+type StaffDraft = {
+  name: string;
+  email: string;
+  phone_number: string;
+  role: StaffMember['role'];
 };
 
 const buildStaffAvatarPlaceholder = (name: string, role: StaffMember['role']) => {
@@ -42,18 +50,33 @@ const buildStaffAvatarPlaceholder = (name: string, role: StaffMember['role']) =>
 const getStaffAvatarSource = (member: Pick<StaffMember, 'avatar_url' | 'name' | 'role'>) =>
   member.avatar_url || buildStaffAvatarPlaceholder(member.name, member.role);
 
+const makeEmptyDraft = (): StaffDraft => ({
+  name: '',
+  email: '',
+  phone_number: '',
+  role: 'Maintenance',
+});
+
 export default function StaffPage() {
   const router = useRouter();
   const [session, setSessionState] = useState<SessionUser | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffRole, setNewStaffRole] = useState<StaffMember['role']>('Maintenance');
+  const [newStaff, setNewStaff] = useState<StaffDraft>(makeEmptyDraft());
   const [newStaffSubmitting, setNewStaffSubmitting] = useState(false);
-  const [newStaffSuccess, setNewStaffSuccess] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
+  const [editingDraft, setEditingDraft] = useState<StaffDraft | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<StaffMember | null>(null);
+  const [savingChanges, setSavingChanges] = useState(false);
+  const [removingMember, setRemovingMember] = useState(false);
+
+  const sortedStaff = useMemo(
+    () => [...staff].sort((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email)),
+    [staff],
+  );
 
   const handleAddStaffMember = async () => {
     if (!session || session.role !== 'owner') {
@@ -61,8 +84,9 @@ export default function StaffPage() {
       return;
     }
 
-    const trimmedName = newStaffName.trim();
-    const trimmedEmail = newStaffEmail.trim();
+    const trimmedName = newStaff.name.trim();
+    const trimmedEmail = newStaff.email.trim();
+    const trimmedPhone = newStaff.phone_number.trim();
 
     if (!trimmedName || !trimmedEmail) {
       setError('Name and email are required.');
@@ -77,7 +101,7 @@ export default function StaffPage() {
 
     setNewStaffSubmitting(true);
     setError(null);
-    setNewStaffSuccess(null);
+    setSuccess(null);
 
     try {
       const response = await fetch('/api/staff', {
@@ -90,7 +114,8 @@ export default function StaffPage() {
         body: JSON.stringify({
           name: trimmedName,
           email: trimmedEmail.toLowerCase(),
-          role: newStaffRole,
+          phone_number: trimmedPhone,
+          role: newStaff.role,
         }),
       });
 
@@ -116,10 +141,8 @@ export default function StaffPage() {
         });
       }
 
-      setNewStaffName('');
-      setNewStaffEmail('');
-      setNewStaffRole('Maintenance');
-      setNewStaffSuccess(`Added ${trimmedName} to the staff roster.`);
+      setNewStaff(makeEmptyDraft());
+      setSuccess(`Added ${trimmedName} to the staff roster.`);
       setShowAddForm(false);
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : 'Staff member could not be added.';
@@ -127,6 +150,96 @@ export default function StaffPage() {
       console.error(addError);
     } finally {
       setNewStaffSubmitting(false);
+    }
+  };
+
+  const handleUpdateStaffMember = async (currentEmail: string, updates: Partial<StaffDraft>) => {
+    if (!session || session.role !== 'owner') {
+      setError('Owner access is required to update staff members.');
+      return;
+    }
+
+    setSavingChanges(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const payload = {
+        current_email: currentEmail,
+        name: updates.name ?? '',
+        email: updates.email ?? currentEmail,
+        phone_number: updates.phone_number ?? '',
+        role: updates.role ?? 'Maintenance',
+      };
+
+      const response = await fetch('/api/staff', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': session.role,
+          'x-user-email': session.email,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Staff member could not be updated.');
+      }
+
+      const nextMember = result.staff as StaffMember | null;
+      setStaff((current) => {
+        const filtered = current.filter((member) => member.email.toLowerCase() !== currentEmail.toLowerCase());
+        if (!nextMember) {
+          return filtered;
+        }
+        return [nextMember, ...filtered].sort((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email));
+      });
+
+      setSuccess(`${updates.name || editingMember?.name || 'Staff member'} was updated.`);
+      setEditingMember(null);
+      setEditingDraft(null);
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : 'Staff member could not be updated.';
+      setError(message);
+      console.error(updateError);
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
+  const handleRemoveStaffMember = async () => {
+    if (!session || session.role !== 'owner' || !deleteCandidate) {
+      return;
+    }
+
+    setRemovingMember(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await fetch(`/api/staff?email=${encodeURIComponent(deleteCandidate.email)}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-role': session.role,
+          'x-user-email': session.email,
+        },
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Staff member could not be removed.');
+      }
+
+      setStaff((current) => current.filter((member) => member.email.toLowerCase() !== deleteCandidate.email.toLowerCase()));
+      setSuccess(`${deleteCandidate.name} was removed from the roster.`);
+      setDeleteCandidate(null);
+    } catch (removeError) {
+      const message = removeError instanceof Error ? removeError.message : 'Staff member could not be removed.';
+      setError(message);
+      console.error(removeError);
+    } finally {
+      setRemovingMember(false);
     }
   };
 
@@ -166,43 +279,10 @@ export default function StaffPage() {
             : member,
         ),
       );
+      setSuccess('Avatar updated successfully.');
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Avatar could not be updated.');
       console.error(uploadError);
-    }
-  };
-
-  const handleStaffRoleChange = async (staffEmail: string, role: StaffMember['role']) => {
-    if (!session || session.role !== 'owner') {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/staff', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-role': session.role,
-          'x-user-email': session.email,
-        },
-        body: JSON.stringify({ email: staffEmail, role }),
-      });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result?.error || 'Role could not be updated.');
-      }
-
-      setStaff((current) =>
-        current.map((member) =>
-          member.email.toLowerCase() === staffEmail.toLowerCase() && result.staff
-            ? { ...member, ...result.staff }
-            : member,
-        ),
-      );
-    } catch (roleError) {
-      setError(roleError instanceof Error ? roleError.message : 'Role could not be updated.');
-      console.error(roleError);
     }
   };
 
@@ -232,7 +312,6 @@ export default function StaffPage() {
       };
 
       setSessionState(nextSession);
-
       if (nextSession.role !== 'owner') {
         router.replace('/dashboard');
       }
@@ -257,7 +336,6 @@ export default function StaffPage() {
       };
 
       setSessionState(nextSessionUser);
-
       if (nextSessionUser.role !== 'owner') {
         router.replace('/dashboard');
       }
@@ -345,13 +423,13 @@ export default function StaffPage() {
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <label className="text-sm text-slate-600">
                 <span className="mb-1 block font-medium text-slate-700">Name</span>
                 <input
                   type="text"
-                  value={newStaffName}
-                  onChange={(event) => setNewStaffName(event.target.value)}
+                  value={newStaff.name}
+                  onChange={(event) => setNewStaff((current) => ({ ...current, name: event.target.value }))}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                   placeholder="Jane Smith"
                 />
@@ -361,18 +439,29 @@ export default function StaffPage() {
                 <span className="mb-1 block font-medium text-slate-700">Email</span>
                 <input
                   type="email"
-                  value={newStaffEmail}
-                  onChange={(event) => setNewStaffEmail(event.target.value)}
+                  value={newStaff.email}
+                  onChange={(event) => setNewStaff((current) => ({ ...current, email: event.target.value }))}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                   placeholder="jane@example.com"
                 />
               </label>
 
               <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Phone</span>
+                <input
+                  type="tel"
+                  value={newStaff.phone_number}
+                  onChange={(event) => setNewStaff((current) => ({ ...current, phone_number: event.target.value }))}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  placeholder="(555) 123-4567"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
                 <span className="mb-1 block font-medium text-slate-700">Role</span>
                 <select
-                  value={newStaffRole}
-                  onChange={(event) => setNewStaffRole(event.target.value as StaffMember['role'])}
+                  value={newStaff.role}
+                  onChange={(event) => setNewStaff((current) => ({ ...current, role: event.target.value as StaffMember['role'] }))}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                 >
                   <option value="Owner">Owner</option>
@@ -387,9 +476,7 @@ export default function StaffPage() {
                 type="button"
                 onClick={() => {
                   setShowAddForm(false);
-                  setNewStaffName('');
-                  setNewStaffEmail('');
-                  setNewStaffRole('Maintenance');
+                  setNewStaff(makeEmptyDraft());
                 }}
                 className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
@@ -407,15 +494,109 @@ export default function StaffPage() {
           </div>
         )}
 
+        {editingMember && editingDraft && (
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Edit staff member</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingMember(null);
+                  setEditingDraft(null);
+                }}
+                className="text-sm font-medium text-slate-500 hover:text-slate-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Name</span>
+                <input
+                  type="text"
+                  value={editingDraft.name}
+                  onChange={(event) => setEditingDraft((current) => current ? { ...current, name: event.target.value } : current)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Email</span>
+                <input
+                  type="email"
+                  value={editingDraft.email}
+                  onChange={(event) => setEditingDraft((current) => current ? { ...current, email: event.target.value } : current)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Phone</span>
+                <input
+                  type="tel"
+                  value={editingDraft.phone_number}
+                  onChange={(event) => setEditingDraft((current) => current ? { ...current, phone_number: event.target.value } : current)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Role</span>
+                <select
+                  value={editingDraft.role}
+                  onChange={(event) => setEditingDraft((current) => current ? { ...current, role: event.target.value as StaffMember['role'] } : current)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                >
+                  <option value="Owner">Owner</option>
+                  <option value="Maintenance">Maintenance</option>
+                  <option value="Contractor">Contractor</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingMember(null);
+                  setEditingDraft(null);
+                }}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!editingMember || !editingDraft) {
+                    return;
+                  }
+                  void handleUpdateStaffMember(editingMember.email, {
+                    name: editingDraft.name,
+                    email: editingDraft.email,
+                    phone_number: editingDraft.phone_number,
+                    role: editingDraft.role,
+                  });
+                }}
+                disabled={savingChanges}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {savingChanges ? 'Saving...' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}
           </div>
         )}
 
-        {newStaffSuccess && (
+        {success && (
           <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            {newStaffSuccess}
+            {success}
           </div>
         )}
 
@@ -431,12 +612,14 @@ export default function StaffPage() {
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Avatar</th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Name</th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Email</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Phone</th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Role</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Actions</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-200">
-                {staff.map((member) => {
+                {sortedStaff.map((member) => {
                   const avatarSource = getStaffAvatarSource(member);
 
                   return (
@@ -460,19 +643,37 @@ export default function StaffPage() {
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900">{member.name}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{member.email}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{member.phone_number?.trim() || '—'}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">
-                        <select
-                          value={member.role}
-                          onChange={(event) => {
-                            const nextRole = event.target.value as StaffMember['role'];
-                            void handleStaffRoleChange(member.email, nextRole);
-                          }}
-                          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none transition focus:border-slate-500"
-                        >
-                          <option value="Owner">Owner</option>
-                          <option value="Maintenance">Maintenance</option>
-                          <option value="Contractor">Contractor</option>
-                        </select>
+                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                          {member.role}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingMember(member);
+                              setEditingDraft({
+                                name: member.name,
+                                email: member.email,
+                                phone_number: member.phone_number || '',
+                                role: member.role,
+                              });
+                            }}
+                            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteCandidate(member)}
+                            className="rounded-lg border border-rose-200 bg-white px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -480,12 +681,42 @@ export default function StaffPage() {
               </tbody>
             </table>
 
-            {staff.length === 0 && (
+            {sortedStaff.length === 0 && (
               <div className="p-8 text-sm text-slate-500">No staff members have been added yet.</div>
             )}
           </div>
         )}
       </div>
+
+      {deleteCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Confirm removal</p>
+            <h3 className="mt-3 text-xl font-semibold text-slate-900">Remove {deleteCandidate.name}?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will remove the staff member from the roster and revoke their assignment access.
+            </p>
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteCandidate(null)}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRemoveStaffMember()}
+                disabled={removingMember}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-rose-300"
+              >
+                {removingMember ? 'Removing...' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

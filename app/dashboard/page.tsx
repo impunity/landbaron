@@ -63,7 +63,15 @@ const filterTabs = [
   { key: 'Closed', label: 'Dismissed' },
 ] as const;
 
+const sortOptions = [
+  { key: 'date', label: 'Date' },
+  { key: 'severity', label: 'Severity' },
+  { key: 'status', label: 'Status' },
+  { key: 'assigned', label: 'Assigned person' },
+] as const;
+
 type FilterKey = (typeof filterTabs)[number]['key'];
+type SortKey = (typeof sortOptions)[number]['key'];
 
 const normalizeStatus = (status?: string | null) => {
   if (!status) return 'Open';
@@ -186,6 +194,22 @@ const buildStaffAvatarPlaceholder = (name: string, role: StaffMember['role']) =>
 const getStaffAvatarSource = (member: Pick<StaffMember, 'avatar_url' | 'name' | 'role'>) =>
   member.avatar_url || buildStaffAvatarPlaceholder(member.name, member.role);
 
+const severityOrder: Record<string, number> = {
+  Emergency: 5,
+  High: 4,
+  Medium: 3,
+  Low: 2,
+  '': 1,
+};
+
+const statusOrder: Record<string, number> = {
+  Open: 1,
+  'In Progress': 2,
+  'Waiting on Parts': 3,
+  Resolved: 4,
+  Closed: 5,
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSessionState] = useState<SessionUser | null>(null);
@@ -199,6 +223,7 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortKey>('date');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [staffHydrated, setStaffHydrated] = useState(false);
   const [staffSubmitting, setStaffSubmitting] = useState(false);
@@ -330,6 +355,37 @@ export default function DashboardPage() {
 
     return visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === activeFilter);
   }, [activeFilter, visibleTickets]);
+
+  const sortedTickets = useMemo(() => {
+    const next = [...filteredTickets];
+
+    next.sort((a, b) => {
+      if (sortBy === 'severity') {
+        const severityDifference = (severityOrder[normalizePriority(b.priority)] ?? 0) - (severityOrder[normalizePriority(a.priority)] ?? 0);
+        if (severityDifference !== 0) {
+          return severityDifference;
+        }
+      }
+
+      if (sortBy === 'status') {
+        const statusDifference = (statusOrder[normalizeStatus(b.status)] ?? 99) - (statusOrder[normalizeStatus(a.status)] ?? 99);
+        if (statusDifference !== 0) {
+          return statusDifference;
+        }
+      }
+
+      if (sortBy === 'assigned') {
+        const assignedDifference = getTicketAssignmentLabel(b).localeCompare(getTicketAssignmentLabel(a));
+        if (assignedDifference !== 0) {
+          return assignedDifference;
+        }
+      }
+
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+
+    return next;
+  }, [filteredTickets, sortBy]);
 
   const summary = useMemo(
     () => ({
@@ -884,278 +940,6 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {session.role === 'owner' && (
-          <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Staff</p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">Who can be assigned</h2>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_0.8fr_auto]">
-              <input
-                value={newStaffName}
-                onChange={(event) => setNewStaffName(event.target.value)}
-                placeholder="Name"
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-              />
-              <input
-                value={newStaffEmail}
-                onChange={(event) => setNewStaffEmail(event.target.value)}
-                placeholder="email@example.com"
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-              />
-              <select
-                value={newStaffRole}
-                onChange={(event) => setNewStaffRole(event.target.value as StaffMember['role'])}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-              >
-                <option value="Maintenance">Maintenance</option>
-                <option value="Contractor">Contractor</option>
-                <option value="Owner">Owner</option>
-              </select>
-              <button
-                type="button"
-                onClick={handleAddStaffMember}
-                disabled={staffSubmitting}
-                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {staffSubmitting ? 'Saving...' : 'Add staff'}
-              </button>
-            </div>
-
-            {(staffError || staffSuccess) && (
-              <div className={`mt-4 rounded-xl border px-3 py-2 text-sm ${staffError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-                {staffError ?? staffSuccess}
-              </div>
-            )}
-
-            {session.role === 'owner' && (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Staff management</p>
-                    <h3 className="mt-1 text-base font-semibold text-slate-900">Edit roster details</h3>
-                  </div>
-                  {editingStaff && (
-                    <button
-                      type="button"
-                      onClick={() => setEditingStaff(null)}
-                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700"
-                    >
-                      Close
-                    </button>
-                  )}
-                </div>
-
-                {editingStaff ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border border-slate-200 bg-slate-200">
-                        <img
-                          src={getStaffAvatarSource({
-                            name: editingStaff.name,
-                            role: editingStaff.role,
-                            avatar_url:
-                              staffMembers.find((member) => member.email.toLowerCase() === editingStaff.email.toLowerCase())
-                                ?.avatar_url ?? null,
-                          })}
-                          alt={`${editingStaff.name} avatar preview`}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{editingStaff.name}</p>
-                        <p className="text-xs text-slate-500">{editingStaff.email}</p>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
-                      <input
-                        value={editingStaff.name}
-                        onChange={(event) => setEditingStaff((current) => current ? { ...current, name: event.target.value } : current)}
-                        className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                        placeholder="Full name"
-                      />
-
-                      <select
-                        value={editingStaff.role}
-                        onChange={(event) => setEditingStaff((current) => current ? { ...current, role: event.target.value as StaffMember['role'] } : current)}
-                        className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                      >
-                        <option value="Maintenance">Maintenance</option>
-                        <option value="Contractor">Contractor</option>
-                        <option value="Owner">Owner</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!editingStaff) {
-                            return;
-                          }
-
-                          void handleUpdateStaffMember(editingStaff.email, {
-                            name: editingStaff.name,
-                            role: editingStaff.role,
-                          });
-                        }}
-                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
-                      >
-                        Save changes
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                      <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100">
-                        Upload avatar
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              void handleStaffAvatarUpload(editingStaff.email, file);
-                            }
-                            event.target.value = '';
-                          }}
-                        />
-                      </label>
-
-                      {staffMembers.find((member) => member.email.toLowerCase() === editingStaff.email.toLowerCase())?.avatar_url && (
-                        <button
-                          type="button"
-                          onClick={() => void handleRemoveStaffAvatar(editingStaff.email)}
-                          className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
-                        >
-                          Remove avatar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-500">Choose a staff member to update their name, role, or avatar.</p>
-                )}
-              </div>
-            )}
-
-            {staffMembers.length > 0 ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {staffMembers.map((member) => {
-                  const canManageAvatar = session?.role === 'owner' || session?.email?.trim().toLowerCase() === member.email.trim().toLowerCase();
-                  const avatarSource = getStaffAvatarSource(member);
-
-                  return (
-                    <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <label className="group relative block h-12 w-12 cursor-pointer overflow-hidden rounded-full border border-slate-200 bg-slate-200 transition hover:opacity-90">
-                            <img
-                              src={avatarSource}
-                              alt={`${member.name} avatar`}
-                              className="h-full w-full object-cover"
-                            />
-                            <span className="absolute inset-0 flex items-center justify-center bg-slate-950/40 text-[9px] font-semibold uppercase tracking-[0.12em] text-white opacity-0 transition group-hover:opacity-100">
-                              Edit
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                if (file) {
-                                  void handleStaffAvatarUpload(member.email, file);
-                                }
-                                event.target.value = '';
-                              }}
-                            />
-                          </label>
-
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{member.name}</p>
-                            <p className="mt-1 text-xs text-slate-500">{member.email}</p>
-                            {session?.role === 'owner' ? (
-                              <select
-                                value={member.role}
-                                onChange={(event) => {
-                                  const nextRole = event.target.value as StaffMember['role'];
-                                  void handleUpdateStaffMember(member.email, { role: nextRole });
-                                }}
-                                className="mt-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 outline-none transition focus:border-slate-500"
-                              >
-                                <option value="Owner">Owner</option>
-                                <option value="Maintenance">Maintenance</option>
-                                <option value="Contractor">Contractor</option>
-                              </select>
-                            ) : (
-                              <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
-                                {member.role}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-2">
-                          {session?.role === 'owner' && (
-                            <button
-                              type="button"
-                              onClick={() => setEditingStaff({ email: member.email, name: member.name, role: member.role })}
-                              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100"
-                            >
-                              Manage
-                            </button>
-                          )}
-
-                          {canManageAvatar && (
-                            <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100">
-                              Upload
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(event) => {
-                                  const file = event.target.files?.[0];
-                                  void handleStaffAvatarUpload(member.email, file);
-                                  event.target.value = '';
-                                }}
-                              />
-                            </label>
-                          )}
-
-                          {member.avatar_url && (session?.role === 'owner' || session?.email?.trim().toLowerCase() === member.email.trim().toLowerCase()) && (
-                            <button
-                              type="button"
-                              onClick={() => void handleRemoveStaffAvatar(member.email)}
-                              className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
-                            >
-                              Remove avatar
-                            </button>
-                          )}
-
-                          {session?.role === 'owner' && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveStaffMember(member.email)}
-                              className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-slate-500">No staff added yet.</p>
-            )}
-          </section>
-        )}
-
         <section className="mb-8 grid gap-4 md:grid-cols-4">
           {[
             { key: 'all' as const, label: 'Total', value: summary.total, className: 'text-slate-900', badge: 'bg-slate-100 text-slate-700' },
@@ -1191,106 +975,47 @@ export default function DashboardPage() {
           })}
         </section>
 
-        <section className="mb-8 grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Portfolio snapshot
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">Active property load</h2>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {propertySummary.map((entry) => (
-                <div key={entry.property} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    {entry.property}
-                  </p>
-                  <div className="mt-3 flex items-end justify-between gap-2">
-                    <div>
-                      <p className="text-2xl font-semibold text-slate-900">{entry.count}</p>
-                      <p className="text-xs text-slate-500">total issues</p>
-                    </div>
-                    <span className="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
-                      {entry.active} active
-                    </span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] font-medium text-slate-600">
-                    <div className="rounded-md bg-white px-2 py-1.5">
-                      <div className="text-slate-900">{entry.open}</div>
-                      <div>Open</div>
-                    </div>
-                    <div className="rounded-md bg-white px-2 py-1.5">
-                      <div className="text-emerald-700">{entry.resolved}</div>
-                      <div>Resolved</div>
-                    </div>
-                    <div className="rounded-md bg-white px-2 py-1.5">
-                      <div className="text-slate-700">{entry.dismissed}</div>
-                      <div>Dismissed</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Recent activity
-            </p>
-            <div className="mt-4 space-y-3">
-              {recentActivity.map((ticket) => {
-                const assignmentLabel = getTicketAssignmentLabel(ticket);
-
-                return (
-                  <button
-                    key={ticket.id}
-                    type="button"
-                    onClick={() => openTicketView(ticket.id)}
-                    className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-slate-100"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">{ticket.title}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {assignmentLabel} • {normalizeStatus(ticket.status)}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-slate-400">
-                      {new Date(ticket.updated_at).toLocaleDateString()}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
         <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2 className="text-lg font-semibold">Ticket queue</h2>
-              <div className="flex flex-wrap gap-2">
-                {filterTabs.map((tab) => {
-                  const isActive = activeFilter === tab.key;
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                <div className="flex flex-wrap gap-2">
+                  {filterTabs.map((tab) => {
+                    const isActive = activeFilter === tab.key;
 
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => setActiveFilter(tab.key)}
-                      className={[
-                        'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-                      ].join(' ')}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setActiveFilter(tab.key)}
+                        className={[
+                          'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                        ].join(' ')}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
+                  <span className="font-medium text-slate-700">Sort:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(event) => setSortBy(event.target.value as SortKey)}
+                    className="bg-transparent text-sm font-medium text-slate-700 outline-none"
+                  >
+                    {sortOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </div>
           </div>
@@ -1299,7 +1024,7 @@ export default function DashboardPage() {
             <div className="p-8 text-sm text-slate-500">Loading tickets...</div>
           ) : error ? (
             <div className="p-8 text-sm text-rose-600">{error}</div>
-          ) : filteredTickets.length === 0 ? (
+          ) : sortedTickets.length === 0 ? (
             <div className="p-8 text-sm text-slate-500">
               {session.role === 'tenant'
                 ? 'You do not have any tickets matching your account yet.'
@@ -1307,7 +1032,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-200">
-              {filteredTickets.map((ticket) => {
+              {sortedTickets.map((ticket) => {
                 const status = normalizeStatus(ticket.status);
                 const displayPriority = normalizePriority(ticket.priority);
                 const assignmentLabel = getTicketAssignmentLabel(ticket);
