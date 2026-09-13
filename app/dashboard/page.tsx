@@ -1027,12 +1027,15 @@ export default function DashboardPage() {
                     <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <label className="relative block h-12 w-12 cursor-pointer overflow-hidden rounded-full border border-slate-200 bg-slate-200 transition hover:opacity-90">
+                          <label className="group relative block h-12 w-12 cursor-pointer overflow-hidden rounded-full border border-slate-200 bg-slate-200 transition hover:opacity-90">
                             <img
                               src={avatarSource}
                               alt={`${member.name} avatar`}
                               className="h-full w-full object-cover"
                             />
+                            <span className="absolute inset-0 flex items-center justify-center bg-slate-950/40 text-[9px] font-semibold uppercase tracking-[0.12em] text-white opacity-0 transition group-hover:opacity-100">
+                              Edit
+                            </span>
                             <input
                               type="file"
                               accept="image/*"
@@ -1050,9 +1053,24 @@ export default function DashboardPage() {
                           <div>
                             <p className="text-sm font-semibold text-slate-900">{member.name}</p>
                             <p className="mt-1 text-xs text-slate-500">{member.email}</p>
-                            <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
-                              {member.role}
-                            </span>
+                            {session?.role === 'owner' ? (
+                              <select
+                                value={member.role}
+                                onChange={(event) => {
+                                  const nextRole = event.target.value as StaffMember['role'];
+                                  void handleUpdateStaffMember(member.email, { role: nextRole });
+                                }}
+                                className="mt-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 outline-none transition focus:border-slate-500"
+                              >
+                                <option value="Owner">Owner</option>
+                                <option value="Maintenance">Maintenance</option>
+                                <option value="Contractor">Contractor</option>
+                              </select>
+                            ) : (
+                              <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                                {member.role}
+                              </span>
+                            )}
                           </div>
                         </div>
 

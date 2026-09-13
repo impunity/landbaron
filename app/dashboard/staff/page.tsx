@@ -49,6 +49,82 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const handleStaffAvatarUpload = async (staffEmail: string, file?: File | null) => {
+    if (!file || !session) {
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setError('file must be under 8mb');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('email', staffEmail);
+
+    try {
+      const response = await fetch('/api/staff/avatar', {
+        method: 'POST',
+        headers: {
+          'x-user-role': session.role,
+          'x-user-email': session.email,
+        },
+        body: formData,
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Avatar could not be updated.');
+      }
+
+      setStaff((current) =>
+        current.map((member) =>
+          member.email.toLowerCase() === staffEmail.toLowerCase()
+            ? { ...member, avatar_url: result.avatar_url ?? member.avatar_url }
+            : member,
+        ),
+      );
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Avatar could not be updated.');
+      console.error(uploadError);
+    }
+  };
+
+  const handleStaffRoleChange = async (staffEmail: string, role: StaffMember['role']) => {
+    if (!session || session.role !== 'owner') {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/staff', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': session.role,
+          'x-user-email': session.email,
+        },
+        body: JSON.stringify({ email: staffEmail, role }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Role could not be updated.');
+      }
+
+      setStaff((current) =>
+        current.map((member) =>
+          member.email.toLowerCase() === staffEmail.toLowerCase() && result.staff
+            ? { ...member, ...result.staff }
+            : member,
+        ),
+      );
+    } catch (roleError) {
+      setError(roleError instanceof Error ? roleError.message : 'Role could not be updated.');
+      console.error(roleError);
+    }
+  };
+
   useEffect(() => {
     const client = supabase;
 
@@ -197,11 +273,38 @@ export default function StaffPage() {
                   return (
                     <tr key={member.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3">
-                        <img src={avatarSource} alt={`${member.name} avatar`} className="h-12 w-12 rounded-full object-cover ring-1 ring-slate-200" />
+                        <label className="relative block h-12 w-12 cursor-pointer overflow-hidden rounded-full ring-1 ring-slate-200 transition hover:opacity-90">
+                          <img src={avatarSource} alt={`${member.name} avatar`} className="h-full w-full object-cover" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) {
+                                void handleStaffAvatarUpload(member.email, file);
+                              }
+                              event.target.value = '';
+                            }}
+                          />
+                        </label>
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900">{member.name}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{member.email}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{member.role}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        <select
+                          value={member.role}
+                          onChange={(event) => {
+                            const nextRole = event.target.value as StaffMember['role'];
+                            void handleStaffRoleChange(member.email, nextRole);
+                          }}
+                          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none transition focus:border-slate-500"
+                        >
+                          <option value="Owner">Owner</option>
+                          <option value="Maintenance">Maintenance</option>
+                          <option value="Contractor">Contractor</option>
+                        </select>
+                      </td>
                     </tr>
                   );
                 })}
