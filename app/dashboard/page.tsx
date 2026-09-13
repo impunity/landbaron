@@ -105,6 +105,9 @@ const sanitizeTicketDescription = (description?: string | null) => {
   }
 
   return description
+    .replace(/(^|\n)\s*Email:\s*[^\n]*$/gim, '$1')
+    .replace(/(^|\n)\s*Assigned to:\s*[^\n]*$/gim, '$1')
+    .replace(/(^|\n)\s*Photo:\s*[^\n]*$/gim, '$1')
     .replace(/https?:\/\/[^\s)]+/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
