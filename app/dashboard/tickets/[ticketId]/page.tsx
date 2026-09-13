@@ -37,6 +37,7 @@ const normalizeStatus = (status?: string | null) => {
   if (value.toLowerCase() === 'waiting on parts') return 'Waiting on Parts';
   if (value.toLowerCase() === 'resolved') return 'Resolved';
   if (value.toLowerCase() === 'closed' || value.toLowerCase() === 'dismissed') return 'Closed';
+  if (value.toLowerCase() === 'archived') return 'Archived';
 
   return value;
 };
@@ -119,6 +120,7 @@ const labelMap: Record<string, string> = {
   'Waiting on Parts': 'Waiting on Parts',
   Resolved: 'Resolved',
   Closed: 'Dismissed',
+  Archived: 'Archived',
 };
 
 const formatAssignmentLabel = (value?: string | null) => {
@@ -665,6 +667,20 @@ export default function TicketDetailPage() {
                     className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {detailSaving ? 'Updating...' : 'Dismiss ticket'}
+                  </button>
+                )}
+
+                {session.role === 'owner' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusDraft('Archived');
+                      void handleTicketUpdate({ status: 'Archived', notes: noteDraft, assigned_to: assignedStaff });
+                    }}
+                    disabled={detailSaving || statusDraft === 'Archived'}
+                    className="rounded-xl border border-stone-300 bg-stone-100 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {detailSaving ? 'Updating...' : 'Archive ticket'}
                   </button>
                 )}
 

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getRoleLabel, getUserRoleByEmail, getVisibleTickets, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
-type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | 'Closed';
+type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | 'Closed' | 'Archived';
 
 type TicketRow = {
   id: string;
@@ -46,6 +46,7 @@ const statusStyles: Record<string, string> = {
   'Waiting on Parts': 'bg-sky-100 text-sky-700 ring-sky-200',
   Resolved: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
   Closed: 'bg-slate-200 text-slate-700 ring-slate-300',
+  Archived: 'bg-stone-200 text-stone-700 ring-stone-300',
 };
 
 const labelMap: Record<string, string> = {
@@ -54,6 +55,7 @@ const labelMap: Record<string, string> = {
   'Waiting on Parts': 'Waiting on Parts',
   Resolved: 'Resolved',
   Closed: 'Dismissed',
+  Archived: 'Archived',
 };
 
 const filterTabs = [
@@ -62,6 +64,7 @@ const filterTabs = [
   { key: 'In Progress', label: 'In Progress' },
   { key: 'Resolved', label: 'Resolved' },
   { key: 'Closed', label: 'Dismissed' },
+  { key: 'Archived', label: 'Archived' },
 ] as const;
 
 const sortOptions = [
@@ -83,6 +86,7 @@ const normalizeStatus = (status?: string | null) => {
   if (value.toLowerCase() === 'waiting on parts') return 'Waiting on Parts';
   if (value.toLowerCase() === 'resolved') return 'Resolved';
   if (value.toLowerCase() === 'closed' || value.toLowerCase() === 'dismissed') return 'Closed';
+  if (value.toLowerCase() === 'archived') return 'Archived';
 
   return value;
 };
@@ -213,6 +217,7 @@ const statusOrder: Record<string, number> = {
   'Waiting on Parts': 3,
   Resolved: 4,
   Closed: 5,
+  Archived: 6,
 };
 
 export default function DashboardPage() {
@@ -398,6 +403,7 @@ export default function DashboardPage() {
       inProgress: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'In Progress').length,
       resolved: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Resolved').length,
       dismissed: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Closed').length,
+      archived: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Archived').length,
       total: visibleTickets.length,
     }),
     [visibleTickets],
@@ -978,12 +984,13 @@ export default function DashboardPage() {
           </section>
         )}
 
-        <section className="mb-8 grid gap-4 md:grid-cols-4">
+        <section className="mb-8 grid gap-4 md:grid-cols-5">
           {[
             { key: 'all' as const, label: 'Total', value: summary.total, className: 'text-slate-900', badge: 'bg-slate-100 text-slate-700' },
             { key: 'Open' as const, label: 'Open', value: summary.open, className: 'text-rose-600', badge: 'bg-rose-100 text-rose-700' },
             { key: 'Resolved' as const, label: 'Resolved', value: summary.resolved, className: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700' },
             { key: 'Closed' as const, label: 'Dismissed', value: summary.dismissed, className: 'text-slate-700', badge: 'bg-slate-200 text-slate-700' },
+            { key: 'Archived' as const, label: 'Archived', value: summary.archived, className: 'text-stone-700', badge: 'bg-stone-200 text-stone-700' },
           ].map((card) => {
             const isActive = activeFilter === card.key;
 

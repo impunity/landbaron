@@ -1,3 +1,4 @@
+| status | text | Open, In Progress, Awaiting Tenant, Resolved, Closed, Archived |
 # Property Maintenance Ticketing App Specs
 
 ## Product Goal
