@@ -103,14 +103,35 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('POST /api/staff/avatar failed:', error);
 
-    const message = error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : 'Avatar upload failed.';
+    const getErrorMessage = (value: unknown): string => {
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+
+      if (value && typeof value === 'object') {
+        const maybeMessage = 'message' in value && typeof value.message === 'string' && value.message.trim()
+          ? value.message
+          : null;
+
+        if (maybeMessage) {
+          return maybeMessage;
+        }
+
+        try {
+          const json = JSON.stringify(value);
+          if (json && json !== '{}') {
+            return json;
+          }
+        } catch {
+          // ignore JSON serialization issues and fall through
+        }
+      }
+
+      return 'Avatar upload failed.';
+    };
 
     return NextResponse.json(
-      { error: message },
+      { error: getErrorMessage(error) },
       { status: 500 },
     );
   }
