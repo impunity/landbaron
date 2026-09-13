@@ -138,14 +138,24 @@ export async function PATCH(
       }
     }
 
-    const { data: existingTicket, error: fetchError } = await supabaseAdmin
+    let existingTicket: { description?: string | null; assigned_to?: string | null } | null = null;
+    let hasAssignedToColumn = true;
+
+    const { data: fetchedTicket, error: fetchError } = await supabaseAdmin
       .from('tickets')
       .select('description, assigned_to')
       .eq('id', ticketId)
       .maybeSingle();
 
     if (fetchError) {
-      throw fetchError;
+      const errorText = String(fetchError.message ?? '');
+      if (errorText.toLowerCase().includes('assigned_to') || errorText.toLowerCase().includes('column')) {
+        hasAssignedToColumn = false;
+      } else {
+        throw fetchError;
+      }
+    } else {
+      existingTicket = fetchedTicket ?? null;
     }
 
     const currentDescription = existingTicket?.description ?? '';
@@ -163,7 +173,9 @@ export async function PATCH(
       typeof notes === 'string' ? notes.trim().replace(/^Owner notes:\s*/i, '').trim() : currentNotes;
 
     if (typeof assigned_to === 'string' || typeof notes === 'string') {
-      updates.assigned_to = nextAssignment || null;
+      if (hasAssignedToColumn && typeof assigned_to === 'string') {
+        updates.assigned_to = nextAssignment || null;
+      }
       updates.description = buildDescription({
         baseDescription,
         notes: nextNotes,
