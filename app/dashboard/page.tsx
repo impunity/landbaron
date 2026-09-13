@@ -556,7 +556,7 @@ export default function DashboardPage() {
 
     const maxFileSize = 8 * 1024 * 1024;
     if (file.size > maxFileSize) {
-      setStaffError('File must be under 8MB.');
+      setStaffError('file must be under 8mb');
       return;
     }
 

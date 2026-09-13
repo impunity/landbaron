@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'Avatar must be 8MB or smaller.' }, { status: 400 });
+      return NextResponse.json({ error: 'file must be under 8mb' }, { status: 400 });
     }
 
     const canManageAvatar = userRole === 'owner' || userEmail === targetEmail;
