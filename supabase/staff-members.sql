@@ -7,7 +7,18 @@ create table if not exists public.staff_members (
   updated_at timestamptz not null default now()
 );
 
+alter table public.tickets
+  add column if not exists assigned_to text;
+
+create index if not exists tickets_assigned_to_idx
+  on public.tickets (assigned_to);
+
 alter table public.staff_members enable row level security;
+
+drop policy if exists "Owners can view staff" on public.staff_members;
+drop policy if exists "Owners can insert staff" on public.staff_members;
+drop policy if exists "Owners can update staff" on public.staff_members;
+drop policy if exists "Owners can delete staff" on public.staff_members;
 
 create policy "Owners can view staff"
 on public.staff_members
