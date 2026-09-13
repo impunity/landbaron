@@ -10,6 +10,31 @@ const normalizeRole = (value?: string | null) => {
   return 'Maintenance';
 };
 
+const buildGenericStaffAvatar = (name: string, role: string) => {
+  const initials = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || 'ST';
+
+  const palette: Record<string, string> = {
+    Owner: '#111827',
+    Maintenance: '#0f766e',
+    Contractor: '#7c3aed',
+  };
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="${initials} avatar">
+      <rect width="120" height="120" rx="60" fill="${palette[role] ?? '#334155'}" />
+      <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="white" font-family="Arial, sans-serif" font-size="36" font-weight="700">${initials}</text>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
 const getStaffSaveErrorMessage = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error ?? '');
   const normalized = message.toLowerCase();
@@ -76,7 +101,9 @@ export async function POST(request: NextRequest) {
     const name = String(body?.name ?? '').trim();
     const email = String(body?.email ?? '').trim().toLowerCase();
     const role = normalizeRole(body?.role);
-    const avatarUrl = typeof body?.avatar_url === 'string' ? body.avatar_url.trim() : null;
+    const avatarUrl = typeof body?.avatar_url === 'string' && body.avatar_url.trim()
+      ? body.avatar_url.trim()
+      : buildGenericStaffAvatar(name, role);
 
     if (!name || !email) {
       return NextResponse.json(

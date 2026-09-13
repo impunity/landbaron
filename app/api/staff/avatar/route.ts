@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024;
+const MAX_FILE_SIZE = 8 * 1024 * 1024;
 
 const getAvatarPath = (email: string) => {
   const sanitized = email.trim().toLowerCase().replace(/[^a-z0-9@._-]/g, '-');
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'Avatar must be 2MB or smaller.' }, { status: 400 });
+      return NextResponse.json({ error: 'Avatar must be 8MB or smaller.' }, { status: 400 });
     }
 
     const canManageAvatar = userRole === 'owner' || userEmail === targetEmail;

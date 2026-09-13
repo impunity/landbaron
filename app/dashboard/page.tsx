@@ -554,6 +554,12 @@ export default function DashboardPage() {
       return;
     }
 
+    const maxFileSize = 8 * 1024 * 1024;
+    if (file.size > maxFileSize) {
+      setStaffError('File must be under 8MB.');
+      return;
+    }
+
     const canManageAvatar = session.role === 'owner' || session.email.trim().toLowerCase() === staffEmail.trim().toLowerCase();
     if (!canManageAvatar) {
       setStaffError('Only the owner or the staff member can update this avatar.');
@@ -698,6 +704,15 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {session.role === 'owner' && (
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard/staff')}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Staff roster
+              </button>
+            )}
             <div
               className={[
                 'rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em]',
@@ -1012,13 +1027,25 @@ export default function DashboardPage() {
                     <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <div className="relative h-12 w-12 overflow-hidden rounded-full border border-slate-200 bg-slate-200">
+                          <label className="relative block h-12 w-12 cursor-pointer overflow-hidden rounded-full border border-slate-200 bg-slate-200 transition hover:opacity-90">
                             <img
                               src={avatarSource}
                               alt={`${member.name} avatar`}
                               className="h-full w-full object-cover"
                             />
-                          </div>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  void handleStaffAvatarUpload(member.email, file);
+                                }
+                                event.target.value = '';
+                              }}
+                            />
+                          </label>
 
                           <div>
                             <p className="text-sm font-semibold text-slate-900">{member.name}</p>
