@@ -124,7 +124,7 @@ export async function PATCH(
       );
     }
 
-    const validStatuses = ['Open', 'In Progress', 'Waiting on Parts', 'Resolved', 'Closed'];
+    const validStatuses = ['Open', 'In Progress', 'Waiting on Parts', 'Resolved', 'Closed', 'Archived'];
     const updates: Record<string, string | null> = {};
 
     if (typeof status === 'string') {
