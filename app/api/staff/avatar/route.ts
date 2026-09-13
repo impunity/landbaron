@@ -102,8 +102,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, avatar_url: staffRecord[0].avatar_url ?? avatarUrl });
   } catch (error) {
     console.error('POST /api/staff/avatar failed:', error);
+
+    const message = error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Avatar upload failed.';
+
     return NextResponse.json(
-      { error: 'Avatar upload failed. Please confirm the staff-avatars bucket exists in Supabase Storage.' },
+      { error: message },
       { status: 500 },
     );
   }
