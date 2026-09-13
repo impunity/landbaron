@@ -48,6 +48,87 @@ export default function StaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState<StaffMember['role']>('Maintenance');
+  const [newStaffSubmitting, setNewStaffSubmitting] = useState(false);
+  const [newStaffSuccess, setNewStaffSuccess] = useState<string | null>(null);
+
+  const handleAddStaffMember = async () => {
+    if (!session || session.role !== 'owner') {
+      setError('Owner access is required to add staff members.');
+      return;
+    }
+
+    const trimmedName = newStaffName.trim();
+    const trimmedEmail = newStaffEmail.trim();
+
+    if (!trimmedName || !trimmedEmail) {
+      setError('Name and email are required.');
+      return;
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(trimmedEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    setNewStaffSubmitting(true);
+    setError(null);
+    setNewStaffSuccess(null);
+
+    try {
+      const response = await fetch('/api/staff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': session.role,
+          'x-user-email': session.email,
+        },
+        body: JSON.stringify({
+          name: trimmedName,
+          email: trimmedEmail.toLowerCase(),
+          role: newStaffRole,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Staff member could not be added.');
+      }
+
+      const nextMember = result.staff as StaffMember | null;
+      if (nextMember) {
+        setStaff((current) => {
+          const existingIndex = current.findIndex(
+            (member) => member.email.toLowerCase() === nextMember.email.toLowerCase(),
+          );
+
+          if (existingIndex >= 0) {
+            const updated = [...current];
+            updated[existingIndex] = nextMember;
+            return updated;
+          }
+
+          return [nextMember, ...current];
+        });
+      }
+
+      setNewStaffName('');
+      setNewStaffEmail('');
+      setNewStaffRole('Maintenance');
+      setNewStaffSuccess(`Added ${trimmedName} to the staff roster.`);
+      setShowAddForm(false);
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : 'Staff member could not be added.';
+      setError(message);
+      console.error(addError);
+    } finally {
+      setNewStaffSubmitting(false);
+    }
+  };
 
   const handleStaffAvatarUpload = async (staffEmail: string, file?: File | null) => {
     if (!file || !session) {
@@ -236,6 +317,13 @@ export default function StaffPage() {
             </div>
             <button
               type="button"
+              onClick={() => setShowAddForm((current) => !current)}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800"
+            >
+              ADD STAFF
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/dashboard')}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -244,9 +332,90 @@ export default function StaffPage() {
           </div>
         </header>
 
+        {showAddForm && (
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Add staff member</h2>
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="text-sm font-medium text-slate-500 hover:text-slate-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Name</span>
+                <input
+                  type="text"
+                  value={newStaffName}
+                  onChange={(event) => setNewStaffName(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  placeholder="Jane Smith"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Email</span>
+                <input
+                  type="email"
+                  value={newStaffEmail}
+                  onChange={(event) => setNewStaffEmail(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  placeholder="jane@example.com"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
+                <span className="mb-1 block font-medium text-slate-700">Role</span>
+                <select
+                  value={newStaffRole}
+                  onChange={(event) => setNewStaffRole(event.target.value as StaffMember['role'])}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                >
+                  <option value="Owner">Owner</option>
+                  <option value="Maintenance">Maintenance</option>
+                  <option value="Contractor">Contractor</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddForm(false);
+                  setNewStaffName('');
+                  setNewStaffEmail('');
+                  setNewStaffRole('Maintenance');
+                }}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAddStaffMember()}
+                disabled={newStaffSubmitting}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {newStaffSubmitting ? 'Saving...' : 'Save member'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}
+          </div>
+        )}
+
+        {newStaffSuccess && (
+          <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {newStaffSuccess}
           </div>
         )}
 

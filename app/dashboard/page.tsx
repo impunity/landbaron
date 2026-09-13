@@ -1338,7 +1338,6 @@ export default function DashboardPage() {
                             {ticket.category ?? 'General'}
                           </span>
                           <span>{displayPriority} priority</span>
-                          <span>Assigned: {assignmentLabel}</span>
                           <span>Updated {new Date(ticket.updated_at).toLocaleDateString()}</span>
                         </div>
                       </div>
@@ -1346,8 +1345,6 @@ export default function DashboardPage() {
                       <div className="min-w-[180px] rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
                         <p className="font-medium text-slate-900">Ticket ID</p>
                         <p className="mt-1 break-all">{ticket.id}</p>
-                        <p className="mt-3 font-medium text-slate-900">Assigned</p>
-                        <p className="mt-1">{assignmentLabel}</p>
                       </div>
                     </div>
                   </article>
