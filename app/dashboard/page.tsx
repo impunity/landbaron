@@ -817,24 +817,28 @@ export default function DashboardPage() {
               Recent activity
             </p>
             <div className="mt-4 space-y-3">
-              {recentActivity.map((ticket) => (
-                <button
-                  key={ticket.id}
-                  type="button"
-                  onClick={() => openTicketView(ticket.id)}
-                  className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-slate-100"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{ticket.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {ticket.property_id ?? 'Unassigned'} • {normalizeStatus(ticket.status)}
-                    </p>
-                  </div>
-                  <span className="text-[11px] text-slate-400">
-                    {new Date(ticket.updated_at).toLocaleDateString()}
-                  </span>
-                </button>
-              ))}
+              {recentActivity.map((ticket) => {
+                const assignmentLabel = getTicketAssignmentLabel(ticket);
+
+                return (
+                  <button
+                    key={ticket.id}
+                    type="button"
+                    onClick={() => openTicketView(ticket.id)}
+                    className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:bg-slate-100"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">{ticket.title}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {assignmentLabel} • {normalizeStatus(ticket.status)}
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      {new Date(ticket.updated_at).toLocaleDateString()}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -918,8 +922,8 @@ export default function DashboardPage() {
                       <div className="min-w-[180px] rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
                         <p className="font-medium text-slate-900">Ticket ID</p>
                         <p className="mt-1 break-all">{ticket.id}</p>
-                        <p className="mt-3 font-medium text-slate-900">Property</p>
-                        <p className="mt-1">{ticket.property_id ?? 'Unassigned'}</p>
+                        <p className="mt-3 font-medium text-slate-900">Assigned</p>
+                        <p className="mt-1">{assignmentLabel}</p>
                       </div>
                     </div>
                   </article>
