@@ -201,7 +201,12 @@ export async function PATCH(
   } catch (error) {
     console.error('PATCH /api/tickets/[ticketId] failed:', error);
     return NextResponse.json(
-      { error: 'Ticket update failed. Please try again.' },
+      {
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : 'Ticket update failed. Please try again.',
+      },
       { status: 500 },
     );
   }
