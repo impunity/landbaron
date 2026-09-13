@@ -3,9 +3,13 @@ create table if not exists public.staff_members (
   name text not null,
   email text not null unique,
   role text not null default 'Maintenance' check (role in ('Owner', 'Maintenance', 'Contractor')),
+  avatar_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.staff_members
+  add column if not exists avatar_url text;
 
 alter table public.tickets
   add column if not exists assigned_to text;

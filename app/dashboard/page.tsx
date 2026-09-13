@@ -36,6 +36,7 @@ type StaffMember = {
   name: string;
   email: string;
   role: 'Owner' | 'Maintenance' | 'Contractor';
+  avatar_url?: string | null;
 };
 
 const statusStyles: Record<string, string> = {
@@ -132,6 +133,41 @@ const initialFormState: TicketFormState = {
   description: '',
 };
 
+const getInitials = (name: string) => {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return 'ST';
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? '').join('');
+};
+
+const buildStaffAvatarPlaceholder = (name: string, role: StaffMember['role']) => {
+  const initials = getInitials(name);
+  const palette: Record<StaffMember['role'], string> = {
+    Owner: '#111827',
+    Maintenance: '#0f766e',
+    Contractor: '#7c3aed',
+  };
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="${initials} avatar">
+      <rect width="120" height="120" rx="60" fill="${palette[role] ?? '#334155'}" />
+      <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="white" font-family="Arial, sans-serif" font-size="36" font-weight="700">${initials}</text>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
+const getStaffAvatarSource = (member: Pick<StaffMember, 'avatar_url' | 'name' | 'role'>) =>
+  member.avatar_url || buildStaffAvatarPlaceholder(member.name, member.role);
+
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSessionState] = useState<SessionUser | null>(null);
@@ -153,6 +189,7 @@ export default function DashboardPage() {
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
   const [newStaffRole, setNewStaffRole] = useState<StaffMember['role']>('Maintenance');
+  const [editingStaff, setEditingStaff] = useState<{ email: string; name: string; role: StaffMember['role'] } | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -438,6 +475,128 @@ export default function DashboardPage() {
         : 'Staff member could not be removed.';
       setStaffError(message);
       console.error(removeError);
+    }
+  };
+
+  const handleUpdateStaffMember = async (email: string, updates: Partial<Pick<StaffMember, 'name' | 'role' | 'avatar_url'>>) => {
+    if (!session) {
+      return;
+    }
+
+    const isOwner = session.role === 'owner';
+    const isSelf = session.email.trim().toLowerCase() === email.trim().toLowerCase();
+    const hasRoleNameUpdate = Object.prototype.hasOwnProperty.call(updates, 'name') || Object.prototype.hasOwnProperty.call(updates, 'role');
+
+    if (!isOwner && !(isSelf && !hasRoleNameUpdate)) {
+      setStaffError('Only the owner can edit staff names or roles, and only that staff member or the owner can update their avatar.');
+      return;
+    }
+
+    setStaffError(null);
+    setStaffSuccess(null);
+
+    try {
+      const response = await fetch('/api/staff', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': session.role,
+          'x-user-email': session.email,
+        },
+        body: JSON.stringify({
+          email,
+          ...updates,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Staff member could not be updated.');
+      }
+
+      const updatedMember = result.staff as StaffMember | null;
+      setStaffMembers((current) =>
+        current.map((member) =>
+          member.email.toLowerCase() === email.toLowerCase() && updatedMember
+            ? { ...member, ...updatedMember }
+            : member,
+        ),
+      );
+
+      setStaffSuccess('Staff member updated.');
+    } catch (updateError) {
+      const message = updateError instanceof Error && updateError.message
+        ? updateError.message
+        : 'Staff member could not be updated.';
+      setStaffError(message);
+      console.error(updateError);
+    }
+  };
+
+  const handleRemoveStaffAvatar = async (email: string) => {
+    if (!session) {
+      return;
+    }
+
+    const isOwner = session.role === 'owner';
+    const isSelf = session.email.trim().toLowerCase() === email.trim().toLowerCase();
+
+    if (!isOwner && !isSelf) {
+      setStaffError('Only the owner or that staff member can remove this avatar.');
+      return;
+    }
+
+    await handleUpdateStaffMember(email, { avatar_url: null });
+  };
+
+  const handleStaffAvatarUpload = async (staffEmail: string, file?: File | null) => {
+    if (!file || !session) {
+      return;
+    }
+
+    const canManageAvatar = session.role === 'owner' || session.email.trim().toLowerCase() === staffEmail.trim().toLowerCase();
+    if (!canManageAvatar) {
+      setStaffError('Only the owner or the staff member can update this avatar.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('email', staffEmail);
+
+    setStaffError(null);
+    setStaffSuccess(null);
+
+    try {
+      const response = await fetch('/api/staff/avatar', {
+        method: 'POST',
+        headers: {
+          'x-user-role': session.role,
+          'x-user-email': session.email,
+        },
+        body: formData,
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Avatar could not be updated.');
+      }
+
+      setStaffMembers((current) =>
+        current.map((member) =>
+          member.email.toLowerCase() === staffEmail.toLowerCase()
+            ? { ...member, avatar_url: result.avatar_url ?? member.avatar_url }
+            : member,
+        ),
+      );
+
+      setStaffSuccess('Avatar updated successfully.');
+    } catch (avatarError) {
+      const message = avatarError instanceof Error && avatarError.message
+        ? avatarError.message
+        : 'Avatar could not be updated.';
+      setStaffError(message);
+      console.error(avatarError);
     }
   };
 
@@ -733,28 +892,194 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {staffMembers.length > 0 ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {staffMembers.map((member) => (
-                  <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{member.name}</p>
-                        <p className="mt-1 text-xs text-slate-500">{member.email}</p>
-                        <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
-                          {member.role}
-                        </span>
+            {session.role === 'owner' && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Staff management</p>
+                    <h3 className="mt-1 text-base font-semibold text-slate-900">Edit roster details</h3>
+                  </div>
+                  {editingStaff && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingStaff(null)}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700"
+                    >
+                      Close
+                    </button>
+                  )}
+                </div>
+
+                {editingStaff ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 overflow-hidden rounded-full border border-slate-200 bg-slate-200">
+                        <img
+                          src={getStaffAvatarSource({
+                            name: editingStaff.name,
+                            role: editingStaff.role,
+                            avatar_url:
+                              staffMembers.find((member) => member.email.toLowerCase() === editingStaff.email.toLowerCase())
+                                ?.avatar_url ?? null,
+                          })}
+                          alt={`${editingStaff.name} avatar preview`}
+                          className="h-full w-full object-cover"
+                        />
                       </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{editingStaff.name}</p>
+                        <p className="text-xs text-slate-500">{editingStaff.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
+                      <input
+                        value={editingStaff.name}
+                        onChange={(event) => setEditingStaff((current) => current ? { ...current, name: event.target.value } : current)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                        placeholder="Full name"
+                      />
+
+                      <select
+                        value={editingStaff.role}
+                        onChange={(event) => setEditingStaff((current) => current ? { ...current, role: event.target.value as StaffMember['role'] } : current)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                      >
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Contractor">Contractor</option>
+                        <option value="Owner">Owner</option>
+                      </select>
+
                       <button
                         type="button"
-                        onClick={() => handleRemoveStaffMember(member.email)}
-                        className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
+                        onClick={() => {
+                          if (!editingStaff) {
+                            return;
+                          }
+
+                          void handleUpdateStaffMember(editingStaff.email, {
+                            name: editingStaff.name,
+                            role: editingStaff.role,
+                          });
+                        }}
+                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
                       >
-                        Remove
+                        Save changes
                       </button>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100">
+                        Upload avatar
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              void handleStaffAvatarUpload(editingStaff.email, file);
+                            }
+                            event.target.value = '';
+                          }}
+                        />
+                      </label>
+
+                      {staffMembers.find((member) => member.email.toLowerCase() === editingStaff.email.toLowerCase())?.avatar_url && (
+                        <button
+                          type="button"
+                          onClick={() => void handleRemoveStaffAvatar(editingStaff.email)}
+                          className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
+                        >
+                          Remove avatar
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  <p className="text-sm text-slate-500">Choose a staff member to update their name, role, or avatar.</p>
+                )}
+              </div>
+            )}
+
+            {staffMembers.length > 0 ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {staffMembers.map((member) => {
+                  const canManageAvatar = session?.role === 'owner' || session?.email?.trim().toLowerCase() === member.email.trim().toLowerCase();
+                  const avatarSource = getStaffAvatarSource(member);
+
+                  return (
+                    <div key={member.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-12 w-12 overflow-hidden rounded-full border border-slate-200 bg-slate-200">
+                            <img
+                              src={avatarSource}
+                              alt={`${member.name} avatar`}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{member.name}</p>
+                            <p className="mt-1 text-xs text-slate-500">{member.email}</p>
+                            <span className="mt-2 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                              {member.role}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          {session?.role === 'owner' && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingStaff({ email: member.email, name: member.name, role: member.role })}
+                              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100"
+                            >
+                              Manage
+                            </button>
+                          )}
+
+                          {canManageAvatar && (
+                            <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100">
+                              Upload
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  void handleStaffAvatarUpload(member.email, file);
+                                  event.target.value = '';
+                                }}
+                              />
+                            </label>
+                          )}
+
+                          {member.avatar_url && (session?.role === 'owner' || session?.email?.trim().toLowerCase() === member.email.trim().toLowerCase()) && (
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveStaffAvatar(member.email)}
+                              className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
+                            >
+                              Remove avatar
+                            </button>
+                          )}
+
+                          {session?.role === 'owner' && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveStaffMember(member.email)}
+                              className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-50"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="mt-4 text-sm text-slate-500">No staff added yet.</p>
@@ -763,22 +1088,33 @@ export default function DashboardPage() {
         )}
 
         <section className="mb-8 grid gap-4 md:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Total</p>
-            <p className="mt-2 text-3xl font-semibold">{summary.total}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Open</p>
-            <p className="mt-2 text-3xl font-semibold text-rose-600">{summary.open}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Resolved</p>
-            <p className="mt-2 text-3xl font-semibold text-emerald-600">{summary.resolved}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Dismissed</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-700">{summary.dismissed}</p>
-          </div>
+          {[
+            { key: 'all' as const, label: 'Total', value: summary.total, className: 'text-slate-900' },
+            { key: 'Open' as const, label: 'Open', value: summary.open, className: 'text-rose-600' },
+            { key: 'Resolved' as const, label: 'Resolved', value: summary.resolved, className: 'text-emerald-600' },
+            { key: 'Closed' as const, label: 'Dismissed', value: summary.dismissed, className: 'text-slate-700' },
+          ].map((card) => {
+            const isActive = activeFilter === card.key;
+
+            return (
+              <button
+                key={card.key}
+                type="button"
+                onClick={() => setActiveFilter(card.key)}
+                className={[
+                  'rounded-2xl border p-5 text-left shadow-sm transition-all',
+                  isActive
+                    ? 'border-slate-900 bg-slate-900 text-white shadow-md'
+                    : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50',
+                ].join(' ')}
+              >
+                <p className={['text-sm', isActive ? 'text-slate-200' : 'text-slate-500'].join(' ')}>{card.label}</p>
+                <p className={['mt-2 text-3xl font-semibold', card.className, isActive ? 'text-white' : ''].join(' ')}>
+                  {card.value}
+                </p>
+              </button>
+            );
+          })}
         </section>
 
         <section className="mb-8 grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
