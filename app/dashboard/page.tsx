@@ -114,16 +114,34 @@ const parseAssignmentFromDescription = (description?: string | null) => {
   }
 
   const assignmentMatch = description.match(/(?:^|\n)Assigned to:\s*([^\n]+)/i);
-  return assignmentMatch ? assignmentMatch[1].trim() : 'Unassigned';
+  if (!assignmentMatch) {
+    return 'Unassigned';
+  }
+
+  return assignmentMatch[1].trim();
+};
+
+const formatAssignmentLabel = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return 'Unassigned';
+  }
+
+  const emailMatch = trimmed.match(/^(.+?)\s*<[^>]+>\s*$/);
+  if (emailMatch) {
+    return emailMatch[1].trim();
+  }
+
+  return trimmed;
 };
 
 const getTicketAssignmentLabel = (ticket?: Pick<TicketRow, 'assigned_to' | 'description'> | null) => {
   const directAssignment = ticket?.assigned_to?.trim();
   if (directAssignment) {
-    return directAssignment;
+    return formatAssignmentLabel(directAssignment);
   }
 
-  return parseAssignmentFromDescription(ticket?.description ?? null);
+  return formatAssignmentLabel(parseAssignmentFromDescription(ticket?.description ?? null));
 };
 
 const initialFormState: TicketFormState = {
@@ -325,14 +343,17 @@ export default function DashboardPage() {
   );
 
   const propertySummary = useMemo(() => {
-    const grouped = new Map<string, { count: number; active: number }>();
+    const grouped = new Map<string, { count: number; active: number; open: number; resolved: number; dismissed: number }>();
 
     visibleTickets.forEach((ticket) => {
       const property = ticket.property_id?.trim() || 'Unassigned';
-      const current = grouped.get(property) ?? { count: 0, active: 0 };
+      const current = grouped.get(property) ?? { count: 0, active: 0, open: 0, resolved: 0, dismissed: 0 };
       const status = normalizeStatus(ticket.status);
 
       current.count += 1;
+      if (status === 'Open') current.open += 1;
+      if (status === 'Resolved') current.resolved += 1;
+      if (status === 'Closed') current.dismissed += 1;
       if (status !== 'Resolved' && status !== 'Closed') {
         current.active += 1;
       }
@@ -345,6 +366,9 @@ export default function DashboardPage() {
         property,
         count: data.count,
         active: data.active,
+        open: data.open,
+        resolved: data.resolved,
+        dismissed: data.dismissed,
       }))
       .sort((a, b) => b.active - a.active || b.count - a.count)
       .slice(0, 4);
@@ -1134,10 +1158,10 @@ export default function DashboardPage() {
 
         <section className="mb-8 grid gap-4 md:grid-cols-4">
           {[
-            { key: 'all' as const, label: 'Total', value: summary.total, className: 'text-slate-900' },
-            { key: 'Open' as const, label: 'Open', value: summary.open, className: 'text-rose-600' },
-            { key: 'Resolved' as const, label: 'Resolved', value: summary.resolved, className: 'text-emerald-600' },
-            { key: 'Closed' as const, label: 'Dismissed', value: summary.dismissed, className: 'text-slate-700' },
+            { key: 'all' as const, label: 'Total', value: summary.total, className: 'text-slate-900', badge: 'bg-slate-100 text-slate-700' },
+            { key: 'Open' as const, label: 'Open', value: summary.open, className: 'text-rose-600', badge: 'bg-rose-100 text-rose-700' },
+            { key: 'Resolved' as const, label: 'Resolved', value: summary.resolved, className: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700' },
+            { key: 'Closed' as const, label: 'Dismissed', value: summary.dismissed, className: 'text-slate-700', badge: 'bg-slate-200 text-slate-700' },
           ].map((card) => {
             const isActive = activeFilter === card.key;
 
@@ -1153,7 +1177,12 @@ export default function DashboardPage() {
                     : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50',
                 ].join(' ')}
               >
-                <p className={['text-sm', isActive ? 'text-slate-200' : 'text-slate-500'].join(' ')}>{card.label}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className={['text-sm', isActive ? 'text-slate-200' : 'text-slate-500'].join(' ')}>{card.label}</p>
+                  <span className={['inline-flex rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]', card.badge, isActive ? 'bg-slate-700 text-slate-100' : ''].join(' ')}>
+                    {card.key === 'all' ? 'All' : card.key}
+                  </span>
+                </div>
                 <p className={['mt-2 text-3xl font-semibold', card.className, isActive ? 'text-white' : ''].join(' ')}>
                   {card.value}
                 </p>
@@ -1187,6 +1216,20 @@ export default function DashboardPage() {
                     <span className="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
                       {entry.active} active
                     </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] font-medium text-slate-600">
+                    <div className="rounded-md bg-white px-2 py-1.5">
+                      <div className="text-slate-900">{entry.open}</div>
+                      <div>Open</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1.5">
+                      <div className="text-emerald-700">{entry.resolved}</div>
+                      <div>Resolved</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1.5">
+                      <div className="text-slate-700">{entry.dismissed}</div>
+                      <div>Dismissed</div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1295,7 +1338,7 @@ export default function DashboardPage() {
                             {ticket.category ?? 'General'}
                           </span>
                           <span>{displayPriority} priority</span>
-                          <span>Assigned to: {assignmentLabel}</span>
+                          <span>Assigned: {assignmentLabel}</span>
                           <span>Updated {new Date(ticket.updated_at).toLocaleDateString()}</span>
                         </div>
                       </div>

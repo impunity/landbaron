@@ -121,6 +121,20 @@ const labelMap: Record<string, string> = {
   Closed: 'Dismissed',
 };
 
+const formatAssignmentLabel = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return 'Unassigned';
+  }
+
+  const emailMatch = trimmed.match(/^(.+?)\s*<[^>]+>\s*$/);
+  if (emailMatch) {
+    return emailMatch[1].trim();
+  }
+
+  return trimmed;
+};
+
 const parseAssignment = (description?: string | null) => {
   if (!description) {
     return { label: 'Unassigned', value: '' };
@@ -132,7 +146,7 @@ const parseAssignment = (description?: string | null) => {
   }
 
   const value = assignmentMatch[1].trim();
-  return { label: value || 'Unassigned', value };
+  return { label: formatAssignmentLabel(value) || 'Unassigned', value };
 };
 
 export default function TicketDetailPage() {
