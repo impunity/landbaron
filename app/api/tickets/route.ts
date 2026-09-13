@@ -36,7 +36,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, description, status, priority } = await request.json();
+    const { title, description, status, priority, assigned_to } = await request.json();
 
     if (!title || !description || !status || !priority) {
       return NextResponse.json(
@@ -55,12 +55,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedAssignee = typeof assigned_to === 'string' ? assigned_to.trim() : '';
+
     const { error } = await supabaseAdmin.from('tickets').insert([
       {
         title,
         description,
         status,
         priority,
+        assigned_to: normalizedAssignee || null,
       },
     ]);
 

@@ -29,6 +29,7 @@ type TicketFormState = {
   email: string;
   address: string;
   description: string;
+  assigned_to: string;
 };
 
 type StaffMember = {
@@ -157,6 +158,7 @@ const initialFormState: TicketFormState = {
   email: '',
   address: '',
   description: '',
+  assigned_to: '',
 };
 
 const getInitials = (name: string) => {
@@ -697,6 +699,7 @@ export default function DashboardPage() {
     const trimmedEmail = formState.email.trim();
     const trimmedAddress = formState.address.trim();
     const trimmedDescription = formState.description.trim();
+    const assignedTo = formState.assigned_to.trim();
     const numericSeverity = Number(formState.severity);
 
     if (!trimmedEmail || !trimmedAddress || !trimmedDescription || !formState.severity) {
@@ -729,6 +732,16 @@ export default function DashboardPage() {
     const priority = priorityMap[numericSeverity as 1 | 2 | 3 | 4 | 5];
     const status = 'Open';
     const title = trimmedDescription.length > 50 ? `${trimmedDescription.slice(0, 47)}...` : trimmedDescription;
+    const descriptionParts = [
+      `Email: ${trimmedEmail}`,
+      `Address: ${trimmedAddress}`,
+    ];
+
+    if (assignedTo) {
+      descriptionParts.push(`Assigned to: ${assignedTo}`);
+    }
+
+    descriptionParts.push(trimmedDescription);
 
     try {
       const response = await fetch('/api/tickets', {
@@ -738,9 +751,10 @@ export default function DashboardPage() {
         },
         body: JSON.stringify({
           title,
-          description: `Email: ${trimmedEmail}\nAddress: ${trimmedAddress}\n\n${trimmedDescription}`,
+          description: descriptionParts.join('\n\n'),
           status,
           priority,
+          assigned_to: assignedTo || null,
         }),
       });
 
@@ -872,6 +886,27 @@ export default function DashboardPage() {
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                 />
               </div>
+
+              {session.role === 'owner' && (
+                <div className="md:col-span-1">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Assign to
+                  </label>
+                  <select
+                    name="assigned_to"
+                    value={formState.assigned_to}
+                    onChange={handleInputChange}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  >
+                    <option value="">Unassigned</option>
+                    {staffMembers.map((member) => (
+                      <option key={member.id} value={member.name}>
+                        {member.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-slate-700">
