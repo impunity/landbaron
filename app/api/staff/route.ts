@@ -10,6 +10,21 @@ const normalizeRole = (value?: string | null) => {
   return 'Maintenance';
 };
 
+const getStaffSaveErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('staff_members') && (normalized.includes('does not exist') || normalized.includes('relation'))) {
+    return 'The staff_members table is missing in Supabase. Create it using the SQL in supabase/staff-members.sql.';
+  }
+
+  if (normalized.includes('row level security') || normalized.includes('permission denied')) {
+    return 'Supabase is rejecting the write because the staff_members table is missing permissions or RLS rules.';
+  }
+
+  return message || 'Staff could not be saved.';
+};
+
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -89,7 +104,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('POST /api/staff failed:', error);
     return NextResponse.json(
-      { error: 'Staff could not be saved.' },
+      { error: getStaffSaveErrorMessage(error) },
       { status: 500 },
     );
   }
