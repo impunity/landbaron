@@ -1,0 +1,780 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+
+import { getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+
+type TenantSummary = {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  status: string;
+};
+
+type UnitDetail = {
+  id: string;
+  property_id: string;
+  unit_number: string;
+  rent_amount?: number | null;
+  bedrooms: number;
+  bathrooms: number;
+  square_feet?: number | null;
+  status: string;
+  notes?: string | null;
+  tenants?: TenantSummary[];
+  unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null }>;
+  unit_maintenance_notes?: Array<{ id: string; note: string; category: string }>;
+};
+
+type PropertyWithUnits = {
+  id: string;
+  name: string;
+  address: string;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  notes?: string | null;
+  created_at: string;
+  units?: UnitDetail[];
+};
+
+type UnitDraft = {
+  unit_number: string;
+  rent_amount: string;
+  bedrooms: string;
+  bathrooms: string;
+  square_feet: string;
+  status: string;
+  notes: string;
+};
+
+const emptyUnitDraft: UnitDraft = {
+  unit_number: '',
+  rent_amount: '',
+  bedrooms: '1',
+  bathrooms: '1',
+  square_feet: '',
+  status: 'occupied',
+  notes: '',
+};
+
+export default function PropertyDetailPage() {
+  const router = useRouter();
+  const params = useParams<{ propertyId: string }>();
+  const propertyId = params?.propertyId;
+
+  const [session, setSessionState] = useState<SessionUser | null>(null);
+  const [property, setProperty] = useState<PropertyWithUnits | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAddUnitModal, setShowAddUnitModal] = useState(false);
+  const [unitDraft, setUnitDraft] = useState<UnitDraft>(emptyUnitDraft);
+  const [savingUnit, setSavingUnit] = useState(false);
+  const [showEditPropertyModal, setShowEditPropertyModal] = useState(false);
+  const [propEditDraft, setPropEditDraft] = useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    notes: '',
+  });
+  const [savingProp, setSavingProp] = useState(false);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client) {
+      setError('Supabase is not configured for this environment yet.');
+      setLoading(false);
+      return;
+    }
+
+    const syncSession = async () => {
+      const { data } = await client.auth.getSession();
+      const sessionUser = data.session?.user;
+
+      if (!sessionUser) {
+        router.replace('/login');
+        return;
+      }
+
+      const role = getUserRoleByEmail(sessionUser.email);
+      if (role === 'tenant') {
+        router.replace('/dashboard');
+        return;
+      }
+
+      setSessionState({
+        id: sessionUser.id,
+        name: sessionUser.user_metadata?.full_name || sessionUser.email || 'User',
+        email: sessionUser.email || '',
+        role,
+      });
+    };
+
+    syncSession();
+
+    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+      const nextUser = nextSession?.user;
+      if (!nextUser) {
+        setSessionState(null);
+        router.replace('/login');
+        return;
+      }
+
+      const role = getUserRoleByEmail(nextUser.email);
+      if (role === 'tenant') {
+        router.replace('/dashboard');
+        return;
+      }
+
+      setSessionState({
+        id: nextUser.id,
+        name: nextUser.user_metadata?.full_name || nextUser.email || 'User',
+        email: nextUser.email || '',
+        role,
+      });
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  const loadProperty = async () => {
+    if (!propertyId) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
+      const response = await fetch(`/api/properties/${propertyId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Unable to load property details.');
+      }
+
+      const propData = result.property as PropertyWithUnits | null;
+      setProperty(propData);
+      if (propData) {
+        setPropEditDraft({
+          name: propData.name ?? '',
+          address: propData.address ?? '',
+          city: propData.city ?? '',
+          state: propData.state ?? '',
+          postal_code: propData.postal_code ?? '',
+          notes: propData.notes ?? '',
+        });
+      }
+    } catch (loadError) {
+      console.error(loadError);
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load property details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (session && session.role !== 'tenant' && propertyId) {
+      void loadProperty();
+    }
+  }, [session, propertyId]);
+
+  const handleCreateUnit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!unitDraft.unit_number.trim() || !propertyId) {
+      setError('Unit number is required.');
+      return;
+    }
+
+    setSavingUnit(true);
+    setError(null);
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
+      const response = await fetch('/api/units', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          unit_number: unitDraft.unit_number.trim(),
+          rent_amount: unitDraft.rent_amount ? Number(unitDraft.rent_amount) : null,
+          bedrooms: Number(unitDraft.bedrooms) || 1,
+          bathrooms: Number(unitDraft.bathrooms) || 1,
+          square_feet: unitDraft.square_feet ? Number(unitDraft.square_feet) : null,
+          status: unitDraft.status,
+          notes: unitDraft.notes.trim() || null,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Could not create unit.');
+      }
+
+      setUnitDraft(emptyUnitDraft);
+      setShowAddUnitModal(false);
+      await loadProperty();
+    } catch (saveError) {
+      console.error(saveError);
+      setError(saveError instanceof Error ? saveError.message : 'Could not create unit.');
+    } finally {
+      setSavingUnit(false);
+    }
+  };
+
+  const handleUpdateProperty = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!propertyId) return;
+
+    setSavingProp(true);
+    setError(null);
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
+      const response = await fetch(`/api/properties/${propertyId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(propEditDraft),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Could not update property.');
+      }
+
+      setShowEditPropertyModal(false);
+      await loadProperty();
+    } catch (saveError) {
+      console.error(saveError);
+      setError(saveError instanceof Error ? saveError.message : 'Could not update property.');
+    } finally {
+      setSavingProp(false);
+    }
+  };
+
+  const handleDeleteProperty = async () => {
+    if (!propertyId || !session || session.role !== 'owner') return;
+
+    const confirm = window.confirm(
+      'Are you sure you want to delete this property and all associated units? This cannot be undone.',
+    );
+    if (!confirm) return;
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
+      const response = await fetch(`/api/properties/${propertyId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || 'Could not delete property.');
+      }
+
+      router.push('/dashboard/properties');
+    } catch (delError) {
+      console.error(delError);
+      setError(delError instanceof Error ? delError.message : 'Could not delete property.');
+    }
+  };
+
+  if (!session) {
+    return null;
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-100 p-8">
+        <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
+          Loading property details...
+        </div>
+      </main>
+    );
+  }
+
+  if (error && !property) {
+    return (
+      <main className="min-h-screen bg-slate-100 p-8">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8">
+          <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+            Property not found
+          </p>
+          <p className="mt-3 text-sm text-rose-700">{error}</p>
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/properties')}
+            className="mt-6 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            ← Back to Properties
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!property) return null;
+
+  return (
+    <main className="min-h-screen bg-slate-100 text-slate-900">
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/properties')}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ← Back to Properties
+          </button>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEditPropertyModal(true)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Edit property
+            </button>
+            {session.role === 'owner' && (
+              <button
+                type="button"
+                onClick={handleDeleteProperty}
+                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100"
+              >
+                Delete property
+              </button>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            {error}
+          </div>
+        )}
+
+        {/* Property Overview Header Card */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                Property Details
+              </span>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+                {property.name}
+              </h1>
+              <p className="mt-1 text-base text-slate-600">{property.address}</p>
+              {(property.city || property.state || property.postal_code) && (
+                <p className="text-sm text-slate-500">
+                  {[property.city, property.state, property.postal_code].filter(Boolean).join(', ')}
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Units
+                </p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {property.units?.length ?? 0}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Total Tenants
+                </p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {(property.units ?? []).reduce((sum, u) => sum + (u.tenants?.length ?? 0), 0)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {property.notes && (
+            <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Property Notes
+              </p>
+              <p className="mt-1 text-sm text-slate-700">{property.notes}</p>
+            </div>
+          )}
+        </section>
+
+        {/* Units List Section */}
+        <section className="mt-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Units in this Property</h2>
+              <p className="text-sm text-slate-500">
+                Click any unit to view photos, tenants, rent, and maintenance history.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddUnitModal(true)}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              + Add unit
+            </button>
+          </div>
+
+          {(property.units?.length ?? 0) === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
+              <h3 className="text-base font-semibold text-slate-900">No units added yet</h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Add units (e.g. Unit 1, Apt A, Main House) to manage tenants, rent, and maintenance
+                records.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAddUnitModal(true)}
+                className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                + Add unit
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {(property.units ?? []).map((unit) => {
+                const tenantCount = unit.tenants?.length ?? 0;
+                const photoCount = unit.unit_photos?.length ?? 0;
+                const noteCount = unit.unit_maintenance_notes?.length ?? 0;
+
+                return (
+                  <div
+                    key={unit.id}
+                    onClick={() =>
+                      router.push(`/dashboard/properties/${property.id}/units/${unit.id}`)
+                    }
+                    className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-400 hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">
+                          Unit {unit.unit_number}
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          {unit.bedrooms} bed • {unit.bathrooms} bath
+                          {unit.square_feet ? ` • ${unit.square_feet} sq ft` : ''}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${
+                          unit.status === 'occupied'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : unit.status === 'vacant'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {unit.status}
+                      </span>
+                    </div>
+
+                    {/* Rent (Owner only) */}
+                    {session.role === 'owner' && (
+                      <div className="mt-3">
+                        <p className="text-xs text-slate-500">Monthly Rent</p>
+                        <p className="text-base font-semibold text-slate-900">
+                          {unit.rent_amount !== null && unit.rent_amount !== undefined
+                            ? `$${Number(unit.rent_amount).toLocaleString()}/mo`
+                            : 'Not set'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Tenants */}
+                    <div className="mt-3 border-t border-slate-100 pt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Tenants ({tenantCount})
+                      </p>
+                      {tenantCount === 0 ? (
+                        <p className="mt-1 text-xs text-slate-400">No tenants assigned</p>
+                      ) : (
+                        <div className="mt-1 space-y-1">
+                          {unit.tenants?.map((t) => (
+                            <p key={t.id} className="text-sm font-medium text-slate-800">
+                              {t.name}{' '}
+                              {t.phone && <span className="text-xs text-slate-500">({t.phone})</span>}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Photos & Maintenance badges */}
+                    <div className="mt-4 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
+                      <span>📸 {photoCount} photo{photoCount === 1 ? '' : 's'}</span>
+                      <span>🔧 {noteCount} maintenance record{noteCount === 1 ? '' : 's'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Add Unit Modal */}
+        {showAddUnitModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h2 className="text-xl font-semibold text-slate-900">Add unit to {property.name}</h2>
+
+              <form onSubmit={handleCreateUnit} className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Unit number / label *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Unit 1, Apt 4B, Suite B, or Main"
+                    value={unitDraft.unit_number}
+                    onChange={(e) => setUnitDraft({ ...unitDraft, unit_number: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+
+                {session.role === 'owner' && (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Monthly rent ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 2500"
+                      value={unitDraft.rent_amount}
+                      onChange={(e) => setUnitDraft({ ...unitDraft, rent_amount: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">Bedrooms</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={unitDraft.bedrooms}
+                      onChange={(e) => setUnitDraft({ ...unitDraft, bedrooms: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">Bathrooms</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={unitDraft.bathrooms}
+                      onChange={(e) => setUnitDraft({ ...unitDraft, bathrooms: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">Sq Ft</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="850"
+                      value={unitDraft.square_feet}
+                      onChange={(e) => setUnitDraft({ ...unitDraft, square_feet: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                  <select
+                    value={unitDraft.status}
+                    onChange={(e) => setUnitDraft({ ...unitDraft, status: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+                  >
+                    <option value="occupied">Occupied</option>
+                    <option value="vacant">Vacant</option>
+                    <option value="maintenance">Under Maintenance</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Notes</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Key codes, appliance serials, etc."
+                    value={unitDraft.notes}
+                    onChange={(e) => setUnitDraft({ ...unitDraft, notes: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddUnitModal(false)}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingUnit}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+                  >
+                    {savingUnit ? 'Adding...' : 'Add unit'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Property Modal */}
+        {showEditPropertyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+              <h2 className="text-xl font-semibold text-slate-900">Edit property details</h2>
+
+              <form onSubmit={handleUpdateProperty} className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Property name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={propEditDraft.name}
+                    onChange={(e) =>
+                      setPropEditDraft({ ...propEditDraft, name: e.target.value })
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Street address *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={propEditDraft.address}
+                    onChange={(e) =>
+                      setPropEditDraft({ ...propEditDraft, address: e.target.value })
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">City</label>
+                    <input
+                      type="text"
+                      value={propEditDraft.city}
+                      onChange={(e) =>
+                        setPropEditDraft({ ...propEditDraft, city: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">State</label>
+                    <input
+                      type="text"
+                      value={propEditDraft.state}
+                      onChange={(e) =>
+                        setPropEditDraft({ ...propEditDraft, state: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">Zip</label>
+                    <input
+                      type="text"
+                      value={propEditDraft.postal_code}
+                      onChange={(e) =>
+                        setPropEditDraft({ ...propEditDraft, postal_code: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Notes</label>
+                  <textarea
+                    rows={3}
+                    value={propEditDraft.notes}
+                    onChange={(e) =>
+                      setPropEditDraft({ ...propEditDraft, notes: e.target.value })
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPropertyModal(false)}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingProp}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+                  >
+                    {savingProp ? 'Saving...' : 'Save changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}

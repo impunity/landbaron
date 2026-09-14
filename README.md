@@ -15,6 +15,16 @@ The sender domain must be verified in Resend. When configured, creating an assig
 
 Run [supabase/ticket-ownership.sql](supabase/ticket-ownership.sql) once in the Supabase SQL Editor before deploying tenant access control. It records the authenticated creator of each new ticket so tenants can create tickets and view only tickets they created. Existing tickets without a `created_by` value remain available to staff and owners but are not visible to tenants.
 
+## Properties, Units, Tenants & Maintenance History
+
+Run [supabase/properties-and-units.sql](supabase/properties-and-units.sql) once in the Supabase SQL Editor. It creates tables for:
+- `properties`: Physical properties with addresses and notes
+- `units`: Rental units with bed/bath/sqft, occupancy status, photos, and monthly rent (visible and editable by owners only)
+- `tenants`: Multiple residents per unit with contact info (email, phone, emergency contact) and lease dates
+- `unit_photos`: Unit photo gallery and condition records
+- `unit_maintenance_notes`: Chronological maintenance history per unit tracking "Completed Work" and "Work to Consider" with cost, technician/vendor, and date.
+- Links tickets to units and properties with direct navigation from unit view to ticket queue.
+
 ## Getting Started ##
 
 First, run the development server:

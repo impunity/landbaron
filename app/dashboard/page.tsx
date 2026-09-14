@@ -852,7 +852,25 @@ export default function DashboardPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {session.role !== 'tenant' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard/properties')}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Properties & Units
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard/tenants')}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Tenants
+                </button>
+              </>
+            )}
             {session.role === 'owner' && (
               <button
                 type="button"

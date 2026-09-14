@@ -389,7 +389,21 @@ export default function StaffPage() {
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Staff roster</h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/properties')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Properties & Units
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/tenants')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Tenants
+            </button>
             <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white">
               {getRoleLabel(session.role)}
             </div>
