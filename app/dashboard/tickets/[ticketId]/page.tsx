@@ -543,8 +543,7 @@ export default function TicketDetailPage() {
                 </div>
               )}
 
-              {session.role !== 'tenant' && (
-                <div className="rounded-xl border border-slate-200 p-4">
+              <div className="rounded-xl border border-slate-200 p-4">
                 <label className="mb-2 block text-sm font-medium text-slate-700">Upload photo</label>
                 <input
                   type="file"
@@ -559,8 +558,7 @@ export default function TicketDetailPage() {
                     {photoUploadError}
                   </div>
                 )}
-                </div>
-              )}
+              </div>
 
               {session.role !== 'tenant' && (
                 <div className="rounded-xl border border-slate-200 p-4">

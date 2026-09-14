@@ -232,6 +232,7 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [ticketPhotos, setTicketPhotos] = useState<File[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>('date');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -464,6 +465,11 @@ export default function DashboardPage() {
     setFormState((current) => ({ ...current, [name]: value }));
     setFormError(null);
     setFormSuccess(null);
+  };
+
+  const handleTicketPhotosChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setTicketPhotos(Array.from(event.target.files ?? []));
+    setFormError(null);
   };
 
   const openTicketView = (ticketId: string) => {
@@ -789,7 +795,27 @@ export default function DashboardPage() {
         throw new Error(result?.error || 'Ticket could not be submitted.');
       }
 
+      const ticketId = typeof result.ticket?.id === 'string' ? result.ticket.id : '';
+      if (ticketPhotos.length > 0 && ticketId) {
+        for (const photo of ticketPhotos) {
+          const photoData = new FormData();
+          photoData.append('file', photo);
+
+          const photoResponse = await fetch(`/api/tickets/${ticketId}/photos`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+            body: photoData,
+          });
+
+          if (!photoResponse.ok) {
+            const photoResult = await photoResponse.json().catch(() => ({}));
+            throw new Error(photoResult?.error || 'Ticket created, but one or more photos could not be uploaded.');
+          }
+        }
+      }
+
       setFormState(initialFormState);
+      setTicketPhotos([]);
       setShowForm(false);
       setFormSuccess(
         result.notificationError
@@ -966,6 +992,22 @@ export default function DashboardPage() {
                 />
               </div>
 
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Photos</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleTicketPhotosChange}
+                  className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700"
+                />
+                {ticketPhotos.length > 0 && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    {ticketPhotos.length} photo{ticketPhotos.length === 1 ? '' : 's'} selected
+                  </p>
+                )}
+              </div>
+
               {formError && (
                 <div className="md:col-span-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
                   {formError}
@@ -984,6 +1026,7 @@ export default function DashboardPage() {
                   onClick={() => {
                     setShowForm(false);
                     setFormState(initialFormState);
+                    setTicketPhotos([]);
                     setFormError(null);
                     setFormSuccess(null);
                   }}

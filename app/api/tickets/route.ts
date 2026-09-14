@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, notificationError });
+    return NextResponse.json({ ok: true, ticket, notificationError });
   } catch (error) {
     console.error('POST /api/tickets failed:', error);
     return NextResponse.json(
