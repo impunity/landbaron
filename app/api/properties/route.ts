@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string' && error.message) return error.message;
+    if ('error' in error && typeof error.error === 'string' && error.error) return error.error;
+    if ('details' in error && typeof error.details === 'string' && error.details) return error.details;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -49,7 +59,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('GET /api/properties failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to load properties.' },
+      { error: getErrorMessage(error, 'Unable to load properties.') },
       { status: 500 },
     );
   }
@@ -85,18 +95,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Property name and address are required.' }, { status: 400 });
     }
 
+    const insertPayload: Record<string, unknown> = {
+      name,
+      address,
+    };
+    if (city !== null) insertPayload.city = city;
+    if (state !== null) insertPayload.state = state;
+    if (postal_code !== null) insertPayload.postal_code = postal_code;
+    if (notes !== null) insertPayload.notes = notes;
+
     const { data, error } = await supabaseAdmin
       .from('properties')
-      .insert([
-        {
-          name,
-          address,
-          city,
-          state,
-          postal_code,
-          notes,
-        },
-      ])
+      .insert([insertPayload])
       .select()
       .single();
 
@@ -108,7 +118,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('POST /api/properties failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Property could not be created.' },
+      { error: getErrorMessage(error, 'Property could not be created.') },
       { status: 500 },
     );
   }

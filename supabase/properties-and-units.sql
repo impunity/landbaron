@@ -1,5 +1,7 @@
--- Properties, Units, Tenants, Photos, and Unit Maintenance History Schema
+-- Properties, Units, Tenants, Photos, and Unit Maintenance History Migration & Schema
+-- This script ensures all tables exist, adds all required columns, and removes any obsolete constraints from older schemas.
 
+-- 1. PROPERTIES TABLE
 create table if not exists public.properties (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -12,6 +14,41 @@ create table if not exists public.properties (
   updated_at timestamptz not null default now()
 );
 
+alter table public.properties
+  add column if not exists address text;
+
+alter table public.properties
+  add column if not exists city text;
+
+alter table public.properties
+  add column if not exists state text;
+
+alter table public.properties
+  add column if not exists postal_code text;
+
+alter table public.properties
+  add column if not exists notes text;
+
+alter table public.properties
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.properties
+  add column if not exists updated_at timestamptz not null default now();
+
+-- Drop obsolete landlord_id NOT NULL and FK constraints if present from older schemas
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'properties' and column_name = 'landlord_id'
+  ) then
+    alter table public.properties alter column landlord_id drop not null;
+    alter table public.properties drop constraint if exists properties_landlord_id_fkey;
+  end if;
+end $$;
+
+
+-- 2. UNITS TABLE
 create table if not exists public.units (
   id uuid primary key default gen_random_uuid(),
   property_id uuid not null references public.properties(id) on delete cascade,
@@ -26,6 +63,32 @@ create table if not exists public.units (
   updated_at timestamptz not null default now()
 );
 
+alter table public.units
+  add column if not exists rent_amount numeric;
+
+alter table public.units
+  add column if not exists bedrooms integer default 1;
+
+alter table public.units
+  add column if not exists bathrooms numeric default 1;
+
+alter table public.units
+  add column if not exists square_feet integer;
+
+alter table public.units
+  add column if not exists status text default 'occupied';
+
+alter table public.units
+  add column if not exists notes text;
+
+alter table public.units
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.units
+  add column if not exists updated_at timestamptz not null default now();
+
+
+-- 3. TENANTS TABLE
 create table if not exists public.tenants (
   id uuid primary key default gen_random_uuid(),
   unit_id uuid references public.units(id) on delete cascade,
@@ -42,6 +105,64 @@ create table if not exists public.tenants (
   updated_at timestamptz not null default now()
 );
 
+alter table public.tenants
+  add column if not exists unit_id uuid references public.units(id) on delete cascade;
+
+alter table public.tenants
+  add column if not exists property_id uuid references public.properties(id) on delete cascade;
+
+alter table public.tenants
+  add column if not exists email text;
+
+alter table public.tenants
+  add column if not exists phone text;
+
+alter table public.tenants
+  add column if not exists lease_start date;
+
+alter table public.tenants
+  add column if not exists lease_end date;
+
+alter table public.tenants
+  add column if not exists status text not null default 'active';
+
+alter table public.tenants
+  add column if not exists emergency_contact text;
+
+alter table public.tenants
+  add column if not exists notes text;
+
+-- Drop obsolete constraints on tenants columns if present from older schemas
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tenants' and column_name = 'phone_number'
+  ) then
+    alter table public.tenants alter column phone_number drop not null;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tenants' and column_name = 'first_name'
+  ) then
+    alter table public.tenants alter column first_name drop not null;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tenants' and column_name = 'last_name'
+  ) then
+    alter table public.tenants alter column last_name drop not null;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'tenants' and column_name = 'unit_id'
+  ) then
+    alter table public.tenants alter column unit_id drop not null;
+  end if;
+end $$;
+
+
+-- 4. UNIT PHOTOS TABLE
 create table if not exists public.unit_photos (
   id uuid primary key default gen_random_uuid(),
   unit_id uuid not null references public.units(id) on delete cascade,
@@ -50,6 +171,8 @@ create table if not exists public.unit_photos (
   created_at timestamptz not null default now()
 );
 
+
+-- 5. UNIT MAINTENANCE NOTES TABLE
 create table if not exists public.unit_maintenance_notes (
   id uuid primary key default gen_random_uuid(),
   unit_id uuid not null references public.units(id) on delete cascade,
@@ -61,7 +184,8 @@ create table if not exists public.unit_maintenance_notes (
   created_at timestamptz not null default now()
 );
 
--- Foreign key / index references on tickets
+
+-- 6. FOREIGN KEYS ON TICKETS & INDEXES
 alter table public.tickets
   add column if not exists property_id uuid references public.properties(id) on delete set null;
 
@@ -76,15 +200,18 @@ create index if not exists unit_maintenance_notes_unit_id_idx on public.unit_mai
 create index if not exists tickets_unit_id_idx on public.tickets (unit_id);
 create index if not exists tickets_property_id_idx on public.tickets (property_id);
 
--- Storage bucket for unit photos
+
+-- 7. STORAGE BUCKET FOR UNIT PHOTOS
 insert into storage.buckets (id, name, public)
 values ('unit-photos', 'unit-photos', true)
 on conflict (id) do nothing;
 
+drop policy if exists "Public unit photo access" on storage.objects;
 create policy "Public unit photo access"
 on storage.objects for select
 using (bucket_id = 'unit-photos');
 
+drop policy if exists "Authenticated unit photo uploads" on storage.objects;
 create policy "Authenticated unit photo uploads"
 on storage.objects for insert
 with check (bucket_id = 'unit-photos');

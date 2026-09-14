@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string' && error.message) return error.message;
+    if ('error' in error && typeof error.error === 'string' && error.error) return error.error;
+    if ('details' in error && typeof error.details === 'string' && error.details) return error.details;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 export async function POST(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -71,7 +81,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('POST /api/units failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unit could not be created.' },
+      { error: getErrorMessage(error, 'Unit could not be created.') },
       { status: 500 },
     );
   }

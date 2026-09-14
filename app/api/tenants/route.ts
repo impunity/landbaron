@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string' && error.message) return error.message;
+    if ('error' in error && typeof error.error === 'string' && error.error) return error.error;
+    if ('details' in error && typeof error.details === 'string' && error.details) return error.details;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -34,7 +44,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('GET /api/tenants failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to load tenants.' },
+      { error: getErrorMessage(error, 'Unable to load tenants.') },
       { status: 500 },
     );
   }
@@ -107,7 +117,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('POST /api/tenants failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Tenant could not be added.' },
+      { error: getErrorMessage(error, 'Tenant could not be added.') },
       { status: 500 },
     );
   }
