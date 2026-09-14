@@ -1,7 +1,8 @@
-  const validStatuses = ['Open', 'In Progress', 'Waiting on Parts', 'Resolved', 'Closed', 'Archived'];
 import { NextRequest, NextResponse } from 'next/server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendTicketAssignmentEmail } from '@/lib/ticket-assignment-email';
+import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 
 const getDescriptionParts = (description?: string | null) => {
   if (!description) {
@@ -72,7 +73,7 @@ const buildDescription = ({
 };
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ ticketId: string }> },
 ) {
   try {
@@ -85,11 +86,21 @@ export async function GET(
       );
     }
 
-    const { data, error } = await supabaseAdmin
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    let query = supabaseAdmin
       .from('tickets')
       .select('*')
-      .eq('id', ticketId)
-      .maybeSingle();
+      .eq('id', ticketId);
+
+    if (user.role === 'tenant') {
+      query = query.eq('created_by', user.id);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw error;
@@ -124,6 +135,15 @@ export async function PATCH(
       );
     }
 
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (user.role === 'tenant') {
+      return NextResponse.json({ error: 'Tenants cannot update tickets.' }, { status: 403 });
+    }
+
     const validStatuses = ['Open', 'In Progress', 'Waiting on Parts', 'Resolved', 'Closed', 'Archived'];
     const updates: Record<string, string | null> = {};
 
@@ -139,12 +159,17 @@ export async function PATCH(
       }
     }
 
-    let existingTicket: { description?: string | null; assigned_to?: string | null } | null = null;
+    let existingTicket: {
+      title: string;
+      priority?: string | null;
+      description?: string | null;
+      assigned_to?: string | null;
+    } | null = null;
     let hasAssignedToColumn = true;
 
     const { data: fetchedTicket, error: fetchError } = await supabaseAdmin
       .from('tickets')
-      .select('description, assigned_to')
+      .select('title, priority, description, assigned_to')
       .eq('id', ticketId)
       .maybeSingle();
 
@@ -197,7 +222,20 @@ export async function PATCH(
       throw error;
     }
 
-    return NextResponse.json({ ok: true });
+    let notificationError: string | null = null;
+    const assignmentChanged =
+      typeof assigned_to === 'string' && nextAssignment !== existingAssignment;
+
+    if (assignmentChanged && nextAssignment && existingTicket) {
+      try {
+        await sendTicketAssignmentEmail({ ...existingTicket, id: ticketId }, nextAssignment);
+      } catch (emailError) {
+        console.error('Ticket assignment email failed:', emailError);
+        notificationError = 'Ticket updated, but the assignment email could not be sent.';
+      }
+    }
+
+    return NextResponse.json({ ok: true, notificationError });
   } catch (error) {
     console.error('PATCH /api/tickets/[ticketId] failed:', error);
     return NextResponse.json(

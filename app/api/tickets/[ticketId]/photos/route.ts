@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
@@ -18,6 +19,27 @@ export async function POST(
         { error: 'Supabase service role is not configured.' },
         { status: 500 },
       );
+    }
+
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (user.role === 'tenant') {
+      const { data: ticket, error: ticketError } = await supabaseAdmin
+        .from('tickets')
+        .select('created_by')
+        .eq('id', ticketId)
+        .maybeSingle();
+
+      if (ticketError) {
+        throw ticketError;
+      }
+
+      if (!ticket || ticket.created_by !== user.id) {
+        return NextResponse.json({ error: 'You can only update your own tickets.' }, { status: 403 });
+      }
     }
 
     if (!(file instanceof File)) {

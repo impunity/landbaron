@@ -1,5 +1,20 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Assignment Emails
+
+Ticket assignments send an email through [Resend](https://resend.com). Add these environment variables in Vercel before deploying:
+
+```bash
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL="Landbaron <notifications@your-verified-domain.com>"
+```
+
+The sender domain must be verified in Resend. When configured, creating an assigned ticket or assigning a ticket to a different staff member emails the new assignee with its title, priority, property address, requester email, and a link to the ticket.
+
+## Tenant Ticket Access
+
+Run [supabase/ticket-ownership.sql](supabase/ticket-ownership.sql) once in the Supabase SQL Editor before deploying tenant access control. It records the authenticated creator of each new ticket so tenants can create tickets and view only tickets they created. Existing tickets without a `created_by` value remain available to staff and owners but are not visible to tenants.
+
 ## Getting Started ##
 
 First, run the development server:

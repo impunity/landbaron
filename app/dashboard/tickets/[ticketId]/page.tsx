@@ -223,7 +223,16 @@ export default function TicketDetailPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/tickets/${id}`);
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
+      const response = await fetch(`/api/tickets/${id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
@@ -307,10 +316,18 @@ export default function TicketDetailPage() {
     setError(null);
 
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
       const response = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(updates),
       });
@@ -345,11 +362,19 @@ export default function TicketDetailPage() {
     setPhotoUploadError(null);
 
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
       const formData = new FormData();
       formData.append('file', file);
 
       const response = await fetch(`/api/tickets/${ticketId}/photos`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: formData,
       });
 
@@ -518,7 +543,8 @@ export default function TicketDetailPage() {
                 </div>
               )}
 
-              <div className="rounded-xl border border-slate-200 p-4">
+              {session.role !== 'tenant' && (
+                <div className="rounded-xl border border-slate-200 p-4">
                 <label className="mb-2 block text-sm font-medium text-slate-700">Upload photo</label>
                 <input
                   type="file"
@@ -533,9 +559,11 @@ export default function TicketDetailPage() {
                     {photoUploadError}
                   </div>
                 )}
-              </div>
+                </div>
+              )}
 
-              <div className="rounded-xl border border-slate-200 p-4">
+              {session.role !== 'tenant' && (
+                <div className="rounded-xl border border-slate-200 p-4">
                 <label className="mb-2 block text-sm font-medium text-slate-700">Owner notes</label>
                 <textarea
                   rows={5}
@@ -562,11 +590,13 @@ export default function TicketDetailPage() {
                     {detailSaving ? 'Saving...' : 'Save notes'}
                   </button>
                 </div>
-              </div>
+                </div>
+              )}
             </div>
 
             <aside className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              {session.role !== 'tenant' && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Status</p>
                 <div className="mt-3">
                   <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
@@ -613,7 +643,8 @@ export default function TicketDetailPage() {
                     Resolved {new Date(ticket.resolved_at).toLocaleDateString()}
                   </p>
                 )}
-              </div>
+                </div>
+              )}
 
               <div className="rounded-xl border border-slate-200 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Ticket info</p>
@@ -633,7 +664,8 @@ export default function TicketDetailPage() {
                 </dl>
               </div>
 
-              <div className="flex flex-col gap-3">
+              {session.role !== 'tenant' && (
+                <div className="flex flex-col gap-3">
                 <div className="flex gap-3">
                   <button
                     type="button"
@@ -694,7 +726,8 @@ export default function TicketDetailPage() {
                     {detailSaving ? 'Deleting...' : 'Delete ticket'}
                   </button>
                 )}
-              </div>
+                </div>
+              )}
             </aside>
           </div>
         </section>

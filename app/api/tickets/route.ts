@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendTicketAssignmentEmail } from '@/lib/ticket-assignment-email';
+import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -12,10 +14,21 @@ export async function GET() {
       );
     }
 
-    const { data, error } = await supabaseAdmin
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    let query = supabaseAdmin
       .from('tickets')
       .select('*')
       .order('updated_at', { ascending: false });
+
+    if (user.role === 'tenant') {
+      query = query.eq('created_by', user.id);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw error;
@@ -55,23 +68,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedAssignee = typeof assigned_to === 'string' ? assigned_to.trim() : '';
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
 
-    const { error } = await supabaseAdmin.from('tickets').insert([
-      {
-        title,
-        description,
-        status,
-        priority,
-        assigned_to: normalizedAssignee || null,
-      },
-    ]);
+    const normalizedAssignee = user.role === 'tenant' ? '' : typeof assigned_to === 'string' ? assigned_to.trim() : '';
+    const reporterEmail = user.role === 'tenant' ? user.email : '';
+    const normalizedDescription = reporterEmail
+      ? description.replace(/(^|\n)Email:\s*[^\n]*/i, `$1Email: ${reporterEmail}`)
+      : description;
+
+    const { data: ticket, error } = await supabaseAdmin
+      .from('tickets')
+      .insert([
+        {
+          title,
+          description: normalizedDescription,
+          status,
+          priority,
+          assigned_to: normalizedAssignee || null,
+          created_by: user.id,
+        },
+      ])
+      .select('id, title, priority, description')
+      .single();
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ ok: true });
+    let notificationError: string | null = null;
+    if (normalizedAssignee && ticket) {
+      try {
+        await sendTicketAssignmentEmail(ticket, normalizedAssignee);
+      } catch (emailError) {
+        console.error('Ticket assignment email failed:', emailError);
+        notificationError = 'Ticket created, but the assignment email could not be sent.';
+      }
+    }
+
+    return NextResponse.json({ ok: true, notificationError });
   } catch (error) {
     console.error('POST /api/tickets failed:', error);
     return NextResponse.json(

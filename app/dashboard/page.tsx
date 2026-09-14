@@ -296,10 +296,18 @@ export default function DashboardPage() {
 
   async function loadTickets() {
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
       const response = await fetch('/api/tickets', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
       });
 
@@ -700,12 +708,12 @@ export default function DashboardPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (session?.role === 'tenant') {
-      setFormError('Tenants cannot create new maintenance requests from this view.');
+    if (!session) {
+      setFormError('Sign in is required.');
       return;
     }
 
-    const trimmedEmail = formState.email.trim();
+    const trimmedEmail = session.role === 'tenant' ? session.email.trim() : formState.email.trim();
     const trimmedAddress = formState.address.trim();
     const trimmedDescription = formState.description.trim();
     const assignedTo = formState.assigned_to.trim();
@@ -753,10 +761,18 @@ export default function DashboardPage() {
     descriptionParts.push(trimmedDescription);
 
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
       const response = await fetch('/api/tickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           title,
@@ -775,7 +791,11 @@ export default function DashboardPage() {
 
       setFormState(initialFormState);
       setShowForm(false);
-      setFormSuccess('Ticket created successfully.');
+      setFormSuccess(
+        result.notificationError
+          ? `Ticket created successfully. ${result.notificationError}`
+          : 'Ticket created successfully.',
+      );
       setLoading(true);
       await loadTickets();
     } catch (submitError) {
@@ -846,17 +866,15 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {session.role !== 'tenant' && (
-          <button
-            type="button"
-            onClick={() => setShowForm((current) => !current)}
-            className="mb-8 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-700"
-          >
-            {showForm ? 'Close form' : 'New ticket'}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setShowForm((current) => !current)}
+          className="mb-8 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-700"
+        >
+          {showForm ? 'Close form' : 'New ticket'}
+        </button>
 
-        {showForm && session.role !== 'tenant' && (
+        {showForm && (
           <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="mb-5 text-xl font-semibold">Create a maintenance ticket</h2>
 
@@ -888,11 +906,12 @@ export default function DashboardPage() {
                 <input
                   type="email"
                   name="email"
-                  value={formState.email}
+                  value={session.role === 'tenant' ? session.email : formState.email}
                   onChange={handleInputChange}
                   required
+                  disabled={session.role === 'tenant'}
                   placeholder="tenant@example.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
                 />
               </div>
 
@@ -909,7 +928,7 @@ export default function DashboardPage() {
                   >
                     <option value="">Unassigned</option>
                     {staffMembers.map((member) => (
-                      <option key={member.id} value={member.name}>
+                      <option key={member.id} value={`${member.name} <${member.email}>`}>
                         {member.name}
                       </option>
                     ))}
