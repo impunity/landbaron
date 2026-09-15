@@ -29,6 +29,40 @@ export function getUserRoleByEmail(email?: string | null): UserRole {
   return 'tenant';
 }
 
+export async function fetchUserRole(
+  email?: string | null,
+  client?: any,
+): Promise<UserRole> {
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) return 'tenant';
+
+  if (ownerEmails.includes(normalized)) return 'owner';
+
+  if (client && typeof client.from === 'function') {
+    try {
+      const { data } = await client
+        .from('staff_members')
+        .select('role')
+        .ilike('email', normalized)
+        .maybeSingle();
+
+      if (data?.role) {
+        const r = String(data.role).toLowerCase();
+        if (r === 'owner') return 'owner';
+        if (r === 'maintenance') return 'maintenance';
+        if (r === 'contractor') return 'contractor';
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  if (maintenanceEmails.includes(normalized)) return 'maintenance';
+  if (tenantEmails.includes(normalized)) return 'tenant';
+
+  return 'tenant';
+}
+
 export function getRoleLabel(role: UserRole) {
   if (role === 'owner') return 'Owner / Manager';
   if (role === 'maintenance' || role === 'contractor') return 'Maintenance Person';

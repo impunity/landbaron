@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const normalizeRole = (value?: string | null) => {
@@ -8,6 +9,21 @@ const normalizeRole = (value?: string | null) => {
   if (role === 'Maintenance' || role === 'maintenance') return 'Maintenance';
   if (role === 'Contractor' || role === 'contractor') return 'Contractor';
   return 'Maintenance';
+};
+
+const checkIsOwner = async (role?: string | null, email?: string | null) => {
+  if (role === 'owner') return true;
+  if (!email || !supabaseAdmin) return false;
+  try {
+    const { data } = await supabaseAdmin
+      .from('staff_members')
+      .select('role')
+      .ilike('email', email.trim().toLowerCase())
+      .maybeSingle();
+    return data?.role?.toLowerCase() === 'owner';
+  } catch {
+    return false;
+  }
 };
 
 const buildGenericStaffAvatar = (name: string, role: string) => {
@@ -59,8 +75,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const userRole = request.headers.get('x-user-role')?.trim().toLowerCase();
-    if (userRole !== 'owner') {
+    const authUser = await getAuthenticatedRequestUser(request);
+    const userRole = authUser?.role ?? request.headers.get('x-user-role')?.trim().toLowerCase();
+    const userEmail = authUser?.email ?? request.headers.get('x-user-email')?.trim().toLowerCase();
+    const isOwner = await checkIsOwner(userRole, userEmail);
+
+    if (!isOwner) {
       return NextResponse.json({ error: 'Only owners can view staff.' }, { status: 403 });
     }
 
@@ -92,8 +112,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const userRole = request.headers.get('x-user-role')?.trim().toLowerCase();
-    if (userRole !== 'owner') {
+    const authUser = await getAuthenticatedRequestUser(request);
+    const userRole = authUser?.role ?? request.headers.get('x-user-role')?.trim().toLowerCase();
+    const userEmail = authUser?.email ?? request.headers.get('x-user-email')?.trim().toLowerCase();
+    const isOwner = await checkIsOwner(userRole, userEmail);
+
+    if (!isOwner) {
       return NextResponse.json({ error: 'Only owners can manage staff.' }, { status: 403 });
     }
 
@@ -150,8 +174,9 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const userRole = request.headers.get('x-user-role')?.trim().toLowerCase();
-    const userEmail = request.headers.get('x-user-email')?.trim().toLowerCase();
+    const authUser = await getAuthenticatedRequestUser(request);
+    const userRole = authUser?.role ?? request.headers.get('x-user-role')?.trim().toLowerCase();
+    const userEmail = authUser?.email ?? request.headers.get('x-user-email')?.trim().toLowerCase();
     const body = await request.json();
     const currentEmail = String(body?.current_email ?? body?.email ?? '').trim().toLowerCase();
     const nextEmail = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : undefined;
@@ -162,8 +187,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     const hasNameOrRoleUpdate = typeof body?.name === 'string' || typeof body?.role === 'string';
-    const isOwner = userRole === 'owner';
-    const isSelf = userEmail && userEmail === currentEmail;
+    const isOwner = await checkIsOwner(userRole, userEmail);
+    const isSelf = userEmail && userEmail.toLowerCase() === currentEmail.toLowerCase();
 
     if (!isOwner && !isSelf) {
       return NextResponse.json({ error: 'Only the owner or that staff member can update this staff profile.' }, { status: 403 });
@@ -192,7 +217,7 @@ export async function PATCH(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('staff_members')
       .update(updates)
-      .eq('email', currentEmail)
+      .ilike('email', currentEmail)
       .select();
 
     if (error) {
@@ -207,7 +232,7 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     console.error('PATCH /api/staff failed:', error);
     return NextResponse.json(
-      { error: 'Staff could not be updated.' },
+      { error: error instanceof Error ? error.message : 'Staff could not be updated.' },
       { status: 500 },
     );
   }
@@ -222,8 +247,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const userRole = request.headers.get('x-user-role')?.trim().toLowerCase();
-    if (userRole !== 'owner') {
+    const authUser = await getAuthenticatedRequestUser(request);
+    const userRole = authUser?.role ?? request.headers.get('x-user-role')?.trim().toLowerCase();
+    const userEmail = authUser?.email ?? request.headers.get('x-user-email')?.trim().toLowerCase();
+    const isOwner = await checkIsOwner(userRole, userEmail);
+
+    if (!isOwner) {
       return NextResponse.json({ error: 'Only owners can manage staff.' }, { status: 403 });
     }
 
@@ -235,7 +264,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('staff_members')
       .delete()
-      .eq('email', email);
+      .ilike('email', email);
 
     if (error) {
       throw error;
@@ -245,7 +274,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('DELETE /api/staff failed:', error);
     return NextResponse.json(
-      { error: 'Staff could not be removed.' },
+      { error: error instanceof Error ? error.message : 'Staff could not be removed.' },
       { status: 500 },
     );
   }

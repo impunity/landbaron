@@ -19,9 +19,31 @@ export async function getAuthenticatedRequestUser(request: Request) {
     return null;
   }
 
+  const email = data.user.email.toLowerCase();
+  let role: UserRole = getUserRoleByEmail(email);
+
+  if (role !== 'owner' && supabaseAdmin) {
+    try {
+      const { data: staffData } = await supabaseAdmin
+        .from('staff_members')
+        .select('role')
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (staffData?.role) {
+        const r = String(staffData.role).toLowerCase();
+        if (r === 'owner') role = 'owner';
+        else if (r === 'maintenance') role = 'maintenance';
+        else if (r === 'contractor') role = 'contractor';
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   return {
     id: data.user.id,
-    email: data.user.email.toLowerCase(),
-    role: getUserRoleByEmail(data.user.email),
+    email,
+    role,
   } satisfies AuthenticatedRequestUser;
 }

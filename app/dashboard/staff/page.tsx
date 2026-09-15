@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 type StaffMember = {
@@ -104,10 +104,14 @@ export default function StaffPage() {
     setSuccess(null);
 
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
       const response = await fetch('/api/staff', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           'x-user-role': session.role,
           'x-user-email': session.email,
         },
@@ -164,6 +168,9 @@ export default function StaffPage() {
     setSuccess(null);
 
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
       const payload = {
         current_email: currentEmail,
         name: updates.name ?? '',
@@ -176,6 +183,7 @@ export default function StaffPage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           'x-user-role': session.role,
           'x-user-email': session.email,
         },
@@ -218,9 +226,13 @@ export default function StaffPage() {
     setSuccess(null);
 
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
       const response = await fetch(`/api/staff?email=${encodeURIComponent(deleteCandidate.email)}`, {
         method: 'DELETE',
         headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           'x-user-role': session.role,
           'x-user-email': session.email,
         },
@@ -253,6 +265,9 @@ export default function StaffPage() {
       return;
     }
 
+    const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+    const accessToken = authData.session?.access_token;
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('email', staffEmail);
@@ -261,6 +276,7 @@ export default function StaffPage() {
       const response = await fetch('/api/staff/avatar', {
         method: 'POST',
         headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           'x-user-role': session.role,
           'x-user-email': session.email,
         },
@@ -304,11 +320,13 @@ export default function StaffPage() {
         return;
       }
 
+      const role = await fetchUserRole(sessionUser.email, client);
+
       const nextSession: SessionUser = {
         id: sessionUser.id,
         name: sessionUser.user_metadata?.full_name || sessionUser.email || 'Google User',
         email: sessionUser.email || '',
-        role: getUserRoleByEmail(sessionUser.email),
+        role,
       };
 
       setSessionState(nextSession);
@@ -319,7 +337,7 @@ export default function StaffPage() {
 
     syncSession();
 
-    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = client.auth.onAuthStateChange(async (_event, nextSession) => {
       const nextUser = nextSession?.user;
 
       if (!nextUser) {
@@ -328,11 +346,13 @@ export default function StaffPage() {
         return;
       }
 
+      const role = await fetchUserRole(nextUser.email, client);
+
       const nextSessionUser: SessionUser = {
         id: nextUser.id,
         name: nextUser.user_metadata?.full_name || nextUser.email || 'Google User',
         email: nextUser.email || '',
-        role: getUserRoleByEmail(nextUser.email),
+        role,
       };
 
       setSessionState(nextSessionUser);
@@ -353,9 +373,14 @@ export default function StaffPage() {
 
     const loadStaff = async () => {
       try {
+        const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+        const accessToken = authData.session?.access_token;
+
         const response = await fetch('/api/staff', {
           headers: {
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
             'x-user-role': session.role,
+            'x-user-email': session.email,
           },
         });
 
@@ -509,95 +534,115 @@ export default function StaffPage() {
         )}
 
         {editingMember && editingDraft && (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">Edit staff member</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingMember(null);
-                  setEditingDraft(null);
-                }}
-                className="text-sm font-medium text-slate-500 hover:text-slate-700"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <label className="text-sm text-slate-600">
-                <span className="mb-1 block font-medium text-slate-700">Name</span>
-                <input
-                  type="text"
-                  value={editingDraft.name}
-                  onChange={(event) => setEditingDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                />
-              </label>
-
-              <label className="text-sm text-slate-600">
-                <span className="mb-1 block font-medium text-slate-700">Email</span>
-                <input
-                  type="email"
-                  value={editingDraft.email}
-                  onChange={(event) => setEditingDraft((current) => current ? { ...current, email: event.target.value } : current)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                />
-              </label>
-
-              <label className="text-sm text-slate-600">
-                <span className="mb-1 block font-medium text-slate-700">Phone</span>
-                <input
-                  type="tel"
-                  value={editingDraft.phone_number}
-                  onChange={(event) => setEditingDraft((current) => current ? { ...current, phone_number: event.target.value } : current)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                />
-              </label>
-
-              <label className="text-sm text-slate-600">
-                <span className="mb-1 block font-medium text-slate-700">Role</span>
-                <select
-                  value={editingDraft.role}
-                  onChange={(event) => setEditingDraft((current) => current ? { ...current, role: event.target.value as StaffMember['role'] } : current)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold text-slate-900">Edit staff member</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingMember(null);
+                    setEditingDraft(null);
+                  }}
+                  className="text-sm font-medium text-slate-500 hover:text-slate-700"
                 >
-                  <option value="Owner">Owner</option>
-                  <option value="Maintenance">Maintenance</option>
-                  <option value="Contractor">Contractor</option>
-                </select>
-              </label>
-            </div>
+                  ✕
+                </button>
+              </div>
 
-            <div className="mt-4 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingMember(null);
-                  setEditingDraft(null);
-                }}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!editingMember || !editingDraft) {
-                    return;
-                  }
-                  void handleUpdateStaffMember(editingMember.email, {
-                    name: editingDraft.name,
-                    email: editingDraft.email,
-                    phone_number: editingDraft.phone_number,
-                    role: editingDraft.role,
-                  });
-                }}
-                disabled={savingChanges}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
-                {savingChanges ? 'Saving...' : 'Save changes'}
-              </button>
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
+                  <input
+                    type="text"
+                    value={editingDraft.name}
+                    onChange={(event) =>
+                      setEditingDraft((current) =>
+                        current ? { ...current, name: event.target.value } : current,
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                  <input
+                    type="email"
+                    value={editingDraft.email}
+                    onChange={(event) =>
+                      setEditingDraft((current) =>
+                        current ? { ...current, email: event.target.value } : current,
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
+                  <input
+                    type="tel"
+                    value={editingDraft.phone_number}
+                    onChange={(event) =>
+                      setEditingDraft((current) =>
+                        current ? { ...current, phone_number: event.target.value } : current,
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Role</label>
+                  <select
+                    value={editingDraft.role}
+                    onChange={(event) =>
+                      setEditingDraft((current) =>
+                        current
+                          ? { ...current, role: event.target.value as StaffMember['role'] }
+                          : current,
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                  >
+                    <option value="Owner">Owner</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Contractor">Contractor</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingMember(null);
+                    setEditingDraft(null);
+                  }}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!editingMember || !editingDraft) {
+                      return;
+                    }
+                    void handleUpdateStaffMember(editingMember.email, {
+                      name: editingDraft.name,
+                      email: editingDraft.email,
+                      phone_number: editingDraft.phone_number,
+                      role: editingDraft.role,
+                    });
+                  }}
+                  disabled={savingChanges}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {savingChanges ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
             </div>
           </div>
         )}

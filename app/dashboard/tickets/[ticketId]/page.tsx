@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 type TicketRow = {
@@ -186,17 +186,19 @@ export default function TicketDetailPage() {
         return;
       }
 
+      const role = await fetchUserRole(sessionUser.email, client);
+
       setSessionState({
         id: sessionUser.id,
         name: sessionUser.user_metadata?.full_name || sessionUser.email || 'Google User',
         email: sessionUser.email || '',
-        role: getUserRoleByEmail(sessionUser.email),
+        role,
       });
     };
 
     syncSession();
 
-    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = client.auth.onAuthStateChange(async (_event, nextSession) => {
       const nextUser = nextSession?.user;
 
       if (!nextUser) {
@@ -205,11 +207,13 @@ export default function TicketDetailPage() {
         return;
       }
 
+      const role = await fetchUserRole(nextUser.email, client);
+
       setSessionState({
         id: nextUser.id,
         name: nextUser.user_metadata?.full_name || nextUser.email || 'Google User',
         email: nextUser.email || '',
-        role: getUserRoleByEmail(nextUser.email),
+        role,
       });
     });
 

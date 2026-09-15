@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { supabase } from '@/lib/supabase';
 
@@ -183,7 +183,7 @@ export default function UnitDetailPage() {
         return;
       }
 
-      const role = getUserRoleByEmail(sessionUser.email);
+      const role = await fetchUserRole(sessionUser.email, client);
       if (role === 'tenant') {
         router.replace('/dashboard');
         return;
@@ -199,7 +199,7 @@ export default function UnitDetailPage() {
 
     syncSession();
 
-    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = client.auth.onAuthStateChange(async (_event, nextSession) => {
       const nextUser = nextSession?.user;
       if (!nextUser) {
         setSessionState(null);
@@ -207,7 +207,7 @@ export default function UnitDetailPage() {
         return;
       }
 
-      const role = getUserRoleByEmail(nextUser.email);
+      const role = await fetchUserRole(nextUser.email, client);
       if (role === 'tenant') {
         router.replace('/dashboard');
         return;
