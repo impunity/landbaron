@@ -132,6 +132,12 @@ alter table public.tenants
 alter table public.tenants
   add column if not exists notes text;
 
+alter table public.tenants
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.tenants
+  add column if not exists updated_at timestamptz not null default now();
+
 -- Drop obsolete constraints on tenants columns if present from older schemas
 do $$
 begin

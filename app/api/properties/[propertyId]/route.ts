@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string' && error.message) return error.message;
+    if ('error' in error && typeof error.error === 'string' && error.error) return error.error;
+    if ('details' in error && typeof error.details === 'string' && error.details) return error.details;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ propertyId: string }> },
@@ -57,7 +67,7 @@ export async function GET(
   } catch (error) {
     console.error('GET /api/properties/[propertyId] failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to load property details.' },
+      { error: getErrorMessage(error, 'Unable to load property details.') },
       { status: 500 },
     );
   }
@@ -113,7 +123,7 @@ export async function PATCH(
   } catch (error) {
     console.error('PATCH /api/properties/[propertyId] failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Property update failed.' },
+      { error: getErrorMessage(error, 'Property update failed.') },
       { status: 500 },
     );
   }
@@ -155,7 +165,7 @@ export async function DELETE(
   } catch (error) {
     console.error('DELETE /api/properties/[propertyId] failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Property deletion failed.' },
+      { error: getErrorMessage(error, 'Property deletion failed.') },
       { status: 500 },
     );
   }

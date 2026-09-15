@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string' && error.message) return error.message;
+    if ('error' in error && typeof error.error === 'string' && error.error) return error.error;
+    if ('details' in error && typeof error.details === 'string' && error.details) return error.details;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ unitId: string }> },
@@ -108,7 +118,7 @@ export async function GET(
   } catch (error) {
     console.error('GET /api/units/[unitId] failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to load unit details.' },
+      { error: getErrorMessage(error, 'Unable to load unit details.') },
       { status: 500 },
     );
   }
@@ -175,7 +185,7 @@ export async function PATCH(
   } catch (error) {
     console.error('PATCH /api/units/[unitId] failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unit update failed.' },
+      { error: getErrorMessage(error, 'Unit update failed.') },
       { status: 500 },
     );
   }
@@ -217,7 +227,7 @@ export async function DELETE(
   } catch (error) {
     console.error('DELETE /api/units/[unitId] failed:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unit deletion failed.' },
+      { error: getErrorMessage(error, 'Unit deletion failed.') },
       { status: 500 },
     );
   }
