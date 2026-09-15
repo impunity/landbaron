@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 import { getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { supabase } from '@/lib/supabase';
 
 type TenantSummary = {
@@ -442,9 +443,9 @@ export default function PropertyDetailPage() {
         <section className="mt-8">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-slate-900">Units in this Property</h2>
+              <h2 className="text-xl font-bold text-slate-900">Units at this property</h2>
               <p className="text-sm text-slate-500">
-                Click any unit to view photos, tenants, rent, and maintenance history.
+                Click any unit to view photos, tenants, rent comparison, and maintenance history.
               </p>
             </div>
             <button
@@ -477,6 +478,19 @@ export default function PropertyDetailPage() {
                 const tenantCount = unit.tenants?.length ?? 0;
                 const photoCount = unit.unit_photos?.length ?? 0;
                 const noteCount = unit.unit_maintenance_notes?.length ?? 0;
+                const unitThumbnail = unit.unit_photos?.[0]?.photo_url;
+
+                // Market Rent Estimate calculation
+                const marketComp = calculateEstimatedMarketRent({
+                  bedrooms: unit.bedrooms,
+                  bathrooms: unit.bathrooms,
+                  square_feet: unit.square_feet,
+                  address: property.address,
+                  city: property.city,
+                  state: property.state,
+                  postal_code: property.postal_code,
+                  current_rent: unit.rent_amount,
+                });
 
                 return (
                   <div
@@ -484,66 +498,113 @@ export default function PropertyDetailPage() {
                     onClick={() =>
                       router.push(`/dashboard/properties/${property.id}/units/${unit.id}`)
                     }
-                    className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-400 hover:shadow-md"
+                    className="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-400 hover:shadow-md flex flex-col"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900">
-                          Unit {unit.unit_number}
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          {unit.bedrooms} bed • {unit.bathrooms} bath
-                          {unit.square_feet ? ` • ${unit.square_feet} sq ft` : ''}
-                        </p>
+                    {/* Unit Thumbnail Banner */}
+                    {unitThumbnail ? (
+                      <div className="relative h-40 w-full overflow-hidden bg-slate-100">
+                        <img
+                          src={unitThumbnail}
+                          alt={`Unit ${unit.unit_number}`}
+                          className="h-full w-full object-cover transition group-hover:scale-105"
+                        />
+                        <div className="absolute top-2 right-2 rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                          📷 {photoCount} photo{photoCount === 1 ? '' : 's'}
+                        </div>
                       </div>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${
-                          unit.status === 'occupied'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : unit.status === 'vacant'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {unit.status}
-                      </span>
-                    </div>
-
-                    {/* Rent (Owner only) */}
-                    {session.role === 'owner' && (
-                      <div className="mt-3">
-                        <p className="text-xs text-slate-500">Monthly Rent</p>
-                        <p className="text-base font-semibold text-slate-900">
-                          {unit.rent_amount !== null && unit.rent_amount !== undefined
-                            ? `$${Number(unit.rent_amount).toLocaleString()}/mo`
-                            : 'Not set'}
-                        </p>
+                    ) : (
+                      <div className="flex h-24 w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 text-2xl text-slate-300">
+                        🚪
                       </div>
                     )}
 
-                    {/* Tenants */}
-                    <div className="mt-3 border-t border-slate-100 pt-3">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Tenants ({tenantCount})
-                      </p>
-                      {tenantCount === 0 ? (
-                        <p className="mt-1 text-xs text-slate-400">No tenants assigned</p>
-                      ) : (
-                        <div className="mt-1 space-y-1">
-                          {unit.tenants?.map((t) => (
-                            <p key={t.id} className="text-sm font-medium text-slate-800">
-                              {t.name}{' '}
-                              {t.phone && <span className="text-xs text-slate-500">({t.phone})</span>}
+                    <div className="p-5 flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="text-lg font-bold text-slate-900">
+                              Unit {unit.unit_number}
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                              {unit.bedrooms} bed • {unit.bathrooms} bath
+                              {unit.square_feet ? ` • ${unit.square_feet} sq ft` : ''}
                             </p>
-                          ))}
+                          </div>
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${
+                              unit.status === 'occupied'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : unit.status === 'vacant'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {unit.status}
+                          </span>
                         </div>
-                      )}
-                    </div>
 
-                    {/* Photos & Maintenance badges */}
-                    <div className="mt-4 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
-                      <span>📸 {photoCount} photo{photoCount === 1 ? '' : 's'}</span>
-                      <span>🔧 {noteCount} maintenance record{noteCount === 1 ? '' : 's'}</span>
+                        {/* Rent & Estimated Market Rent (Owner only) */}
+                        {session.role === 'owner' && (
+                          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-[11px] font-medium text-slate-500">Actual Rent</p>
+                                <p className="text-sm font-bold text-slate-900">
+                                  {unit.rent_amount !== null && unit.rent_amount !== undefined
+                                    ? `$${Number(unit.rent_amount).toLocaleString()}/mo`
+                                    : 'Not set'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-medium text-slate-500">Est. Market Rent</p>
+                                <p className="text-sm font-bold text-indigo-700">
+                                  ~${marketComp.estimatedRent.toLocaleString()}/mo
+                                </p>
+                              </div>
+                            </div>
+                            {marketComp.difference && (
+                              <div className="mt-2 text-[11px]">
+                                <span
+                                  className={`font-semibold ${
+                                    marketComp.difference.isBelowMarket
+                                      ? 'text-amber-700'
+                                      : 'text-emerald-700'
+                                  }`}
+                                >
+                                  {marketComp.difference.label}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Tenants */}
+                        <div className="mt-3 border-t border-slate-100 pt-3">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            Tenants ({tenantCount})
+                          </p>
+                          {tenantCount === 0 ? (
+                            <p className="mt-1 text-xs text-slate-400">No tenants assigned</p>
+                          ) : (
+                            <div className="mt-1 space-y-1">
+                              {unit.tenants?.map((t) => (
+                                <p key={t.id} className="text-sm font-medium text-slate-800">
+                                  {t.name}{' '}
+                                  {t.phone && (
+                                    <span className="text-xs text-slate-500">({t.phone})</span>
+                                  )}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Maintenance badge */}
+                      <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between text-xs text-slate-500">
+                        <span>🔧 {noteCount} maintenance record{noteCount === 1 ? '' : 's'}</span>
+                        <span className="font-medium text-slate-700 hover:text-slate-900">View unit →</span>
+                      </div>
                     </div>
                   </div>
                 );

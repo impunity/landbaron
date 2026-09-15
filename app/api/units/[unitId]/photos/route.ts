@@ -104,6 +104,81 @@ export async function POST(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ unitId: string }> },
+) {
+  try {
+    const { unitId } = await params;
+
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Supabase service role is not configured.' },
+        { status: 500 },
+      );
+    }
+
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (user.role === 'tenant') {
+      return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const photoId = String(body?.photoId ?? '').trim();
+
+    if (!photoId) {
+      return NextResponse.json({ error: 'Photo ID is required.' }, { status: 400 });
+    }
+
+    // Try setting is_primary column if available, plus bump created_at timestamp so it orders first
+    const now = new Date().toISOString();
+    
+    // First reset other photos
+    await supabaseAdmin
+      .from('unit_photos')
+      .update({ is_primary: false })
+      .eq('unit_id', unitId)
+      .neq('id', photoId);
+
+    const { data, error } = await supabaseAdmin
+      .from('unit_photos')
+      .update({ is_primary: true, created_at: now })
+      .eq('id', photoId)
+      .eq('unit_id', unitId)
+      .select()
+      .single();
+
+    if (error) {
+      // If is_primary column is not in DB yet, fallback to updating created_at
+      const fallback = await supabaseAdmin
+        .from('unit_photos')
+        .update({ created_at: now })
+        .eq('id', photoId)
+        .eq('unit_id', unitId)
+        .select()
+        .single();
+
+      if (fallback.error) {
+        throw fallback.error;
+      }
+
+      return NextResponse.json({ ok: true, photo: fallback.data });
+    }
+
+    return NextResponse.json({ ok: true, photo: data });
+  } catch (error) {
+    console.error('PATCH /api/units/[unitId]/photos failed:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Could not set primary photo.' },
+      { status: 500 },
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ unitId: string }> },

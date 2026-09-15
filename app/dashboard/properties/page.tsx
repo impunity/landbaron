@@ -11,6 +11,7 @@ type UnitSummary = {
   unit_number: string;
   rent_amount?: number | null;
   tenants?: Array<{ id: string; name: string; email?: string | null; phone?: string | null }>;
+  unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null }>;
 };
 
 type Property = {
@@ -311,42 +312,70 @@ export default function PropertiesPage() {
                 0,
               );
 
+              // Find first available photo from the property's units
+              const firstUnitWithPhoto = (prop.units ?? []).find(
+                (u) => (u.unit_photos?.length ?? 0) > 0,
+              );
+              const propertyThumbnail = firstUnitWithPhoto?.unit_photos?.[0]?.photo_url;
+
               return (
                 <div
                   key={prop.id}
                   onClick={() => router.push(`/dashboard/properties/${prop.id}`)}
-                  className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-400 hover:shadow-md"
+                  className="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-400 hover:shadow-md"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">{prop.name}</h3>
-                      <p className="mt-1 text-sm text-slate-600">{prop.address}</p>
-                      {(prop.city || prop.state || prop.postal_code) && (
-                        <p className="text-xs text-slate-500">
-                          {[prop.city, prop.state, prop.postal_code].filter(Boolean).join(', ')}
-                        </p>
-                      )}
+                  {/* Thumbnail Banner */}
+                  {propertyThumbnail ? (
+                    <div className="relative h-44 w-full overflow-hidden bg-slate-100">
+                      <img
+                        src={propertyThumbnail}
+                        alt={prop.name}
+                        className="h-full w-full object-cover transition group-hover:scale-105"
+                      />
+                      <div className="absolute bottom-2 left-2 rounded-lg bg-slate-900/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                        Unit {firstUnitWithPhoto?.unit_number} photo
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-center">
-                    <div className="rounded-xl bg-slate-50 p-2.5">
-                      <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                        Units
-                      </p>
-                      <p className="mt-1 text-xl font-semibold text-slate-900">{unitCount}</p>
+                  ) : (
+                    <div className="flex h-28 w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 text-3xl text-slate-300">
+                      🏢
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-2.5">
-                      <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                        Tenants
-                      </p>
-                      <p className="mt-1 text-xl font-semibold text-slate-900">{tenantCount}</p>
-                    </div>
-                  </div>
-
-                  {prop.notes && (
-                    <p className="mt-3 truncate text-xs text-slate-500">Note: {prop.notes}</p>
                   )}
+
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-900 group-hover:text-slate-800">
+                          {prop.name}
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-600">{prop.address}</p>
+                        {(prop.city || prop.state || prop.postal_code) && (
+                          <p className="text-xs text-slate-500">
+                            {[prop.city, prop.state, prop.postal_code].filter(Boolean).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-center">
+                      <div className="rounded-xl bg-slate-50 p-2.5">
+                        <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                          Units
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-slate-900">{unitCount}</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-2.5">
+                        <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                          Tenants
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-slate-900">{tenantCount}</p>
+                      </div>
+                    </div>
+
+                    {prop.notes && (
+                      <p className="mt-3 truncate text-xs text-slate-500">Note: {prop.notes}</p>
+                    )}
+                  </div>
                 </div>
               );
             })}

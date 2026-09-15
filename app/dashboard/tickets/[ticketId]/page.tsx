@@ -544,10 +544,15 @@ export default function TicketDetailPage() {
               )}
 
               <div className="rounded-xl border border-slate-200 p-4">
-                <label className="mb-2 block text-sm font-medium text-slate-700">Upload photo</label>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="block text-sm font-medium text-slate-700">Upload photo</label>
+                  <span className="text-xs text-slate-500">
+                    JPG, PNG, WEBP, GIF • Max 8 MB
+                  </span>
+                </div>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/*"
                   onChange={handlePhotoUpload}
                   disabled={uploadingPhoto}
                   className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"

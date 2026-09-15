@@ -59,11 +59,13 @@ export async function GET(
         })
       : [];
 
-    // Sort photos newest first
+    // Sort photos: primary photo first, then newest first
     const photos = Array.isArray(unit.unit_photos)
-      ? [...unit.unit_photos].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        )
+      ? [...unit.unit_photos].sort((a, b) => {
+          if (a.is_primary && !b.is_primary) return -1;
+          if (!a.is_primary && b.is_primary) return 1;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        })
       : [];
 
     // Fetch related tickets for this unit/property

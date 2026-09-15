@@ -623,7 +623,10 @@ export default function StaffPage() {
             <table className="min-w-full divide-y divide-slate-200 text-left">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Avatar</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <div>Avatar</div>
+                    <div className="text-[10px] font-normal lowercase tracking-normal text-slate-400">JPG/PNG/WEBP • Max 8MB</div>
+                  </th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Name</th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Email</th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Phone</th>

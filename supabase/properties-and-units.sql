@@ -174,8 +174,12 @@ create table if not exists public.unit_photos (
   unit_id uuid not null references public.units(id) on delete cascade,
   photo_url text not null,
   caption text,
+  is_primary boolean default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.unit_photos
+  add column if not exists is_primary boolean default false;
 
 
 -- 5. UNIT MAINTENANCE NOTES TABLE

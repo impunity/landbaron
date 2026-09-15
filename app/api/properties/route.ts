@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const { data: properties, error: propError } = await supabaseAdmin
       .from('properties')
-      .select('*, units(id, unit_number, rent_amount, tenants(id, name, email, phone))')
+      .select('*, units(id, unit_number, rent_amount, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone), unit_photos(id, photo_url, caption, created_at))')
       .order('name', { ascending: true });
 
     if (propError) {

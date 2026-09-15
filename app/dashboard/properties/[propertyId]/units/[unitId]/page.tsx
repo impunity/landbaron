@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 import { getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { supabase } from '@/lib/supabase';
 
 type Tenant = {
@@ -25,6 +26,7 @@ type UnitPhoto = {
   unit_id: string;
   photo_url: string;
   caption?: string | null;
+  is_primary?: boolean | null;
   created_at: string;
 };
 
@@ -522,6 +524,36 @@ export default function UnitDetailPage() {
     }
   };
 
+  const handleMakePrimaryPhoto = async (photoId: string) => {
+    if (!unitId) return;
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/units/${unitId}/photos`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ photoId }),
+      });
+
+      if (!response.ok) {
+        const res = await response.json().catch(() => ({}));
+        throw new Error(res?.error || 'Could not set primary photo.');
+      }
+
+      await loadUnitDetail();
+    } catch (primaryError) {
+      console.error(primaryError);
+      setError(primaryError instanceof Error ? primaryError.message : 'Could not set primary photo.');
+    }
+  };
+
   // Unit Update handler
   const handleUpdateUnit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -611,6 +643,17 @@ export default function UnitDetailPage() {
 
   if (!unit) return null;
 
+  const marketEstimate = calculateEstimatedMarketRent({
+    bedrooms: unit.bedrooms,
+    bathrooms: unit.bathrooms,
+    square_feet: unit.square_feet,
+    address: unit.properties?.address,
+    city: unit.properties?.city,
+    state: unit.properties?.state,
+    postal_code: unit.properties?.postal_code,
+    current_rent: unit.rent_amount,
+  });
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto max-w-6xl px-6 py-10">
@@ -687,24 +730,74 @@ export default function UnitDetailPage() {
               </p>
             </div>
 
-            {/* Rent Section (Owner Only) */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center md:min-w-[200px]">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Monthly Rent
-              </p>
+            {/* Rent & Estimated Market Rent Section (Owner Only) */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:min-w-[280px]">
               {session.role === 'owner' ? (
                 <div>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">
-                    {unit.rent_amount !== null && unit.rent_amount !== undefined
-                      ? `$${Number(unit.rent_amount).toLocaleString()}`
-                      : 'Not set'}
-                  </p>
-                  <p className="text-[11px] text-slate-400">Owner view only</p>
+                  <div className="grid grid-cols-2 gap-3 border-b border-slate-200 pb-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Actual Rent
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-slate-900">
+                        {unit.rent_amount !== null && unit.rent_amount !== undefined
+                          ? `$${Number(unit.rent_amount).toLocaleString()}/mo`
+                          : 'Not set'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Est. Market Rent
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-indigo-700">
+                        ~${marketEstimate.estimatedRent.toLocaleString()}/mo
+                      </p>
+                    </div>
+                  </div>
+
+                  {marketEstimate.difference && (
+                    <div className="mt-2 text-xs">
+                      <span
+                        className={`font-semibold ${
+                          marketEstimate.difference.isBelowMarket
+                            ? 'text-amber-700'
+                            : 'text-emerald-700'
+                        }`}
+                      >
+                        {marketEstimate.difference.label}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Zillow & Redfin comp links */}
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-200/80 pt-2 text-[11px]">
+                    <span className="text-slate-500">Comps:</span>
+                    <div className="flex gap-2">
+                      <a
+                        href={marketEstimate.compsUrls.zillow}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        Zillow ↗
+                      </a>
+                      <span className="text-slate-300">•</span>
+                      <a
+                        href={marketEstimate.compsUrls.redfin}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-rose-600 hover:text-rose-800 hover:underline"
+                      >
+                        Redfin ↗
+                      </a>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className="mt-1">
-                  <span className="inline-flex rounded-md bg-slate-200 px-2 py-1 text-xs font-medium text-slate-600">
-                    Restricted (Owner only)
+                <div className="mt-1 text-center">
+                  <span className="inline-flex rounded-md bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600">
+                    Rent Info Restricted (Owner only)
                   </span>
                 </div>
               )}
@@ -857,18 +950,20 @@ export default function UnitDetailPage() {
 
             {/* Photos of Unit Section */}
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">
                     Unit Photos ({(unit.unit_photos ?? []).length})
                   </h2>
-                  <p className="text-xs text-slate-500">Condition photos, appliances, fixtures</p>
+                  <p className="text-xs text-slate-500">
+                    JPG, PNG, WEBP, GIF • Max 10 MB per file
+                  </p>
                 </div>
-                <label className="cursor-pointer rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700">
+                <label className="cursor-pointer rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 text-center">
                   {uploadingPhoto ? 'Uploading...' : '+ Upload photo'}
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/*"
                     disabled={uploadingPhoto}
                     onChange={handlePhotoUpload}
                     className="hidden"
@@ -882,24 +977,52 @@ export default function UnitDetailPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {unit.unit_photos?.map((photo) => (
-                    <div
-                      key={photo.id}
-                      onClick={() => setSelectedPhotoModal(photo)}
-                      className="group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition hover:shadow-md"
-                    >
-                      <img
-                        src={photo.photo_url}
-                        alt={photo.caption || 'Unit photo'}
-                        className="h-28 w-full object-cover transition group-hover:scale-105"
-                      />
-                      {photo.caption && (
-                        <div className="absolute inset-x-0 bottom-0 bg-slate-900/70 p-1 text-[11px] text-white truncate px-2">
-                          {photo.caption}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {unit.unit_photos?.map((photo, idx) => {
+                    const isPrimary = photo.is_primary || idx === 0;
+                    const hasMultiple = (unit.unit_photos?.length ?? 0) > 1;
+
+                    return (
+                      <div
+                        key={photo.id}
+                        onClick={() => setSelectedPhotoModal(photo)}
+                        className="group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition hover:shadow-md"
+                      >
+                        <img
+                          src={photo.photo_url}
+                          alt={photo.caption || 'Unit photo'}
+                          className="h-28 w-full object-cover transition group-hover:scale-105"
+                        />
+
+                        {/* Primary badge */}
+                        {isPrimary && (
+                          <div className="absolute top-1.5 left-1.5 rounded-md bg-slate-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 backdrop-blur-sm shadow-sm">
+                            ⭐ Primary
+                          </div>
+                        )}
+
+                        {/* Mouseover Make Primary Button when not primary and > 1 photos */}
+                        {!isPrimary && hasMultiple && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleMakePrimaryPhoto(photo.id);
+                            }}
+                            className="absolute top-1.5 left-1.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-md bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-slate-800 shadow hover:bg-slate-900 hover:text-white"
+                            title="Set as primary photo"
+                          >
+                            ⭐ Make primary
+                          </button>
+                        )}
+
+                        {photo.caption && (
+                          <div className="absolute inset-x-0 bottom-0 bg-slate-900/70 p-1 text-[11px] text-white truncate px-2">
+                            {photo.caption}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </section>
@@ -1498,11 +1621,33 @@ export default function UnitDetailPage() {
                 alt={selectedPhotoModal.caption || 'Unit photo'}
                 className="max-h-[75vh] w-full object-contain bg-black"
               />
-              <div className="flex items-center justify-between p-4">
-                <p className="text-sm font-medium text-slate-800">
-                  {selectedPhotoModal.caption || 'Unit photo'}
-                </p>
-                <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-slate-800">
+                    {selectedPhotoModal.caption || 'Unit photo'}
+                  </p>
+                  {unit.unit_photos?.[0]?.id === selectedPhotoModal.id && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      ⭐ Primary photo
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {(unit.unit_photos?.length ?? 0) > 1 &&
+                    unit.unit_photos?.[0]?.id !== selectedPhotoModal.id && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleMakePrimaryPhoto(selectedPhotoModal.id);
+                          setSelectedPhotoModal((curr) =>
+                            curr ? { ...curr, is_primary: true } : curr,
+                          );
+                        }}
+                        className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                      >
+                        ⭐ Make primary
+                      </button>
+                    )}
                   <button
                     type="button"
                     onClick={() => handleDeletePhoto(selectedPhotoModal.id)}
