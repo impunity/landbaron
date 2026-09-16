@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const { data: properties, error: propError } = await supabaseAdmin
       .from('properties')
-      .select('*, units(id, unit_number, rent_amount, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone), unit_photos(id, photo_url, caption, created_at))')
+      .select('*, units(id, unit_number, rent_amount, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone), unit_photos(id, photo_url, caption, is_primary, created_at))')
       .order('name', { ascending: true });
 
     if (propError) {
@@ -46,6 +46,9 @@ export async function GET(request: NextRequest) {
         ? prop.units.map((unit: Record<string, unknown>) => ({
             ...unit,
             rent_amount: user.role === 'owner' ? unit.rent_amount : null,
+            unit_photos: Array.isArray(unit.unit_photos)
+              ? [...unit.unit_photos].sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              : [],
           }))
         : [];
 

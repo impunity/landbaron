@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { supabase } from '@/lib/supabase';
 
@@ -680,6 +680,20 @@ export default function UnitDetailPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Maintenance Tickets
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/dashboard?propertyId=${unit.property_id}&unitId=${unit.id}`)}
+              className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              New Maintenance Ticket
+            </button>
             <button
               type="button"
               onClick={() => setShowEditUnitModal(true)}

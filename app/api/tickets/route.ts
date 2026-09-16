@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, description, status, priority, assigned_to } = await request.json();
+    const { title, description, status, priority, assigned_to, property_id, unit_id } = await request.json();
 
     if (!title || !description || !status || !priority) {
       return NextResponse.json(
@@ -89,6 +89,8 @@ export async function POST(request: NextRequest) {
           priority,
           assigned_to: normalizedAssignee || null,
           created_by: user.id,
+          property_id: typeof property_id === 'string' && property_id.trim() ? property_id.trim() : null,
+          unit_id: typeof unit_id === 'string' && unit_id.trim() ? unit_id.trim() : null,
         },
       ])
       .select('id, title, priority, description')

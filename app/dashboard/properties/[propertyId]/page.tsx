@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { supabase } from '@/lib/supabase';
 
@@ -26,7 +26,7 @@ type UnitDetail = {
   status: string;
   notes?: string | null;
   tenants?: TenantSummary[];
-  unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null }>;
+  unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null; is_primary?: boolean | null }>;
   unit_maintenance_notes?: Array<{ id: string; note: string; category: string }>;
 };
 
@@ -368,6 +368,13 @@ export default function PropertyDetailPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Maintenance Tickets
+            </button>
+            <button
+              type="button"
               onClick={() => setShowEditPropertyModal(true)}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -426,6 +433,15 @@ export default function PropertyDetailPage() {
                   {(property.units ?? []).reduce((sum, u) => sum + (u.tenants?.length ?? 0), 0)}
                 </p>
               </div>
+              {session.role === 'owner' && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-center">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Total Rent</p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-900">
+                    ${(property.units ?? []).reduce((sum, unit) => sum + Number(unit.rent_amount ?? 0), 0).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-emerald-700">per month</p>
+                </div>
+              )}
             </div>
           </div>
 

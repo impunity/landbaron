@@ -417,6 +417,13 @@ export default function StaffPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Maintenance Tickets
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/dashboard/properties')}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -438,13 +445,6 @@ export default function StaffPage() {
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800"
             >
               ADD STAFF
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Back to dashboard
             </button>
           </div>
         </header>

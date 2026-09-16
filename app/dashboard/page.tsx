@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getUserRoleByEmail, getVisibleTickets, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, getRoleLabel, getVisibleTickets, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | 'Closed' | 'Archived';
@@ -30,6 +30,22 @@ type TicketFormState = {
   address: string;
   description: string;
   assigned_to: string;
+  property_id: string;
+  unit_id: string;
+};
+
+type PropertyOption = {
+  id: string;
+  name: string;
+  address: string;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  units?: Array<{
+    id: string;
+    unit_number: string;
+    tenants?: Array<{ id: string; name: string; email?: string | null }>;
+  }>;
 };
 
 type StaffMember = {
@@ -166,6 +182,8 @@ const initialFormState: TicketFormState = {
   address: '',
   description: '',
   assigned_to: '',
+  property_id: '',
+  unit_id: '',
 };
 
 const getInitials = (name: string) => {
@@ -233,6 +251,7 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [ticketPhotos, setTicketPhotos] = useState<File[]>([]);
+  const [propertyOptions, setPropertyOptions] = useState<PropertyOption[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>('date');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -331,6 +350,39 @@ export default function DashboardPage() {
     }
   }
 
+  async function loadPropertyOptions() {
+    try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) return;
+
+      const response = await fetch('/api/properties', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok) {
+        const properties = Array.isArray(result.properties) ? result.properties as PropertyOption[] : [];
+        setPropertyOptions(properties);
+
+        const params = new URLSearchParams(window.location.search);
+        const propertyId = params.get('propertyId') ?? '';
+        const unitId = params.get('unitId') ?? '';
+        const property = properties.find((item) => item.id === propertyId);
+        if (property) {
+          const unit = property.units?.find((item) => item.id === unitId);
+          const address = [property.address, unit?.unit_number && `Unit ${unit.unit_number}`]
+            .filter(Boolean)
+            .join(', ');
+          setFormState((current) => ({ ...current, property_id: propertyId, unit_id: unitId, address }));
+          setShowForm(true);
+        }
+      }
+    } catch (propertyError) {
+      console.error(propertyError);
+      setPropertyOptions([]);
+    }
+  }
+
   useEffect(() => {
     if (!session) {
       return;
@@ -340,6 +392,9 @@ export default function DashboardPage() {
       if (session.role !== 'owner') {
         setStaffMembers([]);
         setStaffHydrated(true);
+        if (session.role !== 'tenant') {
+          await loadPropertyOptions();
+        }
         loadTickets();
         return;
       }
@@ -361,6 +416,7 @@ export default function DashboardPage() {
         console.error(loadStaffError);
         setStaffMembers([]);
       } finally {
+        await loadPropertyOptions();
         setStaffHydrated(true);
         loadTickets();
       }
@@ -790,6 +846,8 @@ export default function DashboardPage() {
           status,
           priority,
           assigned_to: assignedTo || null,
+          property_id: formState.property_id || null,
+          unit_id: formState.unit_id || null,
         }),
       });
 
@@ -951,16 +1009,34 @@ export default function DashboardPage() {
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Email address
                 </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={session.role === 'tenant' ? session.email : formState.email}
-                  onChange={handleInputChange}
-                  required
-                  disabled={session.role === 'tenant'}
-                  placeholder="tenant@example.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
-                />
+                {session.role === 'tenant' ? (
+                  <input
+                    type="email"
+                    value={session.email}
+                    disabled
+                    className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm text-slate-900"
+                  />
+                ) : (
+                  <select
+                    name="email"
+                    value={formState.email}
+                    onChange={handleInputChange}
+                    required
+                    disabled={!formState.property_id}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100"
+                  >
+                    <option value="">{formState.property_id ? 'Select tenant email' : 'Select a property first'}</option>
+                    {propertyOptions
+                      .find((property) => property.id === formState.property_id)
+                      ?.units?.flatMap((unit) => unit.tenants ?? [])
+                      .filter((tenant) => tenant.email)
+                      .map((tenant) => (
+                        <option key={tenant.id} value={tenant.email ?? ''}>
+                          {tenant.name} — {tenant.email}
+                        </option>
+                      ))}
+                  </select>
+                )}
               </div>
 
               {session.role === 'owner' && (
@@ -984,6 +1060,57 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {session.role !== 'tenant' && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Property</label>
+                    <select
+                      name="property_id"
+                      value={formState.property_id}
+                      onChange={(event) => {
+                        const property = propertyOptions.find((item) => item.id === event.target.value);
+                        setFormState((current) => ({
+                          ...current,
+                          property_id: event.target.value,
+                          unit_id: '',
+                          email: '',
+                          address: property?.address ?? '',
+                        }));
+                      }}
+                      required
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500"
+                    >
+                      <option value="">Select property</option>
+                      {propertyOptions.map((property) => (
+                        <option key={property.id} value={property.id}>{property.name} — {property.address}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Unit</label>
+                    <select
+                      name="unit_id"
+                      value={formState.unit_id}
+                      onChange={(event) => {
+                        const property = propertyOptions.find((item) => item.id === formState.property_id);
+                        const unit = property?.units?.find((item) => item.id === event.target.value);
+                        setFormState((current) => ({
+                          ...current,
+                          unit_id: event.target.value,
+                          address: [property?.address, unit?.unit_number && `Unit ${unit.unit_number}`].filter(Boolean).join(', '),
+                        }));
+                      }}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500"
+                    >
+                      <option value="">No specific unit</option>
+                      {propertyOptions.find((property) => property.id === formState.property_id)?.units?.map((unit) => (
+                        <option key={unit.id} value={unit.id}>Unit {unit.unit_number}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Property address
@@ -994,6 +1121,7 @@ export default function DashboardPage() {
                   value={formState.address}
                   onChange={handleInputChange}
                   required
+                  readOnly={session.role !== 'tenant'}
                   placeholder="123 Main St, Apt 4B, Springfield, IL"
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                 />

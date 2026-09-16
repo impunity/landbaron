@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 type UnitSummary = {
@@ -11,7 +11,7 @@ type UnitSummary = {
   unit_number: string;
   rent_amount?: number | null;
   tenants?: Array<{ id: string; name: string; email?: string | null; phone?: string | null }>;
-  unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null }>;
+  unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null; is_primary?: boolean | null }>;
 };
 
 type Property = {
@@ -240,6 +240,13 @@ export default function PropertiesPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Maintenance Tickets
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/dashboard/tenants')}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -267,6 +274,16 @@ export default function PropertiesPage() {
         {error && (
           <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
             {error}
+          </div>
+        )}
+
+        {session.role === 'owner' && (
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Total rent across all properties</p>
+            <p className="mt-1 text-3xl font-semibold text-slate-900">
+              ${properties.reduce((total, property) => total + (property.units ?? []).reduce((sum, unit) => sum + Number(unit.rent_amount ?? 0), 0), 0).toLocaleString()}
+              <span className="ml-1 text-sm font-medium text-slate-500">/ month</span>
+            </p>
           </div>
         )}
 
@@ -311,6 +328,7 @@ export default function PropertiesPage() {
                 (sum, u) => sum + (u.tenants?.length ?? 0),
                 0,
               );
+              const totalRent = (prop.units ?? []).reduce((sum, unit) => sum + Number(unit.rent_amount ?? 0), 0);
 
               // Find first available photo from the property's units
               const firstUnitWithPhoto = (prop.units ?? []).find(
@@ -371,6 +389,13 @@ export default function PropertiesPage() {
                         <p className="mt-1 text-xl font-semibold text-slate-900">{tenantCount}</p>
                       </div>
                     </div>
+
+                    {session.role === 'owner' && (
+                      <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Total monthly rent</p>
+                        <p className="mt-0.5 text-lg font-semibold text-emerald-900">${totalRent.toLocaleString()}</p>
+                      </div>
+                    )}
 
                     {prop.notes && (
                       <p className="mt-3 truncate text-xs text-slate-500">Note: {prop.notes}</p>

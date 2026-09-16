@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, getRoleLabel, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 type TicketRow = {
@@ -19,6 +19,16 @@ type TicketRow = {
   property_id: string | null;
   unit_id: string | null;
   owner_notes?: string | null;
+  labor_cost?: number | null;
+  materials_cost?: number | null;
+};
+
+type TicketReceipt = {
+  id: string;
+  file_name: string;
+  file_url: string;
+  file_type?: string | null;
+  created_at: string;
 };
 
 type StaffMember = {
@@ -167,6 +177,11 @@ export default function TicketDetailPage() {
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const [receipts, setReceipts] = useState<TicketReceipt[]>([]);
+  const [laborCost, setLaborCost] = useState('');
+  const [materialsCost, setMaterialsCost] = useState('');
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -262,6 +277,9 @@ export default function TicketDetailPage() {
       setStatusDraft(normalizeStatus(nextTicket?.status ?? 'Open'));
       setNoteDraft(noteMatch ? noteMatch[1].trim() : '');
       setAssignedStaff(assignmentValue);
+      setLaborCost(nextTicket?.labor_cost !== null && nextTicket?.labor_cost !== undefined ? String(nextTicket.labor_cost) : '');
+      setMaterialsCost(nextTicket?.materials_cost !== null && nextTicket?.materials_cost !== undefined ? String(nextTicket.materials_cost) : '');
+      setReceipts(Array.isArray(result.receipts) ? result.receipts : []);
     } catch (detailError) {
       console.error(detailError);
       setError('Unable to load ticket details right now.');
@@ -311,7 +329,7 @@ export default function TicketDetailPage() {
 
   const selectedPhotos = useMemo(() => parsePhotoEntries(ticket?.description ?? ''), [ticket]);
 
-  const handleTicketUpdate = async (updates: { notes?: string; status?: string; assigned_to?: string }) => {
+  const handleTicketUpdate = async (updates: { notes?: string; status?: string; assigned_to?: string; labor_cost?: number | null; materials_cost?: number | null }) => {
     if (!ticketId) {
       return;
     }
@@ -352,6 +370,50 @@ export default function TicketDetailPage() {
       );
     } finally {
       setDetailSaving(false);
+    }
+  };
+
+  const handleReceiptUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !ticketId) return;
+
+    setUploadingReceipt(true);
+    setReceiptError(null);
+    try {
+      const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = data.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(`/api/tickets/${ticketId}/receipts`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Receipt upload failed.');
+      await loadTicketDetail(ticketId);
+    } catch (uploadError) {
+      setReceiptError(uploadError instanceof Error ? uploadError.message : 'Receipt upload failed.');
+    } finally {
+      setUploadingReceipt(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteReceipt = async (receiptId: string) => {
+    if (!ticketId || !window.confirm('Delete this receipt?')) return;
+    try {
+      const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const response = await fetch(`/api/tickets/${ticketId}/receipts?receiptId=${receiptId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${data.session?.access_token}` },
+      });
+      if (!response.ok) throw new Error('Receipt deletion failed.');
+      setReceipts((current) => current.filter((receipt) => receipt.id !== receiptId));
+    } catch (deleteError) {
+      setReceiptError(deleteError instanceof Error ? deleteError.message : 'Receipt deletion failed.');
     }
   };
 
@@ -485,13 +547,22 @@ export default function TicketDetailPage() {
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard')}
-            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            ← Back to Tickets
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              ← Back to Tickets
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Maintenance Tickets
+            </button>
+          </div>
 
           <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white">
             {getRoleLabel(session.role)}
@@ -599,6 +670,34 @@ export default function TicketDetailPage() {
                 </div>
                 </div>
               )}
+
+              {session.role !== 'tenant' && (
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Receipts</p>
+                      <p className="text-xs text-slate-500">PDF, JPG, PNG, WEBP · Max 10 MB</p>
+                    </div>
+                    <label className="cursor-pointer rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-700">
+                      {uploadingReceipt ? 'Uploading...' : 'Upload receipt'}
+                      <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={handleReceiptUpload} disabled={uploadingReceipt} className="hidden" />
+                    </label>
+                  </div>
+                  {receiptError && <p className="mt-3 text-sm text-rose-700">{receiptError}</p>}
+                  {receipts.length === 0 ? (
+                    <p className="mt-4 text-sm text-slate-500">No receipts uploaded.</p>
+                  ) : (
+                    <div className="mt-4 divide-y divide-slate-100">
+                      {receipts.map((receipt) => (
+                        <div key={receipt.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                          <a href={receipt.file_url} target="_blank" rel="noreferrer" className="truncate font-medium text-slate-800 underline underline-offset-2">{receipt.file_name}</a>
+                          <button type="button" onClick={() => void handleDeleteReceipt(receipt.id)} className="text-xs font-medium text-rose-700">Delete</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <aside className="space-y-4">
@@ -670,6 +769,25 @@ export default function TicketDetailPage() {
                   </div>
                 </dl>
               </div>
+
+              {session.role !== 'tenant' && (
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Ticket cost</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <label className="text-xs font-medium text-slate-600">Labor
+                      <input type="number" min="0" step="0.01" value={laborCost} onChange={(event) => setLaborCost(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+                    </label>
+                    <label className="text-xs font-medium text-slate-600">Materials
+                      <input type="number" min="0" step="0.01" value={materialsCost} onChange={(event) => setMaterialsCost(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+                    </label>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm">
+                    <span className="font-medium text-slate-600">Total</span>
+                    <span className="font-semibold text-slate-900">${(Number(laborCost || 0) + Number(materialsCost || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <button type="button" onClick={() => void handleTicketUpdate({ labor_cost: laborCost ? Number(laborCost) : null, materials_cost: materialsCost ? Number(materialsCost) : null })} disabled={detailSaving} className="mt-3 w-full rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Save costs</button>
+                </div>
+              )}
 
               {session.role !== 'tenant' && (
                 <div className="flex flex-col gap-3">

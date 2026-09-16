@@ -90,15 +90,16 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-10">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-6 py-10">
+      <div className="mb-8 text-center">
+        <p className="text-4xl font-bold tracking-[0.12em] text-slate-950 sm:text-5xl">LANDBARON</p>
+        <p className="mt-2 text-sm font-medium text-slate-600">Support Ticketing for Small Landlords</p>
+      </div>
       <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-8 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Landbaron.ai
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Sign in with Google</h1>
+          <h1 className="text-3xl font-semibold text-slate-900">Sign in with Google</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Use your Google account to access the Landbaron.ai operations dashboard.
+            Use your Google account to access the maintenance workspace.
           </p>
         </div>
 

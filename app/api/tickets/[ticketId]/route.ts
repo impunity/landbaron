@@ -110,7 +110,20 @@ export async function GET(
       return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
-    return NextResponse.json({ ticket: data });
+    const { data: receipts, error: receiptsError } = await supabaseAdmin
+      .from('ticket_receipts')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: false });
+
+    if (receiptsError) {
+      const missingTable = receiptsError.message?.toLowerCase().includes('ticket_receipts');
+      if (!missingTable) {
+        throw receiptsError;
+      }
+    }
+
+    return NextResponse.json({ ticket: data, receipts: receipts ?? [] });
   } catch (error) {
     console.error('GET /api/tickets/[ticketId] failed:', error);
     return NextResponse.json(
@@ -126,7 +139,7 @@ export async function PATCH(
 ) {
   try {
     const { ticketId } = await params;
-    const { notes, status, assigned_to } = await request.json();
+    const { notes, status, assigned_to, labor_cost, materials_cost } = await request.json();
 
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -157,6 +170,22 @@ export async function PATCH(
       if (normalizedStatus === 'Resolved' || normalizedStatus === 'Closed') {
         updates.resolved_at = new Date().toISOString();
       }
+    }
+
+    if (labor_cost !== undefined) {
+      const value = labor_cost === null || labor_cost === '' ? null : Number(labor_cost);
+      if (value !== null && (!Number.isFinite(value) || value < 0)) {
+        return NextResponse.json({ error: 'Labor cost must be zero or greater.' }, { status: 400 });
+      }
+      updates.labor_cost = value === null ? null : String(value);
+    }
+
+    if (materials_cost !== undefined) {
+      const value = materials_cost === null || materials_cost === '' ? null : Number(materials_cost);
+      if (value !== null && (!Number.isFinite(value) || value < 0)) {
+        return NextResponse.json({ error: 'Materials cost must be zero or greater.' }, { status: 400 });
+      }
+      updates.materials_cost = value === null ? null : String(value);
     }
 
     let existingTicket: {

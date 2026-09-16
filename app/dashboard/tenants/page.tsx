@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 type TenantWithUnit = {
@@ -38,6 +38,7 @@ export default function TenantsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'past' | 'pending'>('all');
+  const [propertyFilter, setPropertyFilter] = useState('all');
 
   useEffect(() => {
     const client = supabase;
@@ -137,6 +138,9 @@ export default function TenantsPage() {
 
   const filteredTenants = useMemo(() => {
     let list = tenants;
+    if (propertyFilter !== 'all') {
+      list = list.filter((tenant) => tenant.units?.property_id === propertyFilter);
+    }
     if (statusFilter !== 'all') {
       list = list.filter((t) => t.status === statusFilter);
     }
@@ -153,7 +157,16 @@ export default function TenantsPage() {
       const unitMatch = (t.units?.unit_number ?? '').toLowerCase().includes(query);
       return nameMatch || emailMatch || phoneMatch || propMatch || addrMatch || unitMatch;
     });
-  }, [tenants, searchTerm, statusFilter]);
+  }, [tenants, searchTerm, statusFilter, propertyFilter]);
+
+  const propertyOptions = useMemo(() => {
+    const properties = new Map<string, string>();
+    tenants.forEach((tenant) => {
+      const property = tenant.units?.properties;
+      if (property?.id) properties.set(property.id, property.name || property.address);
+    });
+    return Array.from(properties.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [tenants]);
 
   if (!session) return null;
 
@@ -183,6 +196,13 @@ export default function TenantsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Maintenance Tickets
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/dashboard/properties')}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -208,13 +228,25 @@ export default function TenantsPage() {
 
         {/* Filters */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <input
-            type="text"
-            placeholder="Search by tenant name, email, phone, property, or unit..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full max-w-md rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-slate-500"
-          />
+          <div className="flex w-full flex-col gap-3 sm:max-w-2xl sm:flex-row">
+            <input
+              type="text"
+              placeholder="Search tenants..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-slate-500"
+            />
+            <select
+              value={propertyFilter}
+              onChange={(event) => setPropertyFilter(event.target.value)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-500"
+            >
+              <option value="all">All properties</option>
+              {propertyOptions.map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex gap-2">
             {[
@@ -280,7 +312,13 @@ export default function TenantsPage() {
                   return (
                     <tr key={t.id} className="transition hover:bg-slate-50">
                       <td className="px-5 py-4 font-semibold text-slate-900">
-                        {t.name}
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/dashboard/tenants/${t.id}`)}
+                          className="text-left font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-800"
+                        >
+                          {t.name}
+                        </button>
                         {t.notes && <p className="text-xs font-normal text-slate-500 italic mt-0.5">{t.notes}</p>}
                       </td>
                       <td className="px-5 py-4 text-slate-700">
@@ -339,17 +377,24 @@ export default function TenantsPage() {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        {unitPropId && unitId ? (
+                        <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() =>
-                              router.push(`/dashboard/properties/${unitPropId}/units/${unitId}`)
-                            }
+                            onClick={() => router.push(`/dashboard/tenants/${t.id}`)}
                             className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           >
-                            View unit →
+                            Edit tenant
                           </button>
-                        ) : null}
+                          {unitPropId && unitId ? (
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/dashboard/properties/${unitPropId}/units/${unitId}`)}
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              View unit →
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );
