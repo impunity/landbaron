@@ -427,13 +427,18 @@ export default function DashboardPage() {
 
   const visibleTickets = useMemo(() => getVisibleTickets(tickets, session), [tickets, session]);
 
+  const nonArchivedTickets = useMemo(
+    () => visibleTickets.filter((ticket) => normalizeStatus(ticket.status) !== 'Archived'),
+    [visibleTickets],
+  );
+
   const filteredTickets = useMemo(() => {
     if (activeFilter === 'all') {
-      return visibleTickets;
+      return nonArchivedTickets;
     }
 
     return visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === activeFilter);
-  }, [activeFilter, visibleTickets]);
+  }, [activeFilter, nonArchivedTickets, visibleTickets]);
 
   const sortedTickets = useMemo(() => {
     const next = [...filteredTickets];
@@ -473,15 +478,15 @@ export default function DashboardPage() {
       resolved: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Resolved').length,
       dismissed: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Closed').length,
       archived: visibleTickets.filter((ticket) => normalizeStatus(ticket.status) === 'Archived').length,
-      total: visibleTickets.length,
+      total: nonArchivedTickets.length,
     }),
-    [visibleTickets],
+    [nonArchivedTickets, visibleTickets],
   );
 
   const propertySummary = useMemo(() => {
     const grouped = new Map<string, { count: number; active: number; open: number; resolved: number; dismissed: number }>();
 
-    visibleTickets.forEach((ticket) => {
+    nonArchivedTickets.forEach((ticket) => {
       const property = ticket.property_id?.trim() || 'Unassigned';
       const current = grouped.get(property) ?? { count: 0, active: 0, open: 0, resolved: 0, dismissed: 0 };
       const status = normalizeStatus(ticket.status);
@@ -508,14 +513,14 @@ export default function DashboardPage() {
       }))
       .sort((a, b) => b.active - a.active || b.count - a.count)
       .slice(0, 4);
-  }, [visibleTickets]);
+  }, [nonArchivedTickets]);
 
   const recentActivity = useMemo(
     () =>
-      [...visibleTickets]
+      [...nonArchivedTickets]
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
         .slice(0, 4),
-    [visibleTickets],
+    [nonArchivedTickets],
   );
 
   const handleInputChange = (
@@ -985,84 +990,10 @@ export default function DashboardPage() {
             <h2 className="mb-5 text-xl font-semibold">Create a maintenance ticket</h2>
 
             <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
-              <div className="md:col-span-1">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Severity rating
-                </label>
-                <select
-                  name="severity"
-                  value={formState.severity}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-0 transition focus:border-slate-500"
-                >
-                  <option value="">Select severity</option>
-                  <option value="1">1 - Nice to have</option>
-                  <option value="2">2 - Minor issue</option>
-                  <option value="3">3 - Important</option>
-                  <option value="4">4 - Major issue</option>
-                  <option value="5">5 - Unit is on fire / flooding</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-1">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Email address
-                </label>
-                {session.role === 'tenant' ? (
-                  <input
-                    type="email"
-                    value={session.email}
-                    disabled
-                    className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm text-slate-900"
-                  />
-                ) : (
-                  <select
-                    name="email"
-                    value={formState.email}
-                    onChange={handleInputChange}
-                    required
-                    disabled={!formState.property_id}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100"
-                  >
-                    <option value="">{formState.property_id ? 'Select tenant email' : 'Select a property first'}</option>
-                    {propertyOptions
-                      .find((property) => property.id === formState.property_id)
-                      ?.units?.flatMap((unit) => unit.tenants ?? [])
-                      .filter((tenant) => tenant.email)
-                      .map((tenant) => (
-                        <option key={tenant.id} value={tenant.email ?? ''}>
-                          {tenant.name} — {tenant.email}
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </div>
-
-              {session.role === 'owner' && (
-                <div className="md:col-span-1">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Assign to
-                  </label>
-                  <select
-                    name="assigned_to"
-                    value={formState.assigned_to}
-                    onChange={handleInputChange}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                  >
-                    <option value="">Unassigned</option>
-                    {staffMembers.map((member) => (
-                      <option key={member.id} value={`${member.name} <${member.email}>`}>
-                        {member.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {session.role !== 'tenant' && (
-                <>
-                  <div>
+              <div className="space-y-5">
+                {session.role !== 'tenant' && (
+                  <>
+                    <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Property</label>
                     <select
                       name="property_id"
@@ -1085,8 +1016,8 @@ export default function DashboardPage() {
                         <option key={property.id} value={property.id}>{property.name} — {property.address}</option>
                       ))}
                     </select>
-                  </div>
-                  <div>
+                    </div>
+                    <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Unit</label>
                     <select
                       name="unit_id"
@@ -1107,9 +1038,43 @@ export default function DashboardPage() {
                         <option key={unit.id} value={unit.id}>Unit {unit.unit_number}</option>
                       ))}
                     </select>
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Tenant Email</label>
+                  {session.role === 'tenant' ? (
+                    <input type="email" value={session.email} disabled className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm text-slate-900" />
+                  ) : (
+                    <select name="email" value={formState.email} onChange={handleInputChange} required disabled={!formState.property_id} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100">
+                      <option value="">{formState.property_id ? 'Select tenant email' : 'Select a property first'}</option>
+                      {propertyOptions.find((property) => property.id === formState.property_id)?.units?.flatMap((unit) => unit.tenants ?? []).filter((tenant) => tenant.email).map((tenant) => (
+                        <option key={tenant.id} value={tenant.email ?? ''}>{tenant.name} — {tenant.email}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                {session.role === 'owner' && (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Assigned To</label>
+                    <select name="assigned_to" value={formState.assigned_to} onChange={handleInputChange} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500">
+                      <option value="">Unassigned</option>
+                      {staffMembers.map((member) => <option key={member.id} value={`${member.name} <${member.email}>`}>{member.name}</option>)}
+                    </select>
                   </div>
-                </>
-              )}
+                )}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Severity</label>
+                  <select name="severity" value={formState.severity} onChange={handleInputChange} required className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500">
+                    <option value="">Select severity</option>
+                    <option value="1">1 - Nice to have</option><option value="2">2 - Minor issue</option><option value="3">3 - Important</option><option value="4">4 - Major issue</option><option value="5">5 - Unit is on fire / flooding</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-slate-700">

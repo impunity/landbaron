@@ -104,9 +104,9 @@ export async function GET(
       }
     });
 
-    const relatedTickets = Array.from(matchedTicketsMap.values()).sort(
-      (a, b) => new Date(String(b.updated_at)).getTime() - new Date(String(a.updated_at)).getTime(),
-    );
+    const relatedTickets = Array.from(matchedTicketsMap.values())
+      .filter((ticket) => String(ticket.status ?? '').toLowerCase() !== 'archived')
+      .sort((a, b) => new Date(String(b.updated_at)).getTime() - new Date(String(a.updated_at)).getTime());
 
     return NextResponse.json({
       unit: {

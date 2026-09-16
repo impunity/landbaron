@@ -338,7 +338,7 @@ export default function TenantsPage() {
                       <td className="px-5 py-4 text-xs text-slate-600">
                         {t.email && (
                           <p>
-                            <a href={`mailto:${t.email}`} className="text-slate-900 underline">
+                            <a href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(t.email)}`} target="_blank" rel="noreferrer" className="text-slate-900 underline">
                               {t.email}
                             </a>
                           </p>

@@ -894,7 +894,9 @@ export default function UnitDetailPage() {
                               <p>
                                 ✉️{' '}
                                 <a
-                                  href={`mailto:${t.email}`}
+                                  href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(t.email)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
                                   className="text-slate-900 underline hover:text-slate-700"
                                 >
                                   {t.email}
