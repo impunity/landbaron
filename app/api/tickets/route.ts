@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { sendTicketAssignmentEmail } from '@/lib/ticket-assignment-email';
+import { sendTicketCreatedEmails } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 
 export async function GET(request: NextRequest) {
@@ -101,12 +101,18 @@ export async function POST(request: NextRequest) {
     }
 
     let notificationError: string | null = null;
-    if (normalizedAssignee && ticket) {
+    if (ticket) {
       try {
-        await sendTicketAssignmentEmail(ticket, normalizedAssignee);
+        const notification = await sendTicketCreatedEmails(ticket, normalizedAssignee, {
+          tenantCanViewTicket: user.role === 'tenant',
+        });
+        const notConfigured = notification.results.every((result) => result.reason === 'not-configured');
+        if (notConfigured) {
+          notificationError = 'Email notifications are not configured yet.';
+        }
       } catch (emailError) {
-        console.error('Ticket assignment email failed:', emailError);
-        notificationError = 'Ticket created, but the assignment email could not be sent.';
+        console.error('Ticket creation emails failed:', emailError);
+        notificationError = 'Ticket created, but one or more notification emails could not be sent.';
       }
     }
 

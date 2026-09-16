@@ -6,10 +6,11 @@ Ticket assignments send an email through [Resend](https://resend.com). Add these
 
 ```bash
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL="Landbaron <notifications@your-verified-domain.com>"
+RESEND_FROM_EMAIL="Landbaron <notifications@landbaron.app>"
+RESEND_REPLY_TO_EMAIL=scrosby@gmail.com
 ```
 
-The sender domain must be verified in Resend. When configured, creating an assigned ticket or assigning a ticket to a different staff member emails the new assignee with its title, priority, property address, requester email, and a link to the ticket.
+The `landbaron.app` sender domain must be verified in Resend. When configured, filing a ticket sends the tenant a confirmation and emails the assigned staff member with its title, priority, property address, requester email, and a direct ticket link. Reassigning a ticket also emails the new assignee.
 
 ## Tenant Ticket Access
 

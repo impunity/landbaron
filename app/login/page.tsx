@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { fetchUserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
@@ -22,13 +23,14 @@ export default function LoginPage() {
 
     client.auth
       .getSession()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!active) {
           return;
         }
 
         if (data.session) {
-          router.replace('/dashboard');
+          const role = await fetchUserRole(data.session.user.email, client);
+          router.replace(role === 'tenant' ? '/dashboard' : '/dashboard/properties');
         }
       })
       .finally(() => {
@@ -58,7 +60,7 @@ export default function LoginPage() {
       const siteUrl =
         process.env.NEXT_PUBLIC_SITE_URL ||
         (typeof window !== 'undefined' ? window.location.origin : 'https://landbaron.vercel.app');
-      const redirectTo = `${siteUrl.replace(/\/$/, '')}/dashboard`;
+      const redirectTo = `${siteUrl.replace(/\/$/, '')}/dashboard/properties`;
 
       const { error: oauthError } = await client.auth.signInWithOAuth({
         provider: 'google',
