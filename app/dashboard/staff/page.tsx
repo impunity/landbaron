@@ -410,7 +410,7 @@ export default function StaffPage() {
       <div className="mx-auto max-w-6xl px-6 py-10">
         <header className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Landbaron.ai</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">LANDBARON</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Staff roster</h1>
           </div>
 

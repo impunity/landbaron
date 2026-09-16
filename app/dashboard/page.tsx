@@ -921,7 +921,7 @@ export default function DashboardPage() {
         <header className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Landbaron.ai
+              LANDBARON
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
               Maintenance tickets
@@ -968,21 +968,6 @@ export default function DashboardPage() {
             >
               {getRoleLabel(session.role)}
             </div>
-            <button
-              type="button"
-              onClick={async () => {
-                if (!supabase) {
-                  router.push('/login');
-                  return;
-                }
-
-                await supabase.auth.signOut();
-                router.push('/login');
-              }}
-              className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Log out
-            </button>
           </div>
         </header>
 

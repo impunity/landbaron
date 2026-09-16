@@ -524,7 +524,7 @@ export default function TicketDetailPage() {
     return (
       <main className="min-h-screen bg-slate-100 px-6 py-12">
         <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Landbaron.ai</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">LANDBARON</p>
           <h1 className="mt-3 text-2xl font-semibold text-slate-900">Ticket unavailable</h1>
           <p className="mt-3 text-sm text-rose-700">{error}</p>
           <button

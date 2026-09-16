@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -84,7 +85,7 @@ export default function LoginPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-10">
         <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Landbaron.ai</p>
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">LANDBARON</p>
           <p className="mt-4 text-base text-slate-700">Checking your sign-in state...</p>
         </div>
       </main>
@@ -93,7 +94,15 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-6 py-10">
-      <div className="mb-8 text-center">
+      <div className="mb-8 w-full max-w-3xl text-center">
+        <Image
+          src="/beach-chair.png"
+          alt="Beach chair with a drink"
+          width={1536}
+          height={768}
+          priority
+          className="mx-auto mb-6 h-auto w-full max-w-2xl"
+        />
         <p className="text-4xl font-bold tracking-[0.12em] text-slate-950 sm:text-5xl">LANDBARON</p>
         <p className="mt-2 text-sm font-medium text-slate-600">Support Ticketing for Small Landlords</p>
       </div>

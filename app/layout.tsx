@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Landbaron.ai",
+  title: "LANDBARON",
   description: "Property maintenance dashboard for small landlords and property operations",
 };
 
