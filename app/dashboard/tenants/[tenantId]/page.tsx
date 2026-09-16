@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { LogoutButton } from '../../logout-button';
 
 type Tenant = {
   id: string;
@@ -84,7 +85,10 @@ export default function TenantEditPage() {
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <button type="button" onClick={() => router.push('/dashboard/tenants')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">← Tenants Directory</button>
-          <button type="button" onClick={() => router.push('/dashboard')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Maintenance Tickets</button>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => router.push('/dashboard')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Maintenance Tickets</button>
+            <LogoutButton />
+          </div>
         </div>
         <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Edit tenant</p>

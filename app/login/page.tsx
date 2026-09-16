@@ -95,14 +95,16 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-6 py-10">
       <div className="mb-8 w-full max-w-3xl text-center">
-        <Image
-          src="/beach-chair.png"
-          alt="Beach chair with a drink"
-          width={1536}
-          height={768}
-          priority
-          className="mx-auto mb-6 h-auto w-full max-w-2xl"
-        />
+        <div className="mx-auto mb-6 h-72 w-72 overflow-hidden rounded-full ring-4 ring-white shadow-md sm:h-96 sm:w-96">
+          <Image
+            src="/beach-chair.png"
+            alt="Beach chair with a drink"
+            width={1536}
+            height={768}
+            priority
+            className="h-full w-full object-cover"
+          />
+        </div>
         <p className="text-4xl font-bold tracking-[0.12em] text-slate-950 sm:text-5xl">LANDBARON</p>
         <p className="mt-2 text-sm font-medium text-slate-600">Support Ticketing for Small Landlords</p>
       </div>

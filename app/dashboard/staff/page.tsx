@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { LogoutButton } from '../logout-button';
 
 type StaffMember = {
   id: string;
@@ -446,6 +447,7 @@ export default function StaffPage() {
             >
               ADD STAFF
             </button>
+            <LogoutButton />
           </div>
         </header>
 

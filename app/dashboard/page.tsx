@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, getRoleLabel, getVisibleTickets, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { LogoutButton } from './logout-button';
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | 'Closed' | 'Archived';
 
@@ -968,6 +969,7 @@ export default function DashboardPage() {
             >
               {getRoleLabel(session.role)}
             </div>
+            <LogoutButton />
           </div>
         </header>
 

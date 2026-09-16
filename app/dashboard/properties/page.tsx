@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { LogoutButton } from '../logout-button';
 
 type UnitSummary = {
   id: string;
@@ -268,6 +269,7 @@ export default function PropertiesPage() {
             >
               + Add property
             </button>
+            <LogoutButton />
           </div>
         </header>
 

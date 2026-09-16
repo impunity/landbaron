@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { LogoutButton } from '../logout-button';
 
 type TenantWithUnit = {
   id: string;
@@ -217,6 +218,7 @@ export default function TenantsPage() {
                 Staff roster
               </button>
             )}
+            <LogoutButton />
           </div>
         </header>
 
