@@ -370,10 +370,17 @@ export default function DashboardPage() {
         const property = properties.find((item) => item.id === propertyId);
         if (property) {
           const unit = property.units?.find((item) => item.id === unitId);
+          const tenantEmail = unit?.tenants?.find((tenant) => tenant.email)?.email ?? '';
           const address = [property.address, unit?.unit_number && `Unit ${unit.unit_number}`]
             .filter(Boolean)
             .join(', ');
-          setFormState((current) => ({ ...current, property_id: propertyId, unit_id: unitId, address }));
+          setFormState((current) => ({
+            ...current,
+            property_id: propertyId,
+            unit_id: unitId,
+            email: tenantEmail,
+            address,
+          }));
           setShowForm(true);
         }
       }
@@ -887,7 +894,9 @@ export default function DashboardPage() {
       setFormSuccess(
         result.notificationError
           ? `Ticket created successfully. ${result.notificationError}`
-          : 'Ticket created successfully.',
+          : result.notificationSent
+            ? 'Ticket created successfully. Email notification accepted by Resend.'
+            : 'Ticket created successfully.',
       );
       setLoading(true);
       await loadTickets();
@@ -985,6 +994,12 @@ export default function DashboardPage() {
           {showForm ? 'Close form' : 'New ticket'}
         </button>
 
+        {!showForm && formSuccess && (
+          <div className="mb-8 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {formSuccess}
+          </div>
+        )}
+
         {showForm && (
           <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="mb-5 text-xl font-semibold">Create a maintenance ticket</h2>
@@ -1025,9 +1040,11 @@ export default function DashboardPage() {
                       onChange={(event) => {
                         const property = propertyOptions.find((item) => item.id === formState.property_id);
                         const unit = property?.units?.find((item) => item.id === event.target.value);
+                        const tenantEmail = unit?.tenants?.find((tenant) => tenant.email)?.email ?? '';
                         setFormState((current) => ({
                           ...current,
                           unit_id: event.target.value,
+                          email: tenantEmail,
                           address: [property?.address, unit?.unit_number && `Unit ${unit.unit_number}`].filter(Boolean).join(', '),
                         }));
                       }}
@@ -1049,7 +1066,12 @@ export default function DashboardPage() {
                   ) : (
                     <select name="email" value={formState.email} onChange={handleInputChange} required disabled={!formState.property_id} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100">
                       <option value="">{formState.property_id ? 'Select tenant email' : 'Select a property first'}</option>
-                      {propertyOptions.find((property) => property.id === formState.property_id)?.units?.flatMap((unit) => unit.tenants ?? []).filter((tenant) => tenant.email).map((tenant) => (
+                      {propertyOptions
+                        .find((property) => property.id === formState.property_id)
+                        ?.units?.filter((unit) => !formState.unit_id || unit.id === formState.unit_id)
+                        .flatMap((unit) => unit.tenants ?? [])
+                        .filter((tenant) => tenant.email)
+                        .map((tenant) => (
                         <option key={tenant.id} value={tenant.email ?? ''}>{tenant.name} — {tenant.email}</option>
                       ))}
                     </select>

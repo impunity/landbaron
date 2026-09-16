@@ -10,6 +10,7 @@ type AssignmentNotificationTicket = {
 type NotificationResult = {
   sent: boolean;
   recipient: 'tenant' | 'assignee';
+  messageId?: string;
   reason?: 'not-configured' | 'missing-recipient' | 'duplicate-recipient';
 };
 
@@ -109,10 +110,28 @@ export async function sendTicketCreatedEmails(
 
   const resend = new Resend(apiKey);
 
+  if (requesterEmail && assigneeEmail.toLowerCase() === requesterEmail.toLowerCase()) {
+    const { data, error } = await resend.emails.send({
+      from,
+      to: requesterEmail,
+      replyTo: replyTo || undefined,
+      subject: `Ticket filed and assigned to you: ${ticket.title}`,
+      text: `Your maintenance request has been received and assigned to you.\n\n${ticket.title}\n${details}\n\nView ticket: ${ticketUrl}`,
+      html: `<p>Your maintenance request has been received and assigned to you.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><a href="${ticketUrl}">View ticket</a></p>`,
+    });
+    if (error) throw new Error(`Combined notification failed: ${error.message}`);
+    return {
+      results: [
+        { sent: true, recipient: 'tenant' as const, messageId: data?.id },
+        { sent: false, recipient: 'assignee' as const, reason: 'duplicate-recipient' as const },
+      ],
+    };
+  }
+
   if (requesterEmail) {
     const tenantLinkText = options?.tenantCanViewTicket ? `\n\nView ticket: ${ticketUrl}` : '';
     const tenantLinkHtml = options?.tenantCanViewTicket ? `<p><a href="${ticketUrl}">View ticket</a></p>` : '';
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from,
       to: requesterEmail,
       replyTo: replyTo || undefined,
@@ -121,18 +140,16 @@ export async function sendTicketCreatedEmails(
       html: `<p>Your maintenance request has been received.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p>${tenantLinkHtml}`,
     });
     if (error) throw new Error(`Tenant email failed: ${error.message}`);
-    results.push({ sent: true, recipient: 'tenant' });
+    results.push({ sent: true, recipient: 'tenant', messageId: data?.id });
   } else {
     results.push({ sent: false, recipient: 'tenant', reason: 'missing-recipient' });
   }
 
   if (!assigneeEmail) {
     results.push({ sent: false, recipient: 'assignee', reason: 'missing-recipient' });
-  } else if (assigneeEmail.toLowerCase() === requesterEmail.toLowerCase()) {
-    results.push({ sent: false, recipient: 'assignee', reason: 'duplicate-recipient' });
   } else {
     const assigneeDetails = [details, requesterEmail && `Requester: ${requesterEmail}`].filter(Boolean).join('\n');
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from,
       to: assigneeEmail,
       replyTo: replyTo || undefined,
@@ -141,7 +158,7 @@ export async function sendTicketCreatedEmails(
       html: `<p>You have been assigned a maintenance ticket.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(assigneeDetails).replace(/\n/g, '<br />')}</p><p><a href="${ticketUrl}">View ticket</a></p>`,
     });
     if (error) throw new Error(`Assignee email failed: ${error.message}`);
-    results.push({ sent: true, recipient: 'assignee' });
+    results.push({ sent: true, recipient: 'assignee', messageId: data?.id });
   }
 
   return { results };

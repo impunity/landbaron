@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     let notificationError: string | null = null;
+    let notificationSent = false;
     if (ticket) {
       try {
         const notification = await sendTicketCreatedEmails(ticket, normalizedAssignee, {
@@ -110,13 +111,14 @@ export async function POST(request: NextRequest) {
         if (notConfigured) {
           notificationError = 'Email notifications are not configured yet.';
         }
+        notificationSent = notification.results.some((result) => result.sent);
       } catch (emailError) {
         console.error('Ticket creation emails failed:', emailError);
         notificationError = 'Ticket created, but one or more notification emails could not be sent.';
       }
     }
 
-    return NextResponse.json({ ok: true, ticket, notificationError });
+    return NextResponse.json({ ok: true, ticket, notificationError, notificationSent });
   } catch (error) {
     console.error('POST /api/tickets failed:', error);
     return NextResponse.json(
