@@ -93,18 +93,23 @@ export async function POST(request: NextRequest) {
           unit_id: typeof unit_id === 'string' && unit_id.trim() ? unit_id.trim() : null,
         },
       ])
-      .select('id, title, priority, description')
+      .select('id, title, priority, description, unit_id')
       .single();
 
     if (error) {
       throw error;
     }
 
+    const { data: unitPhoto } = ticket.unit_id
+      ? await supabaseAdmin.from('unit_photos').select('photo_url').eq('unit_id', ticket.unit_id).order('is_primary', { ascending: false }).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      : { data: null };
+    const notificationTicket = { ...ticket, unitPhotoUrl: unitPhoto?.photo_url ?? null };
+
     let notificationError: string | null = null;
     let notificationSent = false;
     if (ticket) {
       try {
-        const notification = await sendTicketCreatedEmails(ticket, normalizedAssignee, {
+        const notification = await sendTicketCreatedEmails(notificationTicket, normalizedAssignee, {
           tenantCanViewTicket: user.role === 'tenant',
         });
         const notConfigured = notification.results.every((result) => result.reason === 'not-configured');

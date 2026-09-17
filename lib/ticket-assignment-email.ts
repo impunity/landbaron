@@ -1,10 +1,12 @@
 import { Resend } from 'resend';
+import crypto from 'node:crypto';
 
 type AssignmentNotificationTicket = {
   id: string;
   title: string;
   priority?: string | null;
   description?: string | null;
+  unitPhotoUrl?: string | null;
 };
 
 type NotificationResult = {
@@ -27,6 +29,11 @@ const getAssigneeEmail = (assignment?: string | null) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
 };
 
+const getAssigneeName = (assignment?: string | null) => {
+  const value = assignment?.trim() ?? '';
+  return value.match(/^(.+?)\s*<[^>]+>\s*$/)?.[1]?.trim() || value || 'the maintenance team';
+};
+
 const getDescriptionField = (description: string | null | undefined, field: string) =>
   description?.match(new RegExp(`(?:^|\\n)${field}:\\s*([^\\n]+)`, 'i'))?.[1]?.trim() ?? '';
 
@@ -35,6 +42,11 @@ const getEmailConfiguration = () => ({
   from: process.env.RESEND_FROM_EMAIL,
   replyTo: process.env.RESEND_REPLY_TO_EMAIL,
 });
+
+const getNudgeToken = (ticketId: string, assigneeEmail: string) => {
+  const secret = process.env.NUDGE_SECRET || process.env.RESEND_API_KEY || '';
+  return crypto.createHmac('sha256', secret).update(`${ticketId}:${assigneeEmail.toLowerCase()}`).digest('hex');
+};
 
 const getTicketDetails = (ticket: AssignmentNotificationTicket) => {
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://landbaron.vercel.app').replace(/\/$/, '');
@@ -67,6 +79,7 @@ export async function sendTicketAssignmentEmail(
   }
 
   const { details, requesterEmail, ticketUrl } = getTicketDetails(ticket);
+  const assigneeName = getAssigneeName(assignment);
   const requesterDetails = [
     requesterEmail && `Requester: ${requesterEmail}`,
   ].filter(Boolean).join('\n');
@@ -79,7 +92,7 @@ export async function sendTicketAssignmentEmail(
     replyTo: replyTo || undefined,
     subject: `Assigned ticket: ${ticket.title}`,
     text: `You have been assigned a maintenance ticket.\n\n${ticket.title}\n${fullDetails}\n\nView ticket: ${ticketUrl}`,
-    html: `<p>You have been assigned a maintenance ticket.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(fullDetails).replace(/\n/g, '<br />')}</p><p><a href="${ticketUrl}">View ticket</a></p>`,
+    html: `<p>You have been assigned a maintenance ticket.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(fullDetails).replace(/\n/g, '<br />')}</p><p><a href="${ticketUrl}">View ticket</a></p><p>Assigned to: ${escapeHtml(assigneeName)}</p>`,
   });
 
   if (error) {
@@ -98,6 +111,15 @@ export async function sendTicketCreatedEmails(
   const assigneeEmail = getAssigneeEmail(assignment);
   const { details, requesterEmail, ticketUrl } = getTicketDetails(ticket);
   const results: NotificationResult[] = [];
+  const assigneeName = getAssigneeName(assignment);
+  const nudgeEndpoint = ticketUrl.replace('/dashboard/tickets/', '/api/tickets/') + '/nudge';
+  const nudgeUrl = assigneeEmail
+    ? `${nudgeEndpoint}?email=${encodeURIComponent(assigneeEmail)}&token=${getNudgeToken(ticket.id, assigneeEmail)}`
+    : ticketUrl;
+  const photoHtml = ticket.unitPhotoUrl
+    ? `<p><img src="${ticket.unitPhotoUrl}" alt="Unit photo" style="max-width:220px;border-radius:10px" /></p>`
+    : '';
+  const photoText = ticket.unitPhotoUrl ? `\nUnit photo: ${ticket.unitPhotoUrl}` : '';
 
   if (!apiKey || !from) {
     return {
@@ -116,8 +138,8 @@ export async function sendTicketCreatedEmails(
       to: requesterEmail,
       replyTo: replyTo || undefined,
       subject: `Ticket filed and assigned to you: ${ticket.title}`,
-      text: `Your maintenance request has been received and assigned to you.\n\n${ticket.title}\n${details}\n\nView ticket: ${ticketUrl}`,
-      html: `<p>Your maintenance request has been received and assigned to you.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><a href="${ticketUrl}">View ticket</a></p>`,
+      text: `Hello! This is a confirmation that your maintenance request has been received and assigned.\n\n${ticket.title}\n${details}\nAssigned to: ${assigneeName}\n\nYou will get an email update when the status of the request changes.\n\nOpen ticket and add information, adjust severity, or dismiss: ${ticketUrl}\n\nNudge maintenance person: ${nudgeUrl}${photoText}`,
+      html: `<p>Hello! This is a confirmation that your maintenance request has been received and assigned.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><strong>Assigned to:</strong> ${escapeHtml(assigneeName)}</p><p>You will get an email update when the status of the request changes.</p>${photoHtml}<p><a href="${ticketUrl}">Open ticket and add information, adjust severity, or dismiss.</a></p><p><a href="${nudgeUrl}">Nudge maintenance person</a></p>`,
     });
     if (error) throw new Error(`Combined notification failed: ${error.message}`);
     return {
@@ -136,8 +158,8 @@ export async function sendTicketCreatedEmails(
       to: requesterEmail,
       replyTo: replyTo || undefined,
       subject: `Maintenance request received: ${ticket.title}`,
-      text: `Your maintenance request has been received.\n\n${ticket.title}\n${details}${tenantLinkText}`,
-      html: `<p>Your maintenance request has been received.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p>${tenantLinkHtml}`,
+      text: `Hello! This is a confirmation that your maintenance request has been received and assigned.\n\n${ticket.title}\n${details}\nAssigned to: ${assigneeName}\n\nYou will get an email update when the status of the request changes.\n\nOpen ticket and add information, adjust severity, or dismiss: ${ticketUrl}\n\nNudge maintenance person: ${nudgeUrl}${photoText}`,
+      html: `<p>Hello! This is a confirmation that your maintenance request has been received and assigned.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><strong>Assigned to:</strong> ${escapeHtml(assigneeName)}</p><p>You will get an email update when the status of the request changes.</p>${photoHtml}<p><a href="${ticketUrl}">Open ticket and add information, adjust severity, or dismiss.</a></p><p><a href="${nudgeUrl}">Nudge maintenance person</a></p>${tenantLinkHtml}`,
     });
     if (error) throw new Error(`Tenant email failed: ${error.message}`);
     results.push({ sent: true, recipient: 'tenant', messageId: data?.id });
