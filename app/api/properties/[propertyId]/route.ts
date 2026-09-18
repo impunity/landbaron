@@ -50,6 +50,23 @@ export async function GET(
       return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     }
 
+    const { data: assignments, error: assignmentsError } = await supabaseAdmin
+      .from('property_staff_assignments')
+      .select('assignment_type, staff_members(*)')
+      .eq('property_id', propertyId);
+
+    if (assignmentsError && !assignmentsError.message.toLowerCase().includes('property_staff_assignments')) {
+      throw assignmentsError;
+    }
+
+    const { data: maintenanceStaff, error: staffError } = await supabaseAdmin
+      .from('staff_members')
+      .select('*')
+      .eq('role', 'Maintenance')
+      .order('name');
+
+    if (staffError) throw staffError;
+
     // Sanitize rent_amount for non-owners
     const units = Array.isArray(property.units)
       ? property.units.map((unit: Record<string, unknown>) => ({
@@ -66,6 +83,8 @@ export async function GET(
         ...property,
         units,
       },
+      assignments: assignments ?? [],
+      maintenanceStaff: maintenanceStaff ?? [],
     });
   } catch (error) {
     console.error('GET /api/properties/[propertyId] failed:', error);
@@ -111,6 +130,13 @@ export async function PATCH(
     if (body.postal_code !== undefined) updates.postal_code = typeof body.postal_code === 'string' ? body.postal_code.trim() : null;
     if (body.notes !== undefined) updates.notes = typeof body.notes === 'string' ? body.notes.trim() : null;
 
+    const primaryStaffId = typeof body.primary_staff_id === 'string' && body.primary_staff_id.trim()
+      ? body.primary_staff_id.trim()
+      : null;
+    const secondaryStaffId = typeof body.secondary_staff_id === 'string' && body.secondary_staff_id.trim()
+      ? body.secondary_staff_id.trim()
+      : null;
+
     const { data, error } = await supabaseAdmin
       .from('properties')
       .update(updates)
@@ -120,6 +146,28 @@ export async function PATCH(
 
     if (error) {
       throw error;
+    }
+
+    if (body.primary_staff_id !== undefined || body.secondary_staff_id !== undefined) {
+      const { error: deleteAssignmentsError } = await supabaseAdmin
+        .from('property_staff_assignments')
+        .delete()
+        .eq('property_id', propertyId);
+
+      if (deleteAssignmentsError) throw deleteAssignmentsError;
+
+      const assignments = [
+        primaryStaffId && { property_id: propertyId, staff_id: primaryStaffId, assignment_type: 'primary' },
+        secondaryStaffId && secondaryStaffId !== primaryStaffId && { property_id: propertyId, staff_id: secondaryStaffId, assignment_type: 'secondary' },
+      ].filter(Boolean);
+
+      if (assignments.length > 0) {
+        const { error: insertAssignmentsError } = await supabaseAdmin
+          .from('property_staff_assignments')
+          .insert(assignments);
+
+        if (insertAssignmentsError) throw insertAssignmentsError;
+      }
     }
 
     return NextResponse.json({ ok: true, property: data });

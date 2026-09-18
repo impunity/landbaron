@@ -26,6 +26,10 @@ Run [supabase/properties-and-units.sql](supabase/properties-and-units.sql) once 
 - `unit_maintenance_notes`: Chronological maintenance history per unit tracking "Completed Work" and "Work to Consider" with cost, technician/vendor, and date.
 - Links tickets to units and properties with direct navigation from unit view to ticket queue.
 
+## Tenant Portal, Contacts & Vendors
+
+Run [supabase/tenant-portal-and-contacts.sql](supabase/tenant-portal-and-contacts.sql) once in Supabase. It adds tenant avatars and improvement photos, per-property primary/secondary staff assignments, and approved vendor records.
+
 ## Getting Started ##
 
 First, run the development server:

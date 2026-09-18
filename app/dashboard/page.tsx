@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { fetchUserRole, getRoleLabel, getVisibleTickets, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { LogoutButton } from './logout-button';
+import { TenantPortal } from './tenant-portal';
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | 'Closed' | 'Archived';
 
@@ -916,6 +917,10 @@ export default function DashboardPage() {
     return null;
   }
 
+  if (session.role === 'tenant') {
+    return <TenantPortal session={session} />;
+  }
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto max-w-6xl px-6 py-10">
@@ -930,8 +935,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {session.role !== 'tenant' && (
-              <>
+            <>
                 <button
                   type="button"
                   onClick={() => router.push('/dashboard/properties')}
@@ -946,8 +950,14 @@ export default function DashboardPage() {
                 >
                   Tenants
                 </button>
-              </>
-            )}
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard/vendors')}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Approved Vendors
+                </button>
+            </>
             {session.role === 'owner' && (
               <button
                 type="button"
@@ -993,8 +1003,7 @@ export default function DashboardPage() {
 
             <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
               <div className="space-y-5">
-                {session.role !== 'tenant' && (
-                  <>
+                <>
                     <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Property</label>
                     <select
@@ -1043,15 +1052,11 @@ export default function DashboardPage() {
                       ))}
                     </select>
                     </div>
-                  </>
-                )}
+                </>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Tenant Email</label>
-                  {session.role === 'tenant' ? (
-                    <input type="email" value={session.email} disabled className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm text-slate-900" />
-                  ) : (
-                    <select name="email" value={formState.email} onChange={handleInputChange} required disabled={!formState.property_id} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100">
+                  <select name="email" value={formState.email} onChange={handleInputChange} required disabled={!formState.property_id} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100">
                       <option value="">{formState.property_id ? 'Select tenant email' : 'Select a property first'}</option>
                       {propertyOptions
                         .find((property) => property.id === formState.property_id)
@@ -1061,8 +1066,7 @@ export default function DashboardPage() {
                         .map((tenant) => (
                         <option key={tenant.id} value={tenant.email ?? ''}>{tenant.name} — {tenant.email}</option>
                       ))}
-                    </select>
-                  )}
+                  </select>
                 </div>
               </div>
 
@@ -1095,7 +1099,7 @@ export default function DashboardPage() {
                   value={formState.address}
                   onChange={handleInputChange}
                   required
-                  readOnly={session.role !== 'tenant'}
+                  readOnly
                   placeholder="123 Main St, Apt 4B, Springfield, IL"
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                 />
@@ -1261,11 +1265,7 @@ export default function DashboardPage() {
           ) : error ? (
             <div className="p-8 text-sm text-rose-600">{error}</div>
           ) : sortedTickets.length === 0 ? (
-            <div className="p-8 text-sm text-slate-500">
-              {session.role === 'tenant'
-                ? 'You do not have any tickets matching your account yet.'
-                : 'No tickets found for this filter.'}
-            </div>
+            <div className="p-8 text-sm text-slate-500">No tickets found for this filter.</div>
           ) : (
             <div className="divide-y divide-slate-200">
               {sortedTickets.map((ticket) => {

@@ -43,6 +43,19 @@ type PropertyWithUnits = {
   units?: UnitDetail[];
 };
 
+type MaintenanceStaff = {
+  id: string;
+  name: string;
+  email: string;
+  phone_number?: string | null;
+  avatar_url?: string | null;
+};
+
+type PropertyAssignment = {
+  assignment_type: 'primary' | 'secondary';
+  staff_members: MaintenanceStaff;
+};
+
 type UnitDraft = {
   unit_number: string;
   rent_amount: string;
@@ -83,8 +96,12 @@ export default function PropertyDetailPage() {
     state: '',
     postal_code: '',
     notes: '',
+    primary_staff_id: '',
+    secondary_staff_id: '',
   });
   const [savingProp, setSavingProp] = useState(false);
+  const [maintenanceStaff, setMaintenanceStaff] = useState<MaintenanceStaff[]>([]);
+  const [propertyAssignments, setPropertyAssignments] = useState<PropertyAssignment[]>([]);
 
   useEffect(() => {
     const client = supabase;
@@ -170,7 +187,11 @@ export default function PropertyDetailPage() {
 
       const propData = result.property as PropertyWithUnits | null;
       setProperty(propData);
+      setMaintenanceStaff(Array.isArray(result.maintenanceStaff) ? result.maintenanceStaff : []);
+      setPropertyAssignments(Array.isArray(result.assignments) ? result.assignments : []);
       if (propData) {
+        const primary = result.assignments?.find((assignment: PropertyAssignment) => assignment.assignment_type === 'primary')?.staff_members?.id ?? '';
+        const secondary = result.assignments?.find((assignment: PropertyAssignment) => assignment.assignment_type === 'secondary')?.staff_members?.id ?? '';
         setPropEditDraft({
           name: propData.name ?? '',
           address: propData.address ?? '',
@@ -178,6 +199,8 @@ export default function PropertyDetailPage() {
           state: propData.state ?? '',
           postal_code: propData.postal_code ?? '',
           notes: propData.notes ?? '',
+          primary_staff_id: primary,
+          secondary_staff_id: secondary,
         });
       }
     } catch (loadError) {
@@ -455,6 +478,24 @@ export default function PropertyDetailPage() {
               <p className="mt-1 text-sm text-slate-700">{property.notes}</p>
             </div>
           )}
+
+          {(() => {
+            const primary = propertyAssignments.find((assignment) => assignment.assignment_type === 'primary')?.staff_members;
+            return primary ? (
+              <div className="mt-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <img
+                  src={primary.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(primary.name)}&background=0f766e&color=fff`}
+                  alt={`${primary.name} avatar`}
+                  className="h-12 w-12 rounded-full object-cover"
+                />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Primary Maintenance contact</p>
+                  <p className="mt-1 font-semibold text-emerald-950">{primary.name}</p>
+                  {primary.phone_number && <p className="text-sm text-emerald-800">{primary.phone_number}</p>}
+                </div>
+              </div>
+            ) : null;
+          })()}
         </section>
 
         {/* Units List Section */}
@@ -725,6 +766,35 @@ export default function PropertyDetailPage() {
                     onChange={(e) => setUnitDraft({ ...unitDraft, notes: e.target.value })}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
                   />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Primary Maintenance Contact
+                    <select
+                      value={propEditDraft.primary_staff_id}
+                      onChange={(event) => setPropEditDraft({ ...propEditDraft, primary_staff_id: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="">None assigned</option>
+                      {maintenanceStaff.map((member) => (
+                        <option key={member.id} value={member.id}>{member.name} {member.phone_number ? `(${member.phone_number})` : ''}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Secondary Maintenance Contact
+                    <select
+                      value={propEditDraft.secondary_staff_id}
+                      onChange={(event) => setPropEditDraft({ ...propEditDraft, secondary_staff_id: event.target.value })}
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="">None assigned</option>
+                      {maintenanceStaff.map((member) => (
+                        <option key={member.id} value={member.id}>{member.name} {member.phone_number ? `(${member.phone_number})` : ''}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-3">
