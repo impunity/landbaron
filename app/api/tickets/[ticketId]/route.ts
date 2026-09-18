@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { sendTicketAssignmentEmail } from '@/lib/ticket-assignment-email';
+import { sendTicketAssignmentEmail, sendTicketStatusChangeEmail } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 
 const getDescriptionParts = (description?: string | null) => {
@@ -193,12 +193,13 @@ export async function PATCH(
       priority?: string | null;
       description?: string | null;
       assigned_to?: string | null;
+      status?: string | null;
     } | null = null;
     let hasAssignedToColumn = true;
 
     const { data: fetchedTicket, error: fetchError } = await supabaseAdmin
       .from('tickets')
-      .select('title, priority, description, assigned_to')
+      .select('title, priority, description, assigned_to, status')
       .eq('id', ticketId)
       .maybeSingle();
 
@@ -261,6 +262,24 @@ export async function PATCH(
       } catch (emailError) {
         console.error('Ticket assignment email failed:', emailError);
         notificationError = 'Ticket updated, but the assignment email could not be sent.';
+      }
+    }
+
+    const previousStatus = existingTicket?.status ?? '';
+    const statusChanged =
+      typeof updates.status === 'string' && updates.status !== previousStatus;
+
+    if (statusChanged && existingTicket) {
+      try {
+        await sendTicketStatusChangeEmail(
+          { ...existingTicket, id: ticketId },
+          nextAssignment,
+          previousStatus || 'Open',
+          updates.status as string,
+        );
+      } catch (emailError) {
+        console.error('Ticket status change email failed:', emailError);
+        notificationError = 'Ticket updated, but the status change email could not be sent.';
       }
     }
 

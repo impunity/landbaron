@@ -185,3 +185,58 @@ export async function sendTicketCreatedEmails(
 
   return { results };
 }
+
+export async function sendTicketStatusChangeEmail(
+  ticket: AssignmentNotificationTicket,
+  assignment: string | null | undefined,
+  previousStatus: string,
+  newStatus: string,
+) {
+  const { apiKey, from, replyTo } = getEmailConfiguration();
+  const assigneeEmail = getAssigneeEmail(assignment);
+  const { details, requesterEmail, ticketUrl } = getTicketDetails(ticket);
+  const results: NotificationResult[] = [];
+
+  if (!apiKey || !from) {
+    return {
+      results: [
+        { sent: false, recipient: 'tenant' as const, reason: 'not-configured' as const },
+        { sent: false, recipient: 'assignee' as const, reason: 'not-configured' as const },
+      ],
+    };
+  }
+
+  const resend = new Resend(apiKey);
+  const subject = `Ticket status updated: ${ticket.title}`;
+  const text = `The status of a maintenance ticket has changed.\n\n${ticket.title}\n${details}\nStatus: ${previousStatus} → ${newStatus}\n\nView ticket: ${ticketUrl}`;
+  const html = `<p>The status of a maintenance ticket has changed.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><strong>Status:</strong> ${escapeHtml(previousStatus)} → ${escapeHtml(newStatus)}</p><p><a href="${ticketUrl}">View ticket</a></p>`;
+
+  const recipients = new Set<string>();
+  if (requesterEmail) recipients.add(requesterEmail.toLowerCase());
+  if (assigneeEmail) recipients.add(assigneeEmail.toLowerCase());
+
+  if (recipients.size === 0) {
+    return {
+      results: [
+        { sent: false, recipient: 'tenant' as const, reason: 'missing-recipient' as const },
+        { sent: false, recipient: 'assignee' as const, reason: 'missing-recipient' as const },
+      ],
+    };
+  }
+
+  for (const email of recipients) {
+    const recipientType: 'tenant' | 'assignee' = email === requesterEmail?.toLowerCase() ? 'tenant' : 'assignee';
+    const { data, error } = await resend.emails.send({
+      from,
+      to: email,
+      replyTo: replyTo || undefined,
+      subject,
+      text,
+      html,
+    });
+    if (error) throw new Error(`Status change email failed: ${error.message}`);
+    results.push({ sent: true, recipient: recipientType, messageId: data?.id });
+  }
+
+  return { results };
+}

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-const MAX_FILE_SIZE = 8 * 1024 * 1024;
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 export async function POST(
   request: NextRequest,
@@ -46,12 +46,14 @@ export async function POST(
       return NextResponse.json({ error: 'No photo was uploaded.' }, { status: 400 });
     }
 
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image files are allowed.' }, { status: 400 });
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    if (!isImage && !isVideo) {
+      return NextResponse.json({ error: 'Only image or video files are allowed.' }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'Photo must be 8MB or smaller.' }, { status: 400 });
+      return NextResponse.json({ error: 'File must be 25MB or smaller.' }, { status: 400 });
     }
 
     const extension = file.name.includes('.') ? file.name.split('.').pop() : 'png';
@@ -85,10 +87,11 @@ export async function POST(
     }
 
     const existingDescription = existingTicket?.description ?? '';
-    const photoLabel = file.name.trim() || 'photo';
+    const photoLabel = file.name.trim() || (isVideo ? 'video' : 'photo');
+    const attachmentType = isVideo ? 'Video' : 'Photo';
     const nextDescription = existingDescription.trim()
-      ? `${existingDescription.trim()}\n\nPhoto: ${photoLabel} | ${publicUrl}`
-      : `Photo: ${photoLabel} | ${publicUrl}`;
+      ? `${existingDescription.trim()}\n\n${attachmentType}: ${photoLabel} | ${publicUrl}`
+      : `${attachmentType}: ${photoLabel} | ${publicUrl}`;
 
     const { error: updateError } = await supabaseAdmin
       .from('tickets')

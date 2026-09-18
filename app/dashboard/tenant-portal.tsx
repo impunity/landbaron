@@ -27,6 +27,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [requestDraft, setRequestDraft] = useState({ severity: '', description: '' });
+  const [requestFiles, setRequestFiles] = useState<File[]>([]);
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
   const loadPortal = async () => {
@@ -104,9 +105,26 @@ export function TenantPortal({ session }: { session: SessionUser }) {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || 'Maintenance request could not be submitted.');
+      const ticketId = typeof result.ticket?.id === 'string' ? result.ticket.id : '';
+      if (requestFiles.length > 0 && ticketId) {
+        for (const file of requestFiles) {
+          const fileBody = new FormData();
+          fileBody.append('file', file);
+          const fileResponse = await fetch(`/api/tickets/${ticketId}/photos`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: fileBody,
+          });
+          if (!fileResponse.ok) {
+            const fileResult = await fileResponse.json().catch(() => ({}));
+            throw new Error(fileResult?.error || 'Request submitted, but one or more files could not be uploaded.');
+          }
+        }
+      }
       setRequestDraft({ severity: '', description: '' });
+      setRequestFiles([]);
       setShowRequestForm(false);
-      router.push(`/dashboard/tickets/${result.ticket.id}`);
+      router.push(`/dashboard/tickets/${ticketId}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Maintenance request could not be submitted.');
     } finally {
@@ -151,7 +169,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">Improvements you have made</h2><p className="mt-1 text-sm text-slate-500">Share photos of voluntary improvements or upgrades in your unit.</p></div><label className="cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">{uploading ? 'Uploading...' : 'Upload improvement photo'}<input type="file" accept="image/*" onChange={uploadImprovement} disabled={uploading} className="hidden" /></label></div>{data.improvements.length === 0 ? <p className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No improvement photos uploaded yet.</p> : <div className="mt-6 grid gap-4 sm:grid-cols-2">{data.improvements.map((photo) => <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200"><img src={photo.photo_url} alt={photo.caption || 'Tenant improvement'} className="h-40 w-full object-cover" /><p className="p-3 text-xs text-slate-600">{photo.caption}</p></div>)}</div>}</div>
         </section>
 
-        {showRequestForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><form onSubmit={submitRequest} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"><h2 className="text-xl font-semibold">Submit Maintenance Request</h2><label className="mt-5 block text-sm font-medium">Severity<select required value={requestDraft.severity} onChange={(event) => setRequestDraft({ ...requestDraft, severity: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5"><option value="">Select severity</option><option value="1">1 - Nice to have</option><option value="2">2 - Minor issue</option><option value="3">3 - Important</option><option value="4">4 - Major issue</option><option value="5">5 - Emergency</option></select></label><label className="mt-4 block text-sm font-medium">What needs attention?<textarea required rows={5} value={requestDraft.description} onChange={(event) => setRequestDraft({ ...requestDraft, description: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" /></label><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setShowRequestForm(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancel</button><button type="submit" disabled={submittingRequest} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">{submittingRequest ? 'Submitting...' : 'Submit request'}</button></div></form></div>}
+        {showRequestForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><form onSubmit={submitRequest} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"><h2 className="text-xl font-semibold">Submit Maintenance Request</h2><label className="mt-5 block text-sm font-medium">Severity<select required value={requestDraft.severity} onChange={(event) => setRequestDraft({ ...requestDraft, severity: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5"><option value="">Select severity</option><option value="1">1 - Nice to have</option><option value="2">2 - Minor issue</option><option value="3">3 - Important</option><option value="4">4 - Major issue</option><option value="5">5 - Emergency</option></select></label><label className="mt-4 block text-sm font-medium">What needs attention?<textarea required rows={5} value={requestDraft.description} onChange={(event) => setRequestDraft({ ...requestDraft, description: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" /></label><div className="mt-4"><div className="flex items-center justify-between"><label className="block text-sm font-medium">Photos/Videos</label><span className="text-xs text-slate-500">Max 25MB per file</span></div><input type="file" accept="image/*,video/*" multiple onChange={(event) => setRequestFiles(Array.from(event.target.files ?? []))} className="mt-1 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700" />{requestFiles.length > 0 && <p className="mt-2 text-xs text-slate-500">{requestFiles.length} file{requestFiles.length === 1 ? '' : 's'} selected</p>}</div><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => { setShowRequestForm(false); setRequestFiles([]); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancel</button><button type="submit" disabled={submittingRequest} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">{submittingRequest ? 'Submitting...' : 'Submit request'}</button></div></form></div>}
       </div>
     </main>
   );

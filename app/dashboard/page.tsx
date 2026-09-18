@@ -1122,21 +1122,21 @@ export default function DashboardPage() {
 
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Photos</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Photos/Videos</label>
                   <span className="text-xs text-slate-500">
-                    JPG, PNG, WEBP, GIF • Max 8 MB per file
+                    Images or videos • Max 25MB per file
                   </span>
                 </div>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+                  accept="image/*,video/*"
                   multiple
                   onChange={handleTicketPhotosChange}
                   className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700"
                 />
                 {ticketPhotos.length > 0 && (
                   <p className="mt-2 text-xs text-slate-500">
-                    {ticketPhotos.length} photo{ticketPhotos.length === 1 ? '' : 's'} selected
+                    {ticketPhotos.length} file{ticketPhotos.length === 1 ? '' : 's'} selected
                   </p>
                 )}
               </div>
