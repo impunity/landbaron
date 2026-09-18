@@ -500,9 +500,18 @@ export default function PropertyDetailPage() {
                       </div>
                     </>
                   ) : (
-                    <p className="text-sm text-emerald-800">
-                      {assignmentType === 'primary' ? 'No primary maintenance contact assigned.' : 'No secondary maintenance contact assigned.'}
-                    </p>
+                    <div className="text-sm text-emerald-800">
+                      <p>
+                        {assignmentType === 'primary' ? 'No primary maintenance contact assigned.' : 'No secondary maintenance contact assigned.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowEditPropertyModal(true)}
+                        className="mt-1 font-semibold underline hover:text-emerald-900"
+                      >
+                        Edit Property
+                      </button>
+                    </div>
                   )}
                 </div>
               );
