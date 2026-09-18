@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     const property = Array.isArray(unit?.properties) ? unit.properties[0] : unit?.properties;
     if (!property) return NextResponse.json({ error: 'No active property was found.' }, { status: 404 });
     const assignments = property.property_staff_assignments ?? [];
-    const staff = assignments.map((assignment: Record<string, unknown>) => ({ ...(assignment.staff_members as Record<string, unknown>), assignment_type: assignment.assignment_type }));
+    const staff = assignments.map((assignment: Record<string, unknown>) => ({
+      ...(Array.isArray(assignment.staff_members) ? assignment.staff_members[0] : assignment.staff_members) as Record<string, unknown>,
+      assignment_type: assignment.assignment_type,
+    }));
     const { data: owners } = await supabaseAdmin.from('staff_members').select('*').eq('role', 'Owner').order('name');
     return NextResponse.json({ property: { name: property.name, address: property.address }, staff, owners: owners ?? [] });
   } catch (error) {
