@@ -479,23 +479,37 @@ export default function PropertyDetailPage() {
             </div>
           )}
 
-          {(() => {
-            const primary = propertyAssignments.find((assignment) => assignment.assignment_type === 'primary')?.staff_members;
-            return primary ? (
-              <div className="mt-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <img
-                  src={primary.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(primary.name)}&background=0f766e&color=fff`}
-                  alt={`${primary.name} avatar`}
-                  className="h-12 w-12 rounded-full object-cover"
-                />
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Primary Maintenance contact</p>
-                  <p className="mt-1 font-semibold text-emerald-950">{primary.name}</p>
-                  {primary.phone_number && <p className="text-sm text-emerald-800">{primary.phone_number}</p>}
-                </div>
-              </div>
-            ) : null;
-          })()}
+          {propertyAssignments.length > 0 && (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {(['primary', 'secondary'] as const).map((assignmentType) => {
+                const contact = propertyAssignments.find((assignment) => assignment.assignment_type === assignmentType)?.staff_members;
+                return (
+                  <div key={assignmentType} className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    {contact ? (
+                      <>
+                        <img
+                          src={contact.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=0f766e&color=fff`}
+                          alt={`${contact.name} avatar`}
+                          className="h-12 w-12 rounded-full object-cover"
+                        />
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                            {assignmentType === 'primary' ? 'Primary Maintenance contact' : 'Secondary Maintenance contact'}
+                          </p>
+                          <p className="mt-1 font-semibold text-emerald-950">{contact.name}</p>
+                          {contact.phone_number && <p className="text-sm text-emerald-800">{contact.phone_number}</p>}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-emerald-800">
+                        {assignmentType === 'primary' ? 'No primary maintenance contact assigned.' : 'No secondary maintenance contact assigned.'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* Units List Section */}

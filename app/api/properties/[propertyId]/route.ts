@@ -50,7 +50,7 @@ export async function GET(
       return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     }
 
-    const { data: assignments, error: assignmentsError } = await supabaseAdmin
+    const { data: rawAssignments, error: assignmentsError } = await supabaseAdmin
       .from('property_staff_assignments')
       .select('assignment_type, staff_members(*)')
       .eq('property_id', propertyId);
@@ -58,6 +58,13 @@ export async function GET(
     if (assignmentsError && !assignmentsError.message.toLowerCase().includes('property_staff_assignments')) {
       throw assignmentsError;
     }
+
+    const assignments = (rawAssignments ?? []).map((assignment: Record<string, unknown>) => ({
+      assignment_type: assignment.assignment_type,
+      staff_members: Array.isArray(assignment.staff_members)
+        ? assignment.staff_members[0]
+        : assignment.staff_members,
+    }));
 
     const { data: maintenanceStaff, error: staffError } = await supabaseAdmin
       .from('staff_members')
@@ -83,7 +90,7 @@ export async function GET(
         ...property,
         units,
       },
-      assignments: assignments ?? [],
+      assignments,
       maintenanceStaff: maintenanceStaff ?? [],
     });
   } catch (error) {
