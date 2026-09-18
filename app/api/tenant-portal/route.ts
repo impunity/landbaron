@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     const { data: tenant, error: tenantError } = await supabaseAdmin
       .from('tenants')
-      .select('*, units(*, properties(*, property_staff_assignments(*, staff_members(*))))')
+      .select('*, units(*, unit_photos(*), properties(*, property_staff_assignments(*, staff_members(*))))')
       .ilike('email', user.email)
       .eq('status', 'active')
       .limit(1)
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!property) return NextResponse.json({ error: 'No property was found for this tenant.' }, { status: 404 });
     const assignments = property?.property_staff_assignments ?? [];
     const staff = assignments.map((assignment: Record<string, unknown>) => ({
-      ...(assignment.staff_members as Record<string, unknown>),
+      ...(Array.isArray(assignment.staff_members) ? assignment.staff_members[0] : assignment.staff_members) as Record<string, unknown>,
       assignment_type: assignment.assignment_type,
     }));
     const owners = await supabaseAdmin.from('staff_members').select('*').eq('role', 'Owner').order('name');

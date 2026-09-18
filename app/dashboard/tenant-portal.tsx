@@ -8,11 +8,14 @@ import { supabase } from '@/lib/supabase';
 import { LogoutButton } from './logout-button';
 
 type PortalData = {
-  tenant: { id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null };
+  tenant: { id: string; unit_id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null };
   unit: { unit_number: string; unit_photos?: Array<{ photo_url: string; caption?: string | null }> };
   property: { id: string; name: string; address: string; city?: string | null; state?: string | null; postal_code?: string | null };
   unitPhotos: Array<{ photo_url: string; caption?: string | null }>;
   improvements: Array<{ id: string; photo_url: string; caption?: string | null; created_at: string }>;
+  primaryStaff: Array<{ name: string; email?: string | null; phone_number?: string | null; avatar_url?: string | null }>;
+  secondaryStaff: Array<{ name: string; email?: string | null; phone_number?: string | null; avatar_url?: string | null }>;
+  owners: Array<{ name: string; email?: string | null; phone_number?: string | null; avatar_url?: string | null }>;
 };
 
 export function TenantPortal({ session }: { session: SessionUser }) {
@@ -22,6 +25,9 @@ export function TenantPortal({ session }: { session: SessionUser }) {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [requestDraft, setRequestDraft] = useState({ severity: '', description: '' });
+  const [submittingRequest, setSubmittingRequest] = useState(false);
 
   const loadPortal = async () => {
     const auth = await supabase?.auth.getSession();
@@ -77,6 +83,37 @@ export function TenantPortal({ session }: { session: SessionUser }) {
     }
   };
 
+  const submitRequest = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!data || !requestDraft.severity || !requestDraft.description.trim()) return;
+    setSubmittingRequest(true);
+    setError(null);
+    try {
+      const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+      const response = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title: requestDraft.description.trim().slice(0, 50),
+          description: `Email: ${session.email}\nAddress: ${data.property.address}, Unit ${data.unit.unit_number}\n\n${requestDraft.description.trim()}`,
+          status: 'Open',
+          priority: ({ '1': 'Low', '2': 'Low', '3': 'Medium', '4': 'High', '5': 'Emergency' } as Record<string, string>)[requestDraft.severity],
+          property_id: data.property.id,
+          unit_id: data.tenant.unit_id,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Maintenance request could not be submitted.');
+      setRequestDraft({ severity: '', description: '' });
+      setShowRequestForm(false);
+      router.push(`/dashboard/tickets/${result.ticket.id}`);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Maintenance request could not be submitted.');
+    } finally {
+      setSubmittingRequest(false);
+    }
+  };
+
   if (loading) return <main className="min-h-screen bg-slate-100 p-8"><div className="mx-auto max-w-5xl rounded-2xl bg-white p-10 text-center text-slate-500">Loading your maintenance portal...</div></main>;
   if (!data) return <main className="min-h-screen bg-slate-100 p-8"><div className="mx-auto max-w-5xl rounded-2xl bg-white p-10 text-center text-rose-700">{error || 'No tenant record was found.'}</div></main>;
 
@@ -93,7 +130,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
             <h1 className="mt-2 text-3xl font-semibold">Welcome to the Maintenance Portal for {data.property.name}!</h1>
             <p className="mt-2 text-sm text-slate-600">File maintenance requests, share improvements, and stay connected with your maintenance team.</p>
           </div>
-          <div className="flex items-center gap-3"><button type="button" onClick={() => router.push('/dashboard')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Maintenance Tickets</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/emergency-contacts')} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Emergency Contacts</button><LogoutButton /></div>
+          <div className="flex items-center gap-3"><button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/emergency-contacts')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</button><LogoutButton /></div>
         </header>
 
         {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
@@ -109,7 +146,12 @@ export function TenantPortal({ session }: { session: SessionUser }) {
           </div>
         </section>
 
-        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">Improvements you have made</h2><p className="mt-1 text-sm text-slate-500">Share photos of voluntary improvements or upgrades in your unit.</p></div><label className="cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">{uploading ? 'Uploading...' : 'Upload improvement photo'}<input type="file" accept="image/*" onChange={uploadImprovement} disabled={uploading} className="hidden" /></label></div>{data.improvements.length === 0 ? <p className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No improvement photos uploaded yet.</p> : <div className="mt-6 grid gap-4 sm:grid-cols-3">{data.improvements.map((photo) => <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200"><img src={photo.photo_url} alt={photo.caption || 'Tenant improvement'} className="h-40 w-full object-cover" /><p className="p-3 text-xs text-slate-600">{photo.caption}</p></div>)}</div>}</section>
+        <section className="mt-8 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Maintenance Contacts</h2><div className="mt-4 space-y-4">{[...data.primaryStaff.map((person) => ({ ...person, label: 'Primary Maintenance Person' })), ...data.secondaryStaff.map((person) => ({ ...person, label: 'Secondary Maintenance Person' })), ...data.owners.map((person) => ({ ...person, label: 'Owner' }))].map((person, index) => <div key={`${person.email}-${index}`} className="flex items-center gap-3"><img src={person.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(person.name)}&background=0f766e&color=fff`} alt="" className="h-14 w-14 rounded-full object-cover"/><div><p className="text-xs uppercase tracking-wider text-slate-500">{person.label}</p><p className="font-semibold">{person.name}</p>{person.phone_number && <p className="text-sm text-slate-600">{person.phone_number}</p>}{person.email && <a href={`mailto:${person.email}`} className="text-sm text-slate-600 underline">{person.email}</a>}</div></div>)}</div></div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">Improvements you have made</h2><p className="mt-1 text-sm text-slate-500">Share photos of voluntary improvements or upgrades in your unit.</p></div><label className="cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">{uploading ? 'Uploading...' : 'Upload improvement photo'}<input type="file" accept="image/*" onChange={uploadImprovement} disabled={uploading} className="hidden" /></label></div>{data.improvements.length === 0 ? <p className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No improvement photos uploaded yet.</p> : <div className="mt-6 grid gap-4 sm:grid-cols-2">{data.improvements.map((photo) => <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200"><img src={photo.photo_url} alt={photo.caption || 'Tenant improvement'} className="h-40 w-full object-cover" /><p className="p-3 text-xs text-slate-600">{photo.caption}</p></div>)}</div>}</div>
+        </section>
+
+        {showRequestForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><form onSubmit={submitRequest} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"><h2 className="text-xl font-semibold">Submit Maintenance Request</h2><label className="mt-5 block text-sm font-medium">Severity<select required value={requestDraft.severity} onChange={(event) => setRequestDraft({ ...requestDraft, severity: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5"><option value="">Select severity</option><option value="1">1 - Nice to have</option><option value="2">2 - Minor issue</option><option value="3">3 - Important</option><option value="4">4 - Major issue</option><option value="5">5 - Emergency</option></select></label><label className="mt-4 block text-sm font-medium">What needs attention?<textarea required rows={5} value={requestDraft.description} onChange={(event) => setRequestDraft({ ...requestDraft, description: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" /></label><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setShowRequestForm(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancel</button><button type="submit" disabled={submittingRequest} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">{submittingRequest ? 'Submitting...' : 'Submit request'}</button></div></form></div>}
       </div>
     </main>
   );
