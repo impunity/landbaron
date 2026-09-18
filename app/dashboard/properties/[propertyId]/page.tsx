@@ -479,37 +479,35 @@ export default function PropertyDetailPage() {
             </div>
           )}
 
-          {propertyAssignments.length > 0 && (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {(['primary', 'secondary'] as const).map((assignmentType) => {
-                const contact = propertyAssignments.find((assignment) => assignment.assignment_type === assignmentType)?.staff_members;
-                return (
-                  <div key={assignmentType} className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                    {contact ? (
-                      <>
-                        <img
-                          src={contact.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=0f766e&color=fff`}
-                          alt={`${contact.name} avatar`}
-                          className="h-12 w-12 rounded-full object-cover"
-                        />
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                            {assignmentType === 'primary' ? 'Primary Maintenance contact' : 'Secondary Maintenance contact'}
-                          </p>
-                          <p className="mt-1 font-semibold text-emerald-950">{contact.name}</p>
-                          {contact.phone_number && <p className="text-sm text-emerald-800">{contact.phone_number}</p>}
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-sm text-emerald-800">
-                        {assignmentType === 'primary' ? 'No primary maintenance contact assigned.' : 'No secondary maintenance contact assigned.'}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {(['primary', 'secondary'] as const).map((assignmentType) => {
+              const contact = propertyAssignments.find((assignment) => assignment.assignment_type === assignmentType)?.staff_members;
+              return (
+                <div key={assignmentType} className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  {contact ? (
+                    <>
+                      <img
+                        src={contact.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=0f766e&color=fff`}
+                        alt={`${contact.name} avatar`}
+                        className="h-12 w-12 rounded-full object-cover"
+                      />
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                          {assignmentType === 'primary' ? 'Primary Maintenance contact' : 'Secondary Maintenance contact'}
+                        </p>
+                        <p className="mt-1 font-semibold text-emerald-950">{contact.name}</p>
+                        {contact.phone_number && <p className="text-sm text-emerald-800">{contact.phone_number}</p>}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-emerald-800">
+                      {assignmentType === 'primary' ? 'No primary maintenance contact assigned.' : 'No secondary maintenance contact assigned.'}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         {/* Units List Section */}
@@ -915,6 +913,47 @@ export default function PropertyDetailPage() {
                     }
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Primary maintenance contact
+                    </label>
+                    <select
+                      value={propEditDraft.primary_staff_id}
+                      onChange={(e) =>
+                        setPropEditDraft({ ...propEditDraft, primary_staff_id: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    >
+                      <option value="">None</option>
+                      {maintenanceStaff.map((staffMember) => (
+                        <option key={staffMember.id} value={staffMember.id}>
+                          {staffMember.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Secondary maintenance contact
+                    </label>
+                    <select
+                      value={propEditDraft.secondary_staff_id}
+                      onChange={(e) =>
+                        setPropEditDraft({ ...propEditDraft, secondary_staff_id: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    >
+                      <option value="">None</option>
+                      {maintenanceStaff.map((staffMember) => (
+                        <option key={staffMember.id} value={staffMember.id}>
+                          {staffMember.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-3">
