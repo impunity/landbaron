@@ -27,12 +27,33 @@ export async function POST(request: NextRequest) {
     if (auth.response) return auth.response;
     const body = await request.json();
     const name = String(body?.name ?? '').trim();
+    const phone = String(body?.phone ?? '').trim();
     if (!name) return NextResponse.json({ error: 'Vendor name is required.' }, { status: 400 });
-    const { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, company: body.company?.trim() || null, email: body.email?.trim() || null, phone: body.phone?.trim() || null, service_type: body.service_type?.trim() || null, notes: body.notes?.trim() || null }).select().single();
+    if (!phone) return NextResponse.json({ error: 'Vendor phone number is required.' }, { status: 400 });
+    const { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, company: body.company?.trim() || null, email: body.email?.trim() || null, phone, service_type: body.service_type?.trim() || null, website: body.website?.trim() || null, notes: body.notes?.trim() || null }).select().single();
     if (error) throw error;
     return NextResponse.json({ ok: true, vendor: data });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Vendor could not be added.' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await authorize(request);
+    if (auth.response) return auth.response;
+    const id = request.nextUrl.searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Vendor ID is required.' }, { status: 400 });
+    const body = await request.json();
+    const name = String(body?.name ?? '').trim();
+    const phone = String(body?.phone ?? '').trim();
+    if (!name) return NextResponse.json({ error: 'Vendor name is required.' }, { status: 400 });
+    if (!phone) return NextResponse.json({ error: 'Vendor phone number is required.' }, { status: 400 });
+    const { data, error } = await supabaseAdmin!.from('approved_vendors').update({ name, company: body.company?.trim() || null, email: body.email?.trim() || null, phone, service_type: body.service_type?.trim() || null, website: body.website?.trim() || null, notes: body.notes?.trim() || null }).eq('id', id).select().single();
+    if (error) throw error;
+    return NextResponse.json({ ok: true, vendor: data });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Vendor could not be updated.' }, { status: 500 });
   }
 }
 
