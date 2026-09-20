@@ -62,11 +62,24 @@ const fetchVendorWebsiteInfo = async (website: string) => {
 };
 
 const getVendorErrorMessage = (error: unknown, fallback: string) => {
-  const message = error instanceof Error ? error.message : '';
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : '';
   if (/website|address|website_thumbnail_url|website_title|website_description/i.test(message) && /column|schema cache/i.test(message)) {
     return 'Vendor website fields are not in Supabase yet. Run supabase/vendor-website.sql, then try again.';
   }
   return message || fallback;
+};
+
+const isMissingEnrichmentColumnError = (error: unknown) => {
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : '';
+  return /address|website_thumbnail_url|website_title|website_description/i.test(message) && /column|schema cache/i.test(message);
 };
 
 async function authorize(request: NextRequest, allowTenant = false) {
@@ -100,7 +113,12 @@ export async function POST(request: NextRequest) {
     if (!name) return NextResponse.json({ error: 'Vendor name is required.' }, { status: 400 });
     if (!phone) return NextResponse.json({ error: 'Vendor phone number is required.' }, { status: 400 });
     const websiteInfo = await fetchVendorWebsiteInfo(website);
-    const { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: getString(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).select().single();
+    let { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: getString(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).select().single();
+    if (error && isMissingEnrichmentColumnError(error)) {
+      const retry = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, notes: getString(body?.notes) || null }).select().single();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) throw error;
     return NextResponse.json({ ok: true, vendor: data });
   } catch (error) {
@@ -121,7 +139,12 @@ export async function PATCH(request: NextRequest) {
     if (!name) return NextResponse.json({ error: 'Vendor name is required.' }, { status: 400 });
     if (!phone) return NextResponse.json({ error: 'Vendor phone number is required.' }, { status: 400 });
     const websiteInfo = await fetchVendorWebsiteInfo(website);
-    const { data, error } = await supabaseAdmin!.from('approved_vendors').update({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: getString(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).eq('id', id).select().single();
+    let { data, error } = await supabaseAdmin!.from('approved_vendors').update({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: getString(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).eq('id', id).select().single();
+    if (error && isMissingEnrichmentColumnError(error)) {
+      const retry = await supabaseAdmin!.from('approved_vendors').update({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, notes: getString(body?.notes) || null }).eq('id', id).select().single();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) throw error;
     return NextResponse.json({ ok: true, vendor: data });
   } catch (error) {
