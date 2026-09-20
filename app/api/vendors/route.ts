@@ -2,16 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-async function authorize(request: NextRequest) {
+async function authorize(request: NextRequest, allowTenant = false) {
   const user = await getAuthenticatedRequestUser(request);
   if (!user) return { user: null, response: NextResponse.json({ error: 'Sign in is required.' }, { status: 401 }) };
+  if (allowTenant && user.role === 'tenant') return { user, response: null };
   if (!['owner', 'maintenance', 'contractor'].includes(user.role)) return { user: null, response: NextResponse.json({ error: 'Staff access is required.' }, { status: 403 }) };
   return { user, response: null };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await authorize(request);
+    const auth = await authorize(request, true);
     if (auth.response) return auth.response;
     const { data, error } = await supabaseAdmin!.from('approved_vendors').select('*').order('name');
     if (error) throw error;

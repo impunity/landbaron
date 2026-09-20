@@ -304,12 +304,6 @@ export async function DELETE(
 ) {
   try {
     const { ticketId } = await params;
-    const userEmail = request.headers.get('x-user-email')?.trim().toLowerCase();
-    const userRole = request.headers.get('x-user-role')?.trim().toLowerCase();
-    const allowedOwnerEmails = (process.env.NEXT_PUBLIC_OWNER_EMAILS ?? '')
-      .split(',')
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean);
 
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -318,8 +312,25 @@ export async function DELETE(
       );
     }
 
-    if (!userEmail || userRole !== 'owner' || !allowedOwnerEmails.includes(userEmail)) {
-      return NextResponse.json({ error: 'Only the owner can delete tickets.' }, { status: 403 });
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (user.role === 'tenant') {
+      const { data: ticket, error: ticketError } = await supabaseAdmin
+        .from('tickets')
+        .select('created_by')
+        .eq('id', ticketId)
+        .maybeSingle();
+
+      if (ticketError) {
+        throw ticketError;
+      }
+
+      if (!ticket || ticket.created_by !== user.id) {
+        return NextResponse.json({ error: 'You can only delete tickets you created.' }, { status: 403 });
+      }
     }
 
     const { error } = await supabaseAdmin.from('tickets').delete().eq('id', ticketId);

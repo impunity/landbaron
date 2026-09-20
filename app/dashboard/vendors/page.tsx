@@ -32,7 +32,6 @@ export default function VendorsPage() {
       const user = auth?.data.session?.user;
       if (!user) return router.replace('/login');
       const role = await fetchUserRole(user.email, supabase);
-      if (role === 'tenant') return router.replace('/dashboard');
       setSession({ id: user.id, name: user.user_metadata?.full_name || user.email || 'User', email: user.email || '', role });
       const response = await fetch('/api/vendors', { headers: { Authorization: `Bearer ${auth.data.session?.access_token}` } });
       const result = await response.json();
@@ -99,15 +98,17 @@ export default function VendorsPage() {
 
         {error && <div className="mb-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
-        <form onSubmit={addVendor} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:grid-cols-3">
-          <input required placeholder="Vendor / contact name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-          <input placeholder="Company" value={draft.company} onChange={(e) => setDraft({ ...draft, company: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-          <input placeholder="Service type" value={draft.service_type} onChange={(e) => setDraft({ ...draft, service_type: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-          <input type="email" placeholder="Email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-          <input required placeholder="Phone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-          <input placeholder="Website" value={draft.website} onChange={(e) => setDraft({ ...draft, website: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-          <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">Add vendor</button>
-        </form>
+        {session.role !== 'tenant' && (
+          <form onSubmit={addVendor} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:grid-cols-3">
+            <input required placeholder="Vendor / contact name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input placeholder="Company" value={draft.company} onChange={(e) => setDraft({ ...draft, company: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input placeholder="Service type" value={draft.service_type} onChange={(e) => setDraft({ ...draft, service_type: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input type="email" placeholder="Email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input required placeholder="Phone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input placeholder="Website" value={draft.website} onChange={(e) => setDraft({ ...draft, website: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">Add vendor</button>
+          </form>
+        )}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {vendors.map((vendor) => (
@@ -128,14 +129,16 @@ export default function VendorsPage() {
                     {vendor.service_type && <p className="text-xs uppercase tracking-wider text-slate-500">{vendor.service_type}</p>}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-start gap-2">
-                  <button type="button" onClick={() => startEditVendor(vendor)} className="text-sm font-medium text-slate-600 underline">
-                    Edit vendor
-                  </button>
-                  <button type="button" onClick={() => removeVendor(vendor.id)} className="text-sm font-medium text-rose-600 underline">
-                    Remove
-                  </button>
-                </div>
+                {session.role !== 'tenant' && (
+                  <div className="flex shrink-0 items-start gap-2">
+                    <button type="button" onClick={() => startEditVendor(vendor)} className="text-sm font-medium text-slate-600 underline">
+                      Edit vendor
+                    </button>
+                    <button type="button" onClick={() => removeVendor(vendor.id)} className="text-sm font-medium text-rose-600 underline">
+                      Remove
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="mt-3 space-y-1 text-sm">
                 {vendor.phone && <a href={`tel:${vendor.phone}`} className="block text-slate-700 underline">{vendor.phone}</a>}

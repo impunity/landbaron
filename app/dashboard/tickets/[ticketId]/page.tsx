@@ -466,7 +466,7 @@ export default function TicketDetailPage() {
   };
 
   const handleDeleteTicket = async () => {
-    if (!ticketId || !session || session.role !== 'owner') {
+    if (!ticketId || !session || !['owner', 'tenant'].includes(session.role)) {
       return;
     }
 
@@ -479,12 +479,17 @@ export default function TicketDetailPage() {
     setError(null);
 
     try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Sign in is required.');
+      }
+
       const response = await fetch(`/api/tickets/${ticketId}`, {
         method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-          'x-user-email': session.email,
-          'x-user-role': session.role,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
 
@@ -566,6 +571,16 @@ export default function TicketDetailPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {['owner', 'tenant'].includes(session.role) && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteTicket()}
+                disabled={detailSaving}
+                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Delete ticket
+              </button>
+            )}
             <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white">
               {getRoleLabel(session.role)}
             </div>
