@@ -39,6 +39,17 @@ const cleanVendorText = (value?: string | null, maxLength = 220) => {
   return `${cleaned.slice(0, maxLength).replace(/\s+\S*$/, '')}...`;
 };
 
+const cleanVendorAddress = (value?: string | null) => {
+  const cleaned = cleanVendorText(value, 160)
+    .replace(/\s(?:[#.][A-Za-z_-][\w-]*(?:\[[^\]]+\])?)[\s\S]*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned || /[#{}]|\.form-|\[[^\]]+\]/i.test(cleaned)) return '';
+  if (!/(street|st\.?|avenue|ave\.?|road|rd\.?|boulevard|blvd\.?|drive|dr\.?|lane|ln\.?|way|court|ct\.?|circle|cir\.?|place|pl\.?)/i.test(cleaned)) return '';
+  return cleaned;
+};
+
 export default function VendorsPage() {
   const router = useRouter();
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -168,7 +179,7 @@ export default function VendorsPage() {
                 <img src={vendor.website_thumbnail_url || getVendorLogoUrl(vendor)} alt={`${vendor.name} website preview`} className="mb-3 h-28 w-full rounded-xl border border-slate-200 bg-white object-contain" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getVendorAvatarName(vendor))}&background=0f766e&color=fff`; }} />
                 {cleanVendorText(vendor.website_title, 90) && <p className="font-medium text-slate-800">{cleanVendorText(vendor.website_title, 90)}</p>}
                 {cleanVendorText(vendor.website_description, 220) && <p className="text-slate-600">{cleanVendorText(vendor.website_description, 220)}</p>}
-                {vendor.address && <p className="text-slate-700">{vendor.address}</p>}
+                {cleanVendorAddress(vendor.address) && <p className="text-slate-700">{cleanVendorAddress(vendor.address)}</p>}
                 {vendor.phone && <a href={`tel:${vendor.phone}`} className="block text-slate-700 underline">{vendor.phone}</a>}
                 {vendor.email && <a href={`mailto:${vendor.email}`} className="block text-slate-700 underline">{vendor.email}</a>}
                 {vendor.website && <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noreferrer" className="block text-slate-700 underline">{vendor.website}</a>}

@@ -12,6 +12,7 @@ type TicketRow = {
   ticket_number?: number | null;
   title: string;
   description: string | null;
+  assigned_to?: string | null;
   status: string | null;
   priority: string | null;
   category: string | null;
@@ -841,6 +842,10 @@ export default function TicketDetailPage() {
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Category</dt>
                     <dd>{ticket.category ?? 'General'}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Assigned To</dt>
+                    <dd className="text-right">{formatAssignmentLabel(ticket.assigned_to) || parseAssignment(ticket.description).label}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Property</dt>

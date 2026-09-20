@@ -54,14 +54,25 @@ const cleanWebsiteText = (value?: string | null, maxLength = 220) => {
   return `${cleaned.slice(0, maxLength).replace(/\s+\S*$/, '')}...`;
 };
 
+const cleanVendorAddress = (value?: string | null) => {
+  const cleaned = cleanWebsiteText(value, 160)
+    ?.replace(/\s(?:[#.][A-Za-z_-][\w-]*(?:\[[^\]]+\])?)[\s\S]*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() ?? '';
+
+  if (!cleaned || /[#{}]|\.form-|\[[^\]]+\]/i.test(cleaned)) return null;
+  if (!/(street|st\.?|avenue|ave\.?|road|rd\.?|boulevard|blvd\.?|drive|dr\.?|lane|ln\.?|way|court|ct\.?|circle|cir\.?|place|pl\.?)/i.test(cleaned)) return null;
+  return cleaned;
+};
+
 const extractVendorAddress = (html: string) => {
   const structuredAddress = html.match(/"streetAddress"\s*:\s*"([^"]+)"[\s\S]{0,400}?"addressLocality"\s*:\s*"([^"]+)"[\s\S]{0,200}?"addressRegion"\s*:\s*"([^"]+)"/i);
   if (structuredAddress) {
-    return [structuredAddress[1], structuredAddress[2], structuredAddress[3]].filter(Boolean).join(', ');
+    return cleanVendorAddress([structuredAddress[1], structuredAddress[2], structuredAddress[3]].filter(Boolean).join(', ')) ?? '';
   }
 
   const addressMatch = html.replace(/<[^>]+>/g, ' ').match(/\b\d{2,6}\s+[A-Za-z0-9 .'-]+(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Lane|Ln\.?|Way|Court|Ct\.?)\b[^<]{0,120}/i);
-  return addressMatch?.[0].replace(/\s+/g, ' ').trim() ?? '';
+  return cleanVendorAddress(addressMatch?.[0]) ?? '';
 };
 
 const fetchVendorWebsiteInfo = async (website: string) => {
@@ -138,7 +149,7 @@ export async function POST(request: NextRequest) {
     if (!name) return NextResponse.json({ error: 'Vendor name is required.' }, { status: 400 });
     if (!phone) return NextResponse.json({ error: 'Vendor phone number is required.' }, { status: 400 });
     const websiteInfo = await fetchVendorWebsiteInfo(website);
-    let { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: getString(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).select().single();
+    let { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: cleanVendorAddress(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).select().single();
     if (error && isMissingEnrichmentColumnError(error)) {
       const retry = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, notes: getString(body?.notes) || null }).select().single();
       data = retry.data;
@@ -164,7 +175,7 @@ export async function PATCH(request: NextRequest) {
     if (!name) return NextResponse.json({ error: 'Vendor name is required.' }, { status: 400 });
     if (!phone) return NextResponse.json({ error: 'Vendor phone number is required.' }, { status: 400 });
     const websiteInfo = await fetchVendorWebsiteInfo(website);
-    let { data, error } = await supabaseAdmin!.from('approved_vendors').update({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: getString(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).eq('id', id).select().single();
+    let { data, error } = await supabaseAdmin!.from('approved_vendors').update({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: cleanVendorAddress(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).eq('id', id).select().single();
     if (error && isMissingEnrichmentColumnError(error)) {
       const retry = await supabaseAdmin!.from('approved_vendors').update({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, notes: getString(body?.notes) || null }).eq('id', id).select().single();
       data = retry.data;
