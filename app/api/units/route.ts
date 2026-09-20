@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const propertyId = String(body?.property_id ?? '').trim();
     const unitNumber = String(body?.unit_number ?? '').trim();
-    const rentAmount = user.role === 'owner' && body?.rent_amount !== undefined && body?.rent_amount !== null && body?.rent_amount !== ''
+    const rentAmount = (user.role === 'owner' || user.role === 'manager') && body?.rent_amount !== undefined && body?.rent_amount !== null && body?.rent_amount !== ''
       ? Number(body.rent_amount)
       : null;
     const bedrooms = body?.bedrooms !== undefined ? Number(body.bedrooms) : 1;
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       unit: {
         ...data,
-        rent_amount: user.role === 'owner' ? data.rent_amount : null,
+        rent_amount: user.role === 'owner' || user.role === 'manager' ? data.rent_amount : null,
       },
     });
   } catch (error) {

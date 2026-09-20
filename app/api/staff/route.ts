@@ -6,13 +6,14 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 const normalizeRole = (value?: string | null) => {
   const role = (value ?? '').trim();
   if (role === 'Owner' || role === 'owner') return 'Owner';
+  if (role === 'Manager' || role === 'manager') return 'Manager';
   if (role === 'Maintenance' || role === 'maintenance') return 'Maintenance';
   if (role === 'Contractor' || role === 'contractor') return 'Contractor';
   return 'Maintenance';
 };
 
 const checkIsOwner = async (role?: string | null, email?: string | null) => {
-  if (role === 'owner') return true;
+  if (role === 'owner' || role === 'manager') return true;
   if (!email || !supabaseAdmin) return false;
   try {
     const { data } = await supabaseAdmin
@@ -20,7 +21,7 @@ const checkIsOwner = async (role?: string | null, email?: string | null) => {
       .select('role')
       .ilike('email', email.trim().toLowerCase())
       .maybeSingle();
-    return data?.role?.toLowerCase() === 'owner';
+    return ['owner', 'manager'].includes(data?.role?.toLowerCase() ?? '');
   } catch {
     return false;
   }
@@ -37,6 +38,7 @@ const buildGenericStaffAvatar = (name: string, role: string) => {
 
   const palette: Record<string, string> = {
     Owner: '#111827',
+    Manager: '#334155',
     Maintenance: '#0f766e',
     Contractor: '#7c3aed',
   };

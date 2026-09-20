@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'maintenance' | 'tenant' | 'contractor';
+export type UserRole = 'owner' | 'manager' | 'maintenance' | 'tenant' | 'contractor';
 
 export type SessionUser = {
   id: string;
@@ -49,6 +49,7 @@ export async function fetchUserRole(
       if (data?.role) {
         const r = String(data.role).toLowerCase();
         if (r === 'owner') return 'owner';
+        if (r === 'manager') return 'manager';
         if (r === 'maintenance') return 'maintenance';
         if (r === 'contractor') return 'contractor';
       }
@@ -65,6 +66,7 @@ export async function fetchUserRole(
 
 export function getRoleLabel(role: UserRole) {
   if (role === 'owner') return 'Owner / Manager';
+  if (role === 'manager') return 'Manager';
   if (role === 'maintenance' || role === 'contractor') return 'Maintenance Person';
   return 'Tenant';
 }
@@ -77,7 +79,7 @@ export function getVisibleTickets<T extends { description?: string | null; statu
     return [];
   }
 
-  if (user.role === 'owner' || user.role === 'maintenance' || user.role === 'contractor') {
+  if (user.role === 'owner' || user.role === 'manager' || user.role === 'maintenance' || user.role === 'contractor') {
     return tickets;
   }
 

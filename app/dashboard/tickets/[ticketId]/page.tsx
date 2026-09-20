@@ -40,7 +40,7 @@ type StaffMember = {
   id: string;
   name: string;
   email: string;
-  role: 'Owner' | 'Maintenance' | 'Contractor';
+  role: 'Owner' | 'Manager' | 'Maintenance' | 'Contractor';
 };
 
 const normalizeStatus = (status?: string | null) => {
@@ -308,7 +308,7 @@ export default function TicketDetailPage() {
   };
 
   useEffect(() => {
-    if (!session || session.role !== 'owner') {
+    if (!session || (session.role !== 'owner' && session.role !== 'manager')) {
       setStaffMembers([]);
       return;
     }
@@ -917,7 +917,7 @@ export default function TicketDetailPage() {
                   </button>
                 )}
 
-                {session.role === 'owner' && (
+                {(session.role === 'owner' || session.role === 'manager') && (
                   <button
                     type="button"
                     onClick={() => {
@@ -931,7 +931,7 @@ export default function TicketDetailPage() {
                   </button>
                 )}
 
-                {session.role === 'owner' && (
+                {(session.role === 'owner' || session.role === 'manager') && (
                   <button
                     type="button"
                     onClick={handleDeleteTicket}

@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'file must be under 8mb' }, { status: 400 });
     }
 
-    const canManageAvatar = userRole === 'owner' || userEmail === targetEmail;
+    const canManageAvatar = userRole === 'owner' || userRole === 'manager' || userEmail === targetEmail;
     if (!canManageAvatar) {
       return NextResponse.json(
-        { error: 'Only the owner or the staff member can update this avatar.' },
+        { error: 'Only the owner, manager, or the staff member can update this avatar.' },
         { status: 403 },
       );
     }

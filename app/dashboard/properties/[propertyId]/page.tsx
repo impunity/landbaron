@@ -309,7 +309,7 @@ export default function PropertyDetailPage() {
   };
 
   const handleDeleteProperty = async () => {
-    if (!propertyId || !session || session.role !== 'owner') return;
+    if (!propertyId || !session || (session.role !== 'owner' && session.role !== 'manager')) return;
 
     const confirm = window.confirm(
       'Are you sure you want to delete this property and all associated units? This cannot be undone.',
@@ -404,7 +404,7 @@ export default function PropertyDetailPage() {
             >
               Edit property
             </button>
-            {session.role === 'owner' && (
+            {(session.role === 'owner' || session.role === 'manager') && (
               <button
                 type="button"
                 onClick={handleDeleteProperty}
@@ -458,7 +458,7 @@ export default function PropertyDetailPage() {
                   {(property.units ?? []).reduce((sum, u) => sum + (u.tenants?.length ?? 0), 0)}
                 </p>
               </div>
-              {session.role === 'owner' && (
+              {(session.role === 'owner' || session.role === 'manager') && (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-center">
                   <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Total Rent</p>
                   <p className="mt-1 text-2xl font-bold text-emerald-900">
@@ -624,7 +624,7 @@ export default function PropertyDetailPage() {
                         </div>
 
                         {/* Rent & Estimated Market Rent (Owner only) */}
-                        {session.role === 'owner' && (
+                        {(session.role === 'owner' || session.role === 'manager') && (
                           <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
@@ -714,7 +714,7 @@ export default function PropertyDetailPage() {
                   />
                 </div>
 
-                {session.role === 'owner' && (
+                {(session.role === 'owner' || session.role === 'manager') && (
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">
                       Monthly rent ($)

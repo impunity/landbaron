@@ -578,7 +578,7 @@ export default function UnitDetailPage() {
         notes: unitEditDraft.notes.trim() || null,
       };
 
-      if (session?.role === 'owner') {
+      if (session?.role === 'owner' || session?.role === 'manager') {
         payload.rent_amount = unitEditDraft.rent_amount ? Number(unitEditDraft.rent_amount) : null;
       }
 
@@ -748,7 +748,7 @@ export default function UnitDetailPage() {
 
             {/* Rent & Estimated Market Rent Section (Owner Only) */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:min-w-[280px]">
-              {session.role === 'owner' ? (
+              {session.role === 'owner' || session.role === 'manager' ? (
                 <div>
                   <div className="grid grid-cols-2 gap-3 border-b border-slate-200 pb-3">
                     <div>
@@ -1518,7 +1518,7 @@ export default function UnitDetailPage() {
                   />
                 </div>
 
-                {session.role === 'owner' && (
+                {(session.role === 'owner' || session.role === 'manager') && (
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-700">
                       Monthly Rent ($) (Owner Only)

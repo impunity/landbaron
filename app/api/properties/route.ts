@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       const units = Array.isArray(prop.units)
         ? prop.units.map((unit: Record<string, unknown>) => ({
             ...unit,
-            rent_amount: user.role === 'owner' ? unit.rent_amount : null,
+            rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
             unit_photos: Array.isArray(unit.unit_photos)
               ? [...unit.unit_photos].sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
               : [],

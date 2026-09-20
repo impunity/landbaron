@@ -55,7 +55,7 @@ type StaffMember = {
   id: string;
   name: string;
   email: string;
-  role: 'Owner' | 'Maintenance' | 'Contractor';
+  role: 'Owner' | 'Manager' | 'Maintenance' | 'Contractor';
   avatar_url?: string | null;
 };
 
@@ -228,6 +228,7 @@ const buildStaffAvatarPlaceholder = (name: string, role: StaffMember['role']) =>
   const initials = getInitials(name);
   const palette: Record<StaffMember['role'], string> = {
     Owner: '#111827',
+    Manager: '#334155',
     Maintenance: '#0f766e',
     Contractor: '#7c3aed',
   };
@@ -420,7 +421,7 @@ export default function DashboardPage() {
     }
 
     const loadStaffMembers = async () => {
-      if (session.role !== 'owner') {
+      if (session.role !== 'owner' && session.role !== 'manager') {
         setStaffMembers([]);
         setStaffHydrated(true);
         if (session.role !== 'tenant') {
@@ -576,8 +577,8 @@ export default function DashboardPage() {
     const trimmedName = newStaffName.trim();
     const trimmedEmail = newStaffEmail.trim();
 
-    if (!trimmedName || !trimmedEmail || session?.role !== 'owner') {
-      setStaffError('Name, email, and owner access are required.');
+    if (!trimmedName || !trimmedEmail || (session?.role !== 'owner' && session?.role !== 'manager')) {
+      setStaffError('Name, email, and owner or manager access are required.');
       return;
     }
 
@@ -645,8 +646,8 @@ export default function DashboardPage() {
   };
 
   const handleRemoveStaffMember = async (email: string) => {
-    if (session?.role !== 'owner') {
-      setStaffError('Only owners can remove staff members.');
+    if (session?.role !== 'owner' && session?.role !== 'manager') {
+      setStaffError('Only owners or managers can remove staff members.');
       return;
     }
 
@@ -684,7 +685,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const isOwner = session.role === 'owner';
+    const isOwner = session.role === 'owner' || session.role === 'manager';
     const isSelf = session.email.trim().toLowerCase() === email.trim().toLowerCase();
     const hasRoleNameUpdate = Object.prototype.hasOwnProperty.call(updates, 'name') || Object.prototype.hasOwnProperty.call(updates, 'role');
 
@@ -739,7 +740,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const isOwner = session.role === 'owner';
+    const isOwner = session.role === 'owner' || session.role === 'manager';
     const isSelf = session.email.trim().toLowerCase() === email.trim().toLowerCase();
 
     if (!isOwner && !isSelf) {
@@ -761,7 +762,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const canManageAvatar = session.role === 'owner' || session.email.trim().toLowerCase() === staffEmail.trim().toLowerCase();
+    const canManageAvatar = session.role === 'owner' || session.role === 'manager' || session.email.trim().toLowerCase() === staffEmail.trim().toLowerCase();
     if (!canManageAvatar) {
       setStaffError('Only the owner or the staff member can update this avatar.');
       return;
@@ -980,7 +981,7 @@ export default function DashboardPage() {
                   Approved Vendors
                 </button>
             </>
-            {session.role === 'owner' && (
+            {(session.role === 'owner' || session.role === 'manager') && (
               <button
                 type="button"
                 onClick={() => router.push('/dashboard/staff')}
@@ -992,7 +993,7 @@ export default function DashboardPage() {
             <div
               className={[
                 'rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em]',
-                session.role === 'owner'
+                session.role === 'owner' || session.role === 'manager'
                   ? 'bg-slate-900 text-white'
                   : session.role === 'maintenance' || session.role === 'contractor'
                     ? 'bg-emerald-700 text-white'
@@ -1093,7 +1094,7 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-5">
-                {session.role === 'owner' && (
+                {(session.role === 'owner' || session.role === 'manager') && (
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Assigned To</label>
                     <select name="assigned_to" value={formState.assigned_to} onChange={handleInputChange} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500">

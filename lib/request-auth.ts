@@ -33,6 +33,7 @@ export async function getAuthenticatedRequestUser(request: Request) {
       if (staffData?.role) {
         const r = String(staffData.role).toLowerCase();
         if (r === 'owner') role = 'owner';
+        else if (r === 'manager') role = 'manager';
         else if (r === 'maintenance') role = 'maintenance';
         else if (r === 'contractor') role = 'contractor';
       }

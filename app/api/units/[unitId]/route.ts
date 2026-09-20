@@ -68,14 +68,6 @@ export async function GET(
         })
       : [];
 
-    // Fetch related tickets for this unit/property
-    let relatedTicketsQuery = supabaseAdmin
-      .from('tickets')
-      .select('*')
-      .or(`unit_id.eq.${unitId},property_id.eq.${unit.property_id}`);
-
-    const { data: ticketsData } = await relatedTicketsQuery;
-
     // Filter tickets to match this unit either directly by unit_id or matching address/unit in description
     const propertyAddress = String(unit.properties?.address ?? '').toLowerCase().trim();
     const unitNumber = String(unit.unit_number ?? '').toLowerCase().trim();
@@ -86,8 +78,6 @@ export async function GET(
       .order('updated_at', { ascending: false });
 
     const matchedTicketsMap = new Map<string, Record<string, unknown>>();
-
-    (ticketsData ?? []).forEach((t) => matchedTicketsMap.set(t.id, t));
 
     (allTickets ?? []).forEach((t) => {
       if (t.unit_id === unitId) {
@@ -111,7 +101,7 @@ export async function GET(
     return NextResponse.json({
       unit: {
         ...unit,
-        rent_amount: user.role === 'owner' ? unit.rent_amount : null,
+        rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
         unit_photos: photos,
         unit_maintenance_notes: notes,
       },
@@ -162,7 +152,7 @@ export async function PATCH(
     if (body.notes !== undefined) updates.notes = typeof body.notes === 'string' ? body.notes.trim() : null;
 
     // Rent can only be updated by the owner
-    if (user.role === 'owner' && body.rent_amount !== undefined) {
+    if ((user.role === 'owner' || user.role === 'manager') && body.rent_amount !== undefined) {
       updates.rent_amount = body.rent_amount !== '' && body.rent_amount !== null ? Number(body.rent_amount) : null;
     }
 
@@ -181,7 +171,7 @@ export async function PATCH(
       ok: true,
       unit: {
         ...data,
-        rent_amount: user.role === 'owner' ? data.rent_amount : null,
+        rent_amount: user.role === 'owner' || user.role === 'manager' ? data.rent_amount : null,
       },
     });
   } catch (error) {
@@ -212,8 +202,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
     }
 
-    if (user.role !== 'owner') {
-      return NextResponse.json({ error: 'Only owners can delete units.' }, { status: 403 });
+    if (user.role !== 'owner' && user.role !== 'manager') {
+      return NextResponse.json({ error: 'Only owners or managers can delete units.' }, { status: 403 });
     }
 
     const { error } = await supabaseAdmin

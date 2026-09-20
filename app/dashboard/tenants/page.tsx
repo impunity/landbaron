@@ -209,7 +209,7 @@ export default function TenantsPage() {
             >
               Properties & Units
             </button>
-            {session.role === 'owner' && (
+            {(session.role === 'owner' || session.role === 'manager') && (
               <button
                 type="button"
                 onClick={() => router.push('/dashboard/staff')}

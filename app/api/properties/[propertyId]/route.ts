@@ -78,7 +78,7 @@ export async function GET(
     const units = Array.isArray(property.units)
       ? property.units.map((unit: Record<string, unknown>) => ({
           ...unit,
-          rent_amount: user.role === 'owner' ? unit.rent_amount : null,
+          rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
           unit_photos: Array.isArray(unit.unit_photos)
             ? [...unit.unit_photos].sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
             : [],
@@ -206,8 +206,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
     }
 
-    if (user.role !== 'owner') {
-      return NextResponse.json({ error: 'Only owners can delete properties.' }, { status: 403 });
+    if (user.role !== 'owner' && user.role !== 'manager') {
+      return NextResponse.json({ error: 'Only owners or managers can delete properties.' }, { status: 403 });
     }
 
     const { error } = await supabaseAdmin

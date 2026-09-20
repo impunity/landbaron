@@ -12,7 +12,7 @@ type StaffMember = {
   name: string;
   email: string;
   phone_number?: string | null;
-  role: 'Owner' | 'Maintenance' | 'Contractor';
+  role: 'Owner' | 'Manager' | 'Maintenance' | 'Contractor';
   avatar_url?: string | null;
 };
 
@@ -34,6 +34,7 @@ const buildStaffAvatarPlaceholder = (name: string, role: StaffMember['role']) =>
 
   const palette: Record<StaffMember['role'], string> = {
     Owner: '#111827',
+    Manager: '#334155',
     Maintenance: '#0f766e',
     Contractor: '#7c3aed',
   };
@@ -80,8 +81,8 @@ export default function StaffPage() {
   );
 
   const handleAddStaffMember = async () => {
-    if (!session || session.role !== 'owner') {
-      setError('Owner access is required to add staff members.');
+    if (!session || (session.role !== 'owner' && session.role !== 'manager')) {
+      setError('Owner or manager access is required to add staff members.');
       return;
     }
 
@@ -159,8 +160,8 @@ export default function StaffPage() {
   };
 
   const handleUpdateStaffMember = async (currentEmail: string, updates: Partial<StaffDraft>) => {
-    if (!session || session.role !== 'owner') {
-      setError('Owner access is required to update staff members.');
+    if (!session || (session.role !== 'owner' && session.role !== 'manager')) {
+      setError('Owner or manager access is required to update staff members.');
       return;
     }
 
@@ -218,7 +219,7 @@ export default function StaffPage() {
   };
 
   const handleRemoveStaffMember = async () => {
-    if (!session || session.role !== 'owner' || !deleteCandidate) {
+    if (!session || (session.role !== 'owner' && session.role !== 'manager') || !deleteCandidate) {
       return;
     }
 
@@ -331,7 +332,7 @@ export default function StaffPage() {
       };
 
       setSessionState(nextSession);
-      if (nextSession.role !== 'owner') {
+      if (nextSession.role !== 'owner' && nextSession.role !== 'manager') {
         router.replace('/dashboard');
       }
     };
@@ -357,7 +358,7 @@ export default function StaffPage() {
       };
 
       setSessionState(nextSessionUser);
-      if (nextSessionUser.role !== 'owner') {
+      if (nextSessionUser.role !== 'owner' && nextSessionUser.role !== 'manager') {
         router.replace('/dashboard');
       }
     });
@@ -368,7 +369,7 @@ export default function StaffPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!session || session.role !== 'owner') {
+    if (!session || (session.role !== 'owner' && session.role !== 'manager')) {
       return;
     }
 
@@ -506,6 +507,7 @@ export default function StaffPage() {
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                 >
                   <option value="Owner">Owner</option>
+                  <option value="Manager">Manager</option>
                   <option value="Maintenance">Maintenance</option>
                   <option value="Contractor">Contractor</option>
                 </select>
@@ -609,6 +611,7 @@ export default function StaffPage() {
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                   >
                     <option value="Owner">Owner</option>
+                    <option value="Manager">Manager</option>
                     <option value="Maintenance">Maintenance</option>
                     <option value="Contractor">Contractor</option>
                   </select>

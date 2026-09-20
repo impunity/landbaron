@@ -3,7 +3,7 @@ create table if not exists public.staff_members (
   name text not null,
   email text not null unique,
   phone_number text,
-  role text not null default 'Maintenance' check (role in ('Owner', 'Maintenance', 'Contractor')),
+  role text not null default 'Maintenance' check (role in ('Owner', 'Manager', 'Maintenance', 'Contractor')),
   avatar_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

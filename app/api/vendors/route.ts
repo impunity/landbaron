@@ -122,7 +122,7 @@ async function authorize(request: NextRequest, allowTenant = false) {
   const user = await getAuthenticatedRequestUser(request);
   if (!user) return { user: null, response: NextResponse.json({ error: 'Sign in is required.' }, { status: 401 }) };
   if (allowTenant && user.role === 'tenant') return { user, response: null };
-  if (!['owner', 'maintenance', 'contractor'].includes(user.role)) return { user: null, response: NextResponse.json({ error: 'Staff access is required.' }, { status: 403 }) };
+  if (!['owner', 'manager', 'maintenance', 'contractor'].includes(user.role)) return { user: null, response: NextResponse.json({ error: 'Staff access is required.' }, { status: 403 }) };
   return { user, response: null };
 }
 

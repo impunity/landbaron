@@ -253,7 +253,7 @@ export default function PropertiesPage() {
             >
               Tenants list
             </button>
-            {session.role === 'owner' && (
+            {(session.role === 'owner' || session.role === 'manager') && (
               <button
                 type="button"
                 onClick={() => router.push('/dashboard/staff')}
@@ -279,7 +279,7 @@ export default function PropertiesPage() {
           </div>
         )}
 
-        {session.role === 'owner' && (
+        {(session.role === 'owner' || session.role === 'manager') && (
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Total rent across all properties</p>
             <p className="mt-1 text-3xl font-semibold text-slate-900">
@@ -392,7 +392,7 @@ export default function PropertiesPage() {
                       </div>
                     </div>
 
-                    {session.role === 'owner' && (
+                    {(session.role === 'owner' || session.role === 'manager') && (
                       <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center">
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Total monthly rent</p>
                         <p className="mt-0.5 text-lg font-semibold text-emerald-900">${totalRent.toLocaleString()}</p>
