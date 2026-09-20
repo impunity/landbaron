@@ -18,7 +18,7 @@ type PortalData = {
   owners: Array<{ name: string; email?: string | null; phone_number?: string | null; avatar_url?: string | null }>;
 };
 
-type TenantTicket = { id: string; title: string; status?: string | null; priority?: string | null; created_at?: string | null };
+type TenantTicket = { id: string; ticket_number?: number | null; title: string; status?: string | null; priority?: string | null; created_at?: string | null };
 
 const normalizeStatus = (status?: string | null) => {
   if (!status) return 'Open';
@@ -26,6 +26,10 @@ const normalizeStatus = (status?: string | null) => {
   if (value.toLowerCase() === 'archived') return 'Archived';
   return value;
 };
+
+const formatTicketNumber = (ticket: Pick<TenantTicket, 'id' | 'ticket_number'>) => (
+  ticket.ticket_number ? `#${String(ticket.ticket_number).padStart(5, '0')}` : ticket.id
+);
 
 export function TenantPortal({ session }: { session: SessionUser }) {
   const router = useRouter();
@@ -224,7 +228,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                 <div key={ticket.id} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div>
                     <p className="font-semibold">{ticket.title}</p>
-                    <p className="text-xs uppercase tracking-wider text-slate-500">{normalizeStatus(ticket.status)} · {ticket.priority || 'Medium'}</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-500">{formatTicketNumber(ticket)} · {normalizeStatus(ticket.status)} · {ticket.priority || 'Medium'}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">
@@ -249,7 +253,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                     <div key={ticket.id} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                       <div>
                         <p className="font-semibold">{ticket.title}</p>
-                        <p className="text-xs uppercase tracking-wider text-slate-500">Archived · {ticket.priority || 'Medium'}</p>
+                        <p className="text-xs uppercase tracking-wider text-slate-500">{formatTicketNumber(ticket)} · Archived · {ticket.priority || 'Medium'}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">

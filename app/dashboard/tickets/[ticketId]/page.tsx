@@ -9,6 +9,7 @@ import { LogoutButton } from '../../logout-button';
 
 type TicketRow = {
   id: string;
+  ticket_number?: number | null;
   title: string;
   description: string | null;
   status: string | null;
@@ -72,6 +73,7 @@ const sanitizeTicketDescription = (description?: string | null) => {
 
   return description
     .replace(/(^|\n)\s*Photo:\s*.*$/gim, '$1')
+    .replace(/(^|\n)\s*Video:\s*.*$/gim, '$1')
     .replace(/(^|\n)\s*Assigned to:\s*.*$/gm, '$1')
     .replace(/https?:\/\/[^\s)]+/gi, '')
     .replace(/\n{3,}/g, '\n\n')
@@ -79,22 +81,23 @@ const sanitizeTicketDescription = (description?: string | null) => {
 };
 
 const parsePhotoEntries = (description?: string | null) => {
-  if (!description) return [] as Array<{ name: string; url: string }>;
+  if (!description) return [] as Array<{ name: string; url: string; type: 'image' | 'video' }>;
 
-  const entries: Array<{ name: string; url: string }> = [];
+  const entries: Array<{ name: string; url: string; type: 'image' | 'video' }> = [];
 
   for (const line of description.split(/\n+/)) {
-    const entryMatch = line.match(/^Photo:\s*(.*?)\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+    const entryMatch = line.match(/^(Photo|Video):\s*(.*?)\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
     if (entryMatch) {
-      const name = entryMatch[1].trim() || 'photo';
-      const url = entryMatch[2].trim();
-      entries.push({ name, url });
+      const type = entryMatch[1].toLowerCase() === 'video' ? 'video' : 'image';
+      const name = entryMatch[2].trim() || type;
+      const url = entryMatch[3].trim();
+      entries.push({ name, url, type });
       continue;
     }
 
     const legacyMatch = line.match(/^Photo:\s*(https?:\/\/[^\s)]+)\s*$/i);
     if (legacyMatch) {
-      entries.push({ name: 'photo', url: legacyMatch[1].trim() });
+      entries.push({ name: 'photo', url: legacyMatch[1].trim(), type: 'image' });
     }
   }
 
@@ -102,7 +105,7 @@ const parsePhotoEntries = (description?: string | null) => {
   for (const url of urlMatches) {
     const trimmedUrl = url.replace(/[.,;!?]+$/, '');
     if (!entries.some((entry) => entry.url === trimmedUrl)) {
-      entries.push({ name: 'photo', url: trimmedUrl });
+      entries.push({ name: 'photo', url: trimmedUrl, type: 'image' });
     }
   }
 
@@ -124,6 +127,10 @@ const getPhotoFileName = (photoUrl: string, fallbackName?: string) => {
     return fallbackNameFromUrl.replace(/^[0-9]+-[a-f0-9]+-?/i, '').replace(/^\d+-/, '');
   }
 };
+
+const formatTicketNumber = (ticket: Pick<TicketRow, 'id' | 'ticket_number'>) => (
+  ticket.ticket_number ? `#${String(ticket.ticket_number).padStart(5, '0')}` : ticket.id
+);
 
 const labelMap: Record<string, string> = {
   Open: 'Open',
@@ -593,6 +600,7 @@ export default function TicketDetailPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Ticket details</p>
               <h1 className="mt-2 text-3xl font-semibold text-slate-900">{ticket.title}</h1>
+              <p className="mt-1 text-sm font-medium text-slate-500">{formatTicketNumber(ticket)}</p>
             </div>
           </div>
 
@@ -613,7 +621,7 @@ export default function TicketDetailPage() {
 
               {selectedPhotos.length > 0 && (
                 <div className="rounded-xl border border-slate-200 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Photos</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Attachments</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     {selectedPhotos.map((photoEntry) => {
                       const photoName = getPhotoFileName(photoEntry.url, photoEntry.name);
@@ -626,7 +634,11 @@ export default function TicketDetailPage() {
                           rel="noreferrer"
                           className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
                         >
-                          <img src={photoEntry.url} alt={photoName} className="h-48 w-full object-cover" />
+                          {photoEntry.type === 'video' ? (
+                            <video src={photoEntry.url} className="h-48 w-full object-cover" muted playsInline controls />
+                          ) : (
+                            <img src={photoEntry.url} alt={photoName} className="h-48 w-full object-cover" />
+                          )}
                           <div className="border-t border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
                             {photoName}
                           </div>

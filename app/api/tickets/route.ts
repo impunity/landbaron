@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
           unit_id: typeof unit_id === 'string' && unit_id.trim() ? unit_id.trim() : null,
         },
       ])
-      .select('id, title, priority, description, unit_id')
+      .select('id, ticket_number, title, priority, description, unit_id')
       .single();
 
     if (error) {

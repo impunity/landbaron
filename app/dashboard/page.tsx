@@ -12,6 +12,7 @@ type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | '
 
 type TicketRow = {
   id: string;
+  ticket_number?: number | null;
   title: string;
   description: string | null;
   assigned_to?: string | null;
@@ -130,6 +131,7 @@ const sanitizeTicketDescription = (description?: string | null) => {
     .replace(/(^|\n)\s*Email:\s*[^\n]*$/gim, '$1')
     .replace(/(^|\n)\s*Assigned to:\s*[^\n]*$/gim, '$1')
     .replace(/(^|\n)\s*Photo:\s*[^\n]*$/gim, '$1')
+    .replace(/(^|\n)\s*Video:\s*[^\n]*$/gim, '$1')
     .replace(/https?:\/\/[^\s)]+/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -138,9 +140,24 @@ const sanitizeTicketDescription = (description?: string | null) => {
 const parsePhotoUrls = (description?: string | null) => {
   if (!description) return [];
 
-  const matches = description.match(/https?:\/\/[^\s)]+/gi) ?? [];
-  return [...new Set(matches.map((match) => match.replace(/[.,;!?]+$/, '')))].filter(Boolean);
+  const entries: Array<{ url: string; type: 'image' | 'video' }> = [];
+
+  for (const line of description.split(/\n+/)) {
+    const attachmentMatch = line.match(/^(Photo|Video):\s*.*?\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+    if (attachmentMatch) {
+      entries.push({
+        url: attachmentMatch[2].replace(/[.,;!?]+$/, ''),
+        type: attachmentMatch[1].toLowerCase() === 'video' ? 'video' : 'image',
+      });
+    }
+  }
+
+  return entries.filter((entry, index, allEntries) => allEntries.findIndex((candidate) => candidate.url === entry.url) === index);
 };
+
+const formatTicketNumber = (ticket: Pick<TicketRow, 'id' | 'ticket_number'>) => (
+  ticket.ticket_number ? `#${String(ticket.ticket_number).padStart(5, '0')}` : ticket.id
+);
 
 const parseAssignmentFromDescription = (description?: string | null) => {
   if (!description) {
@@ -1272,6 +1289,7 @@ export default function DashboardPage() {
                 const status = normalizeStatus(ticket.status);
                 const displayPriority = normalizePriority(ticket.priority);
                 const assignmentLabel = getTicketAssignmentLabel(ticket);
+                const attachmentEntries = parsePhotoUrls(ticket.description);
 
                 return (
                   <article
@@ -1294,6 +1312,25 @@ export default function DashboardPage() {
                           {sanitizeTicketDescription(ticket.description) || 'No description provided.'}
                         </p>
 
+                        {attachmentEntries.length > 0 && (
+                          <div className="flex max-w-2xl flex-wrap gap-2">
+                            {attachmentEntries.slice(0, 8).map((attachment) => (
+                              <div key={attachment.url} className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                {attachment.type === 'video' ? (
+                                  <video src={attachment.url} className="h-full w-full object-cover" muted playsInline />
+                                ) : (
+                                  <img src={attachment.url} alt="Ticket attachment" className="h-full w-full object-cover" />
+                                )}
+                              </div>
+                            ))}
+                            {attachmentEntries.length > 8 && (
+                              <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                                +{attachmentEntries.length - 8}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                           <span className="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-600">
                             {ticket.category ?? 'General'}
@@ -1304,8 +1341,8 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="min-w-[180px] rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                        <p className="font-medium text-slate-900">Ticket ID</p>
-                        <p className="mt-1 break-all">{ticket.id}</p>
+                        <p className="font-medium text-slate-900">Ticket number</p>
+                        <p className="mt-1">{formatTicketNumber(ticket)}</p>
                       </div>
                     </div>
                   </article>

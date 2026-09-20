@@ -6,9 +6,9 @@ import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { LogoutButton } from '../logout-button';
 
-type Vendor = { id: string; name: string; company?: string | null; email?: string | null; phone?: string | null; service_type?: string | null; website?: string | null; notes?: string | null };
+type Vendor = { id: string; name: string; company?: string | null; email?: string | null; phone?: string | null; service_type?: string | null; website?: string | null; address?: string | null; website_title?: string | null; website_description?: string | null; website_thumbnail_url?: string | null; notes?: string | null };
 
-const emptyDraft = { name: '', company: '', email: '', phone: '', service_type: '', website: '', notes: '' };
+const emptyDraft = { name: '', company: '', email: '', phone: '', service_type: '', website: '', address: '', notes: '' };
 
 const getVendorLogoUrl = (vendor: Vendor) => {
   const website = vendor.website?.trim();
@@ -66,6 +66,7 @@ export default function VendorsPage() {
       phone: vendor.phone ?? '',
       service_type: vendor.service_type ?? '',
       website: vendor.website ?? '',
+      address: vendor.address ?? '',
       notes: vendor.notes ?? '',
     });
   };
@@ -106,6 +107,7 @@ export default function VendorsPage() {
             <input type="email" placeholder="Email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
             <input required placeholder="Phone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
             <input placeholder="Website" value={draft.website} onChange={(e) => setDraft({ ...draft, website: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input placeholder="Address" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" />
             <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">Add vendor</button>
           </form>
         )}
@@ -141,6 +143,10 @@ export default function VendorsPage() {
                 )}
               </div>
               <div className="mt-3 space-y-1 text-sm">
+                {vendor.website_thumbnail_url && <img src={vendor.website_thumbnail_url} alt={`${vendor.name} website preview`} className="mb-3 h-28 w-full rounded-xl border border-slate-200 object-cover" />}
+                {vendor.website_title && <p className="font-medium text-slate-800">{vendor.website_title}</p>}
+                {vendor.website_description && <p className="text-slate-600">{vendor.website_description}</p>}
+                {vendor.address && <p className="text-slate-700">{vendor.address}</p>}
                 {vendor.phone && <a href={`tel:${vendor.phone}`} className="block text-slate-700 underline">{vendor.phone}</a>}
                 {vendor.email && <a href={`mailto:${vendor.email}`} className="block text-slate-700 underline">{vendor.email}</a>}
                 {vendor.website && <a href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`} target="_blank" rel="noreferrer" className="block text-slate-700 underline">{vendor.website}</a>}
@@ -161,6 +167,7 @@ export default function VendorsPage() {
                 <input type="email" placeholder="Email" value={editDraft.email} onChange={(e) => setEditDraft({ ...editDraft, email: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
                 <input required placeholder="Phone" value={editDraft.phone} onChange={(e) => setEditDraft({ ...editDraft, phone: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
                 <input placeholder="Website" value={editDraft.website} onChange={(e) => setEditDraft({ ...editDraft, website: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+                <input placeholder="Address" value={editDraft.address} onChange={(e) => setEditDraft({ ...editDraft, address: e.target.value })} className="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" />
               </div>
               <textarea rows={3} placeholder="Notes" value={editDraft.notes} onChange={(e) => setEditDraft({ ...editDraft, notes: e.target.value })} className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
               <div className="mt-5 flex justify-end gap-3">
