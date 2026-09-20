@@ -17,6 +17,24 @@ const getVendorLogoUrl = (vendor: Vendor) => {
   return `https://logo.clearbit.com/${domain}`;
 };
 
+const cleanVendorText = (value?: string | null, maxLength = 220) => {
+  const cleaned = (value ?? '')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\.[\w-]+\[[^\]]+\]\s*\{[^}]+\}/g, ' ')
+    .replace(/#[\w-]+\s+#[\w-]+\s+\.[\w-]+\s*\{[^}]+\}/g, ' ')
+    .replace(/[{}][^.!?]*$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, maxLength).replace(/\s+\S*$/, '')}...`;
+};
+
 export default function VendorsPage() {
   const router = useRouter();
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -143,9 +161,9 @@ export default function VendorsPage() {
                 )}
               </div>
               <div className="mt-3 space-y-1 text-sm">
-                {vendor.website_thumbnail_url && <img src={vendor.website_thumbnail_url} alt={`${vendor.name} website preview`} className="mb-3 h-28 w-full rounded-xl border border-slate-200 object-cover" />}
-                {vendor.website_title && <p className="font-medium text-slate-800">{vendor.website_title}</p>}
-                {vendor.website_description && <p className="text-slate-600">{vendor.website_description}</p>}
+                <img src={vendor.website_thumbnail_url || getVendorLogoUrl(vendor)} alt={`${vendor.name} website preview`} className="mb-3 h-28 w-full rounded-xl border border-slate-200 bg-white object-contain" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(vendor.name)}&background=0f766e&color=fff`; }} />
+                {cleanVendorText(vendor.website_title, 90) && <p className="font-medium text-slate-800">{cleanVendorText(vendor.website_title, 90)}</p>}
+                {cleanVendorText(vendor.website_description, 220) && <p className="text-slate-600">{cleanVendorText(vendor.website_description, 220)}</p>}
                 {vendor.address && <p className="text-slate-700">{vendor.address}</p>}
                 {vendor.phone && <a href={`tel:${vendor.phone}`} className="block text-slate-700 underline">{vendor.phone}</a>}
                 {vendor.email && <a href={`mailto:${vendor.email}`} className="block text-slate-700 underline">{vendor.email}</a>}

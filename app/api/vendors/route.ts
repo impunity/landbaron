@@ -29,6 +29,29 @@ const getMetaContent = (html: string, key: string) => {
   return '';
 };
 
+const decodeHtmlEntities = (value: string) => value
+  .replace(/&amp;/g, '&')
+  .replace(/&quot;/g, '"')
+  .replace(/&#039;/g, "'")
+  .replace(/&apos;/g, "'")
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)));
+
+const cleanWebsiteText = (value?: string | null, maxLength = 220) => {
+  const cleaned = decodeHtmlEntities(value ?? '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\.[\w-]+\[[^\]]+\]\s*\{[^}]+\}/g, ' ')
+    .replace(/#[\w-]+\s+#[\w-]+\s+\.[\w-]+\s*\{[^}]+\}/g, ' ')
+    .replace(/[{}][^.!?]*$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned.length <= maxLength) return cleaned || null;
+  return `${cleaned.slice(0, maxLength).replace(/\s+\S*$/, '')}...`;
+};
+
 const extractVendorAddress = (html: string) => {
   const structuredAddress = html.match(/"streetAddress"\s*:\s*"([^"]+)"[\s\S]{0,400}?"addressLocality"\s*:\s*"([^"]+)"[\s\S]{0,200}?"addressRegion"\s*:\s*"([^"]+)"/i);
   if (structuredAddress) {
@@ -45,14 +68,14 @@ const fetchVendorWebsiteInfo = async (website: string) => {
     const response = await fetch(website, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) return { website_title: null, website_description: null, website_thumbnail_url: null, address: null };
     const html = await response.text();
-    const title = getMetaContent(html, 'og:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '';
-    const description = getMetaContent(html, 'og:description') || getMetaContent(html, 'description');
-    const thumbnail = getMetaContent(html, 'og:image') || getMetaContent(html, 'twitter:image');
+    const title = cleanWebsiteText(getMetaContent(html, 'og:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '', 90);
+    const description = cleanWebsiteText(getMetaContent(html, 'og:description') || getMetaContent(html, 'description'), 220);
+    const thumbnail = getMetaContent(html, 'og:logo') || getMetaContent(html, 'og:image') || getMetaContent(html, 'twitter:image');
     const address = extractVendorAddress(html);
     const thumbnailUrl = thumbnail ? new URL(thumbnail, website).toString() : null;
     return {
-      website_title: title || null,
-      website_description: description || null,
+      website_title: title,
+      website_description: description,
       website_thumbnail_url: thumbnailUrl,
       address: address || null,
     };

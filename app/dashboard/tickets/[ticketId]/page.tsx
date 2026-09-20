@@ -128,8 +128,13 @@ const getPhotoFileName = (photoUrl: string, fallbackName?: string) => {
   }
 };
 
+const getFallbackTicketNumber = (id: string) => {
+  const digits = id.replace(/\D/g, '').slice(-5);
+  return digits.padStart(5, '0');
+};
+
 const formatTicketNumber = (ticket: Pick<TicketRow, 'id' | 'ticket_number'>) => (
-  ticket.ticket_number ? `#${String(ticket.ticket_number).padStart(5, '0')}` : ticket.id
+  `#${String(ticket.ticket_number ?? getFallbackTicketNumber(ticket.id)).padStart(5, '0')}`
 );
 
 const labelMap: Record<string, string> = {
