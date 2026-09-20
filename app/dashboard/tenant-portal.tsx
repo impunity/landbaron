@@ -18,7 +18,7 @@ type PortalData = {
   owners: Array<{ name: string; email?: string | null; phone_number?: string | null; avatar_url?: string | null }>;
 };
 
-type TenantTicket = { id: string; ticket_number?: number | null; title: string; status?: string | null; priority?: string | null; created_at?: string | null };
+type TenantTicket = { id: string; ticket_number?: number | null; title: string; description?: string | null; status?: string | null; priority?: string | null; created_at?: string | null };
 
 const normalizeStatus = (status?: string | null) => {
   if (!status) return 'Open';
@@ -35,6 +35,23 @@ const getFallbackTicketNumber = (id: string) => {
 const formatTicketNumber = (ticket: Pick<TenantTicket, 'id' | 'ticket_number'>) => (
   `#${String(ticket.ticket_number ?? getFallbackTicketNumber(ticket.id)).padStart(5, '0')}`
 );
+
+const parseTicketAttachments = (description?: string | null) => {
+  if (!description) return [] as Array<{ url: string; type: 'image' | 'video' }>;
+
+  const entries: Array<{ url: string; type: 'image' | 'video' }> = [];
+  for (const line of description.split(/\n+/)) {
+    const attachmentMatch = line.match(/^(Photo|Video):\s*.*?\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+    if (attachmentMatch) {
+      entries.push({
+        url: attachmentMatch[2].replace(/[.,;!?]+$/, ''),
+        type: attachmentMatch[1].toLowerCase() === 'video' ? 'video' : 'image',
+      });
+    }
+  }
+
+  return entries.filter((entry, index, allEntries) => allEntries.findIndex((candidate) => candidate.url === entry.url) === index);
+};
 
 export function TenantPortal({ session }: { session: SessionUser }) {
   const router = useRouter();
@@ -229,11 +246,14 @@ export function TenantPortal({ session }: { session: SessionUser }) {
             <p className="mt-4 text-sm text-slate-500">No open maintenance requests.</p>
           ) : (
             <div className="mt-4 space-y-3">
-              {openTickets.map((ticket) => (
+              {openTickets.map((ticket) => {
+                const attachments = parseTicketAttachments(ticket.description);
+                return (
                 <div key={ticket.id} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div>
                     <p className="font-semibold">{ticket.title}</p>
                     <p className="text-xs uppercase tracking-wider text-slate-500">{formatTicketNumber(ticket)} · {normalizeStatus(ticket.status)} · {ticket.priority || 'Medium'}</p>
+                    {attachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{attachments.slice(0, 6).map((attachment) => <div key={attachment.url} className="h-14 w-14 overflow-hidden rounded-lg border border-slate-200 bg-white">{attachment.type === 'video' ? <video src={attachment.url} className="h-full w-full object-cover" muted playsInline /> : <img src={attachment.url} alt="Maintenance request attachment" className="h-full w-full object-cover" />}</div>)}{attachments.length > 6 && <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500">+{attachments.length - 6}</div>}</div>}
                   </div>
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">
@@ -244,7 +264,8 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                     </button>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
           {showArchivedTickets && (
@@ -254,11 +275,14 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                 <p className="mt-3 text-sm text-slate-500">No archived tickets.</p>
               ) : (
                 <div className="mt-3 space-y-3">
-                  {archivedTickets.map((ticket) => (
+                  {archivedTickets.map((ticket) => {
+                    const attachments = parseTicketAttachments(ticket.description);
+                    return (
                     <div key={ticket.id} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                       <div>
                         <p className="font-semibold">{ticket.title}</p>
                         <p className="text-xs uppercase tracking-wider text-slate-500">{formatTicketNumber(ticket)} · Archived · {ticket.priority || 'Medium'}</p>
+                        {attachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{attachments.slice(0, 6).map((attachment) => <div key={attachment.url} className="h-14 w-14 overflow-hidden rounded-lg border border-slate-200 bg-white">{attachment.type === 'video' ? <video src={attachment.url} className="h-full w-full object-cover" muted playsInline /> : <img src={attachment.url} alt="Maintenance request attachment" className="h-full w-full object-cover" />}</div>)}{attachments.length > 6 && <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500">+{attachments.length - 6}</div>}</div>}
                       </div>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">
@@ -269,7 +293,8 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                         </button>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </div>

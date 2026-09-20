@@ -110,6 +110,34 @@ export async function GET(
       return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
+    let propertyLabel: string | null = null;
+    let unitLabel: string | null = null;
+
+    if (data.property_id) {
+      const { data: property } = await supabaseAdmin
+        .from('properties')
+        .select('name, address, city, state, postal_code')
+        .eq('id', data.property_id)
+        .maybeSingle();
+
+      if (property) {
+        const location = [property.address, property.city, property.state, property.postal_code].filter(Boolean).join(', ');
+        propertyLabel = [property.name, location].filter(Boolean).join(' - ');
+      }
+    }
+
+    if (data.unit_id) {
+      const { data: unit } = await supabaseAdmin
+        .from('units')
+        .select('unit_number')
+        .eq('id', data.unit_id)
+        .maybeSingle();
+
+      if (unit?.unit_number) {
+        unitLabel = `Unit ${unit.unit_number}`;
+      }
+    }
+
     const { data: receipts, error: receiptsError } = await supabaseAdmin
       .from('ticket_receipts')
       .select('*')
@@ -123,7 +151,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ ticket: data, receipts: receipts ?? [] });
+    return NextResponse.json({ ticket: { ...data, property_label: propertyLabel, unit_label: unitLabel }, receipts: receipts ?? [] });
   } catch (error) {
     console.error('GET /api/tickets/[ticketId] failed:', error);
     return NextResponse.json(

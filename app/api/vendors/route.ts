@@ -43,9 +43,11 @@ const cleanWebsiteText = (value?: string | null, maxLength = 220) => {
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/\s(?:[#.][A-Za-z_-][\w-]*(?:\[[^\]]+\])?)[\s\S]*$/g, ' ')
     .replace(/\.[\w-]+\[[^\]]+\]\s*\{[^}]+\}/g, ' ')
     .replace(/#[\w-]+\s+#[\w-]+\s+\.[\w-]+\s*\{[^}]+\}/g, ' ')
     .replace(/[{}][^.!?]*$/g, ' ')
+    .replace(/\s+\d{2,4}$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (cleaned.length <= maxLength) return cleaned || null;

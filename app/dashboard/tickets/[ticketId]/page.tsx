@@ -19,7 +19,9 @@ type TicketRow = {
   updated_at: string;
   resolved_at?: string | null;
   property_id: string | null;
+  property_label?: string | null;
   unit_id: string | null;
+  unit_label?: string | null;
   owner_notes?: string | null;
   labor_cost?: number | null;
   materials_cost?: number | null;
@@ -195,6 +197,8 @@ export default function TicketDetailPage() {
   const [materialsCost, setMaterialsCost] = useState('');
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
+  const [reminding, setReminding] = useState(false);
+  const [reminderMessage, setReminderMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -524,6 +528,31 @@ export default function TicketDetailPage() {
     }
   };
 
+  const handleRemindMaintenance = async () => {
+    if (!ticketId) return;
+    setReminding(true);
+    setReminderMessage(null);
+    setError(null);
+
+    try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/tickets/${ticketId}/remind`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Reminder email could not be sent.');
+      setReminderMessage(result.notificationError || 'Reminder emails sent.');
+    } catch (remindError) {
+      setError(remindError instanceof Error ? remindError.message : 'Reminder email could not be sent.');
+    } finally {
+      setReminding(false);
+    }
+  };
+
   if (!session) {
     return null;
   }
@@ -583,6 +612,14 @@ export default function TicketDetailPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleRemindMaintenance()}
+              disabled={reminding}
+              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reminding ? 'Sending reminder...' : 'Remind Maintenance Person'}
+            </button>
             {['owner', 'tenant'].includes(session.role) && (
               <button
                 type="button"
@@ -612,6 +649,12 @@ export default function TicketDetailPage() {
           {error && (
             <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {error}
+            </div>
+          )}
+
+          {reminderMessage && (
+            <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              {reminderMessage}
             </div>
           )}
 
@@ -801,8 +844,14 @@ export default function TicketDetailPage() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Property</dt>
-                    <dd>{ticket.property_id ?? 'Unassigned'}</dd>
+                    <dd className="text-right">{ticket.property_label ?? ticket.property_id ?? 'Unassigned'}</dd>
                   </div>
+                  {ticket.unit_label && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">Unit</dt>
+                      <dd>{ticket.unit_label}</dd>
+                    </div>
+                  )}
                 </dl>
               </div>
 

@@ -105,13 +105,14 @@ export async function sendTicketAssignmentEmail(
 export async function sendTicketCreatedEmails(
   ticket: AssignmentNotificationTicket,
   assignment?: string | null,
-  options?: { tenantCanViewTicket?: boolean },
+  options?: { tenantCanViewTicket?: boolean; tenantSubjectPrefix?: string },
 ) {
   const { apiKey, from, replyTo } = getEmailConfiguration();
   const assigneeEmail = getAssigneeEmail(assignment);
   const { details, requesterEmail, ticketUrl } = getTicketDetails(ticket);
   const results: NotificationResult[] = [];
   const assigneeName = getAssigneeName(assignment);
+  const tenantSubjectPrefix = options?.tenantSubjectPrefix ?? '';
   const nudgeEndpoint = ticketUrl.replace('/dashboard/tickets/', '/api/tickets/') + '/nudge';
   const nudgeUrl = assigneeEmail
     ? `${nudgeEndpoint}?email=${encodeURIComponent(assigneeEmail)}&token=${getNudgeToken(ticket.id, assigneeEmail)}`
@@ -137,7 +138,7 @@ export async function sendTicketCreatedEmails(
       from,
       to: requesterEmail,
       replyTo: replyTo || undefined,
-      subject: `Ticket filed and assigned to you: ${ticket.title}`,
+      subject: `${tenantSubjectPrefix}Ticket filed and assigned to you: ${ticket.title}`,
       text: `Hello! This is a confirmation that your maintenance request has been received and assigned.\n\n${ticket.title}\n${details}\nAssigned to: ${assigneeName}\n\nYou will get an email update when the status of the request changes.\n\nOpen ticket and add information, adjust severity, or dismiss: ${ticketUrl}\n\nNudge maintenance person: ${nudgeUrl}${photoText}`,
       html: `<p>Hello! This is a confirmation that your maintenance request has been received and assigned.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><strong>Assigned to:</strong> ${escapeHtml(assigneeName)}</p><p>You will get an email update when the status of the request changes.</p>${photoHtml}<p><a href="${ticketUrl}">Open ticket and add information, adjust severity, or dismiss.</a></p><p><a href="${nudgeUrl}">Nudge maintenance person</a></p>`,
     });
@@ -157,7 +158,7 @@ export async function sendTicketCreatedEmails(
       from,
       to: requesterEmail,
       replyTo: replyTo || undefined,
-      subject: `Maintenance request received: ${ticket.title}`,
+      subject: `${tenantSubjectPrefix}Maintenance request received: ${ticket.title}`,
       text: `Hello! This is a confirmation that your maintenance request has been received and assigned.\n\n${ticket.title}\n${details}\nAssigned to: ${assigneeName}\n\nYou will get an email update when the status of the request changes.\n\nOpen ticket and add information, adjust severity, or dismiss: ${ticketUrl}\n\nNudge maintenance person: ${nudgeUrl}${photoText}`,
       html: `<p>Hello! This is a confirmation that your maintenance request has been received and assigned.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><strong>Assigned to:</strong> ${escapeHtml(assigneeName)}</p><p>You will get an email update when the status of the request changes.</p>${photoHtml}<p><a href="${ticketUrl}">Open ticket and add information, adjust severity, or dismiss.</a></p><p><a href="${nudgeUrl}">Nudge maintenance person</a></p>${tenantLinkHtml}`,
     });

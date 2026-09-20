@@ -10,9 +10,11 @@ type Vendor = { id: string; name: string; company?: string | null; email?: strin
 
 const emptyDraft = { name: '', company: '', email: '', phone: '', service_type: '', website: '', address: '', notes: '' };
 
+const getVendorAvatarName = (vendor: Pick<Vendor, 'name' | 'company'>) => vendor.company?.trim() || vendor.name;
+
 const getVendorLogoUrl = (vendor: Vendor) => {
   const website = vendor.website?.trim();
-  if (!website) return `https://ui-avatars.com/api/?name=${encodeURIComponent(vendor.name)}&background=0f766e&color=fff`;
+  if (!website) return `https://ui-avatars.com/api/?name=${encodeURIComponent(getVendorAvatarName(vendor))}&background=0f766e&color=fff`;
   const domain = website.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
   return `https://logo.clearbit.com/${domain}`;
 };
@@ -25,9 +27,11 @@ const cleanVendorText = (value?: string | null, maxLength = 220) => {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/\s(?:[#.][A-Za-z_-][\w-]*(?:\[[^\]]+\])?)[\s\S]*$/g, ' ')
     .replace(/\.[\w-]+\[[^\]]+\]\s*\{[^}]+\}/g, ' ')
     .replace(/#[\w-]+\s+#[\w-]+\s+\.[\w-]+\s*\{[^}]+\}/g, ' ')
     .replace(/[{}][^.!?]*$/g, ' ')
+    .replace(/\s+\d{2,4}$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!cleaned) return '';
@@ -140,7 +144,7 @@ export default function VendorsPage() {
                     alt={`${vendor.name} logo`}
                     className="h-12 w-12 rounded-full border border-slate-200 object-contain bg-white"
                     onError={(e) => {
-                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(vendor.name)}&background=0f766e&color=fff`;
+                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getVendorAvatarName(vendor))}&background=0f766e&color=fff`;
                     }}
                   />
                   <div>
@@ -161,7 +165,7 @@ export default function VendorsPage() {
                 )}
               </div>
               <div className="mt-3 space-y-1 text-sm">
-                <img src={vendor.website_thumbnail_url || getVendorLogoUrl(vendor)} alt={`${vendor.name} website preview`} className="mb-3 h-28 w-full rounded-xl border border-slate-200 bg-white object-contain" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(vendor.name)}&background=0f766e&color=fff`; }} />
+                <img src={vendor.website_thumbnail_url || getVendorLogoUrl(vendor)} alt={`${vendor.name} website preview`} className="mb-3 h-28 w-full rounded-xl border border-slate-200 bg-white object-contain" onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getVendorAvatarName(vendor))}&background=0f766e&color=fff`; }} />
                 {cleanVendorText(vendor.website_title, 90) && <p className="font-medium text-slate-800">{cleanVendorText(vendor.website_title, 90)}</p>}
                 {cleanVendorText(vendor.website_description, 220) && <p className="text-slate-600">{cleanVendorText(vendor.website_description, 220)}</p>}
                 {vendor.address && <p className="text-slate-700">{vendor.address}</p>}
