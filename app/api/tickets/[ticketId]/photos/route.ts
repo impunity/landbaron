@@ -5,6 +5,44 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
+const updateAttachmentDescription = (description: string, url: string, label: string) => {
+  const trimmedLabel = label.trim() || 'Attachment';
+
+  return description
+    .split('\n')
+    .map((line) => {
+      const attachmentMatch = line.match(/^(Photo|Video):\s*(.*?)\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+      if (!attachmentMatch || attachmentMatch[3].replace(/[.,;!?]+$/, '') !== url) {
+        return line;
+      }
+
+      return `${attachmentMatch[1]}: ${trimmedLabel} | ${attachmentMatch[3]}`;
+    })
+    .join('\n');
+};
+
+const canUpdateTicketAttachment = async (ticketId: string, user: NonNullable<Awaited<ReturnType<typeof getAuthenticatedRequestUser>>>) => {
+  const { data: ticket, error: ticketError } = await supabaseAdmin!
+    .from('tickets')
+    .select('created_by, description')
+    .eq('id', ticketId)
+    .maybeSingle();
+
+  if (ticketError) {
+    throw ticketError;
+  }
+
+  if (!ticket) {
+    return { allowed: false, description: '' };
+  }
+
+  if (user.role === 'tenant' && ticket.created_by !== user.id) {
+    return { allowed: false, description: '' };
+  }
+
+  return { allowed: true, description: ticket.description ?? '' };
+};
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ ticketId: string }> },
@@ -107,6 +145,59 @@ export async function POST(
     console.error('POST /api/tickets/[ticketId]/photos failed:', error);
     return NextResponse.json(
       { error: 'Photo upload failed. Please confirm the ticket-photos bucket exists in Supabase Storage.' },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ ticketId: string }> },
+) {
+  try {
+    const { ticketId } = await params;
+    const { url, label } = await request.json();
+
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Supabase service role is not configured.' },
+        { status: 500 },
+      );
+    }
+
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (typeof url !== 'string' || !url.trim()) {
+      return NextResponse.json({ error: 'Photo URL is required.' }, { status: 400 });
+    }
+
+    if (typeof label !== 'string') {
+      return NextResponse.json({ error: 'Description is required.' }, { status: 400 });
+    }
+
+    const access = await canUpdateTicketAttachment(ticketId, user);
+    if (!access.allowed) {
+      return NextResponse.json({ error: 'You cannot update this ticket photo.' }, { status: 403 });
+    }
+
+    const nextDescription = updateAttachmentDescription(access.description, url.trim(), label);
+    const { error: updateError } = await supabaseAdmin
+      .from('tickets')
+      .update({ description: nextDescription })
+      .eq('id', ticketId);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('PATCH /api/tickets/[ticketId]/photos failed:', error);
+    return NextResponse.json(
+      { error: 'Photo description could not be updated.' },
       { status: 500 },
     );
   }

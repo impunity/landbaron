@@ -18,7 +18,7 @@ type PortalData = {
   owners: Array<{ name: string; email?: string | null; phone_number?: string | null; avatar_url?: string | null }>;
 };
 
-type TenantTicket = { id: string; ticket_number?: number | null; title: string; description?: string | null; status?: string | null; priority?: string | null; created_at?: string | null };
+type TenantTicket = { id: string; ticket_number?: number | null; title: string; description?: string | null; status?: string | null; priority?: string | null; created_at?: string | null; opened_by_label?: string | null };
 
 const normalizeStatus = (status?: string | null) => {
   if (!status) return 'Open';
@@ -46,6 +46,10 @@ const parseReporterEmailFromDescription = (description?: string | null) => {
 };
 
 const getTicketOpenedByLabel = (ticket: TenantTicket, data: PortalData, session: SessionUser) => {
+  if (ticket.opened_by_label?.trim()) {
+    return ticket.opened_by_label.trim();
+  }
+
   const reporterEmail = parseReporterEmailFromDescription(ticket.description);
   const tenantEmail = data.tenant.email?.trim().toLowerCase() || session.email.trim().toLowerCase();
 
@@ -53,18 +57,19 @@ const getTicketOpenedByLabel = (ticket: TenantTicket, data: PortalData, session:
     return data.tenant.name;
   }
 
-  return reporterEmail;
+  return 'Unknown';
 };
 
 const parseTicketAttachments = (description?: string | null) => {
-  if (!description) return [] as Array<{ url: string; type: 'image' | 'video' }>;
+  if (!description) return [] as Array<{ label: string; url: string; type: 'image' | 'video' }>;
 
-  const entries: Array<{ url: string; type: 'image' | 'video' }> = [];
+  const entries: Array<{ label: string; url: string; type: 'image' | 'video' }> = [];
   for (const line of description.split(/\n+/)) {
-    const attachmentMatch = line.match(/^(Photo|Video):\s*.*?\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+    const attachmentMatch = line.match(/^(Photo|Video):\s*(.*?)\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
     if (attachmentMatch) {
       entries.push({
-        url: attachmentMatch[2].replace(/[.,;!?]+$/, ''),
+        label: attachmentMatch[2].trim() || 'Attachment',
+        url: attachmentMatch[3].replace(/[.,;!?]+$/, ''),
         type: attachmentMatch[1].toLowerCase() === 'video' ? 'video' : 'image',
       });
     }
@@ -274,8 +279,8 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                   <div>
                     <p className="font-semibold">{ticket.title}</p>
                     <p className="text-xs uppercase tracking-wider text-slate-500">{formatTicketNumber(ticket)} · {normalizeStatus(ticket.status)} · {ticket.priority || 'Medium'}</p>
-                    <p className="mt-1 text-xs font-medium text-slate-600">Opened by: {openedByLabel}</p>
-                    {attachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{attachments.slice(0, 6).map((attachment) => <div key={attachment.url} className="h-14 w-14 overflow-hidden rounded-lg border border-slate-200 bg-white">{attachment.type === 'video' ? <video src={attachment.url} className="h-full w-full object-cover" muted playsInline /> : <img src={attachment.url} alt="Maintenance request attachment" className="h-full w-full object-cover" />}</div>)}{attachments.length > 6 && <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500">+{attachments.length - 6}</div>}</div>}
+                    <p className="mt-1 text-xs font-medium text-slate-600">Filed by: {openedByLabel}</p>
+                    {attachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{attachments.slice(0, 6).map((attachment) => <div key={attachment.url} className="w-24 overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="h-14 w-full">{attachment.type === 'video' ? <video src={attachment.url} className="h-full w-full object-cover" muted playsInline /> : <img src={attachment.url} alt={attachment.label} className="h-full w-full object-cover" />}</div><button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="block w-full px-2 py-1 text-left text-[11px] font-medium text-slate-600">Add/edit description</button></div>)}{attachments.length > 6 && <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500">+{attachments.length - 6}</div>}</div>}
                   </div>
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">
@@ -304,7 +309,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                       <div>
                         <p className="font-semibold">{ticket.title}</p>
                         <p className="text-xs uppercase tracking-wider text-slate-500">{formatTicketNumber(ticket)} · Archived · {ticket.priority || 'Medium'}</p>
-                        {attachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{attachments.slice(0, 6).map((attachment) => <div key={attachment.url} className="h-14 w-14 overflow-hidden rounded-lg border border-slate-200 bg-white">{attachment.type === 'video' ? <video src={attachment.url} className="h-full w-full object-cover" muted playsInline /> : <img src={attachment.url} alt="Maintenance request attachment" className="h-full w-full object-cover" />}</div>)}{attachments.length > 6 && <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500">+{attachments.length - 6}</div>}</div>}
+                        {attachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{attachments.slice(0, 6).map((attachment) => <div key={attachment.url} className="w-24 overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="h-14 w-full">{attachment.type === 'video' ? <video src={attachment.url} className="h-full w-full object-cover" muted playsInline /> : <img src={attachment.url} alt={attachment.label} className="h-full w-full object-cover" />}</div><button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="block w-full px-2 py-1 text-left text-[11px] font-medium text-slate-600">Add/edit description</button></div>)}{attachments.length > 6 && <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500">+{attachments.length - 6}</div>}</div>}
                       </div>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => router.push(`/dashboard/tickets/${ticket.id}`)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">

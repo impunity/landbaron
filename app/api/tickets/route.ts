@@ -5,6 +5,15 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketCreatedEmails } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 
+const parseReporterEmailFromDescription = (description?: string | null) => {
+  if (!description) {
+    return '';
+  }
+
+  const reporterMatch = description.match(/(?:^|\n)Email:\s*([^\n]+)/i);
+  return reporterMatch?.[1]?.trim().toLowerCase() ?? '';
+};
+
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -34,9 +43,42 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
+    const tickets = data ?? [];
+    const { data: tenants } = await supabaseAdmin
+      .from('tenants')
+      .select('name,email,unit_id');
+
+    const tenantByEmail = new Map<string, string>();
+    const tenantsByUnit = new Map<string, Array<{ name: string }>>();
+    (tenants ?? []).forEach((tenant) => {
+      const name = typeof tenant.name === 'string' ? tenant.name.trim() : '';
+      const email = typeof tenant.email === 'string' ? tenant.email.trim().toLowerCase() : '';
+      const unitId = typeof tenant.unit_id === 'string' ? tenant.unit_id : '';
+
+      if (name && email) {
+        tenantByEmail.set(email, name);
+      }
+
+      if (name && unitId) {
+        tenantsByUnit.set(unitId, [...(tenantsByUnit.get(unitId) ?? []), { name }]);
+      }
+    });
+
+    const ticketsWithReporterNames = tickets.map((ticket) => {
+      const reporterEmail = parseReporterEmailFromDescription(ticket.description);
+      const unitTenants = ticket.unit_id ? tenantsByUnit.get(ticket.unit_id) ?? [] : [];
+      const openedByLabel = reporterEmail
+        ? tenantByEmail.get(reporterEmail) ?? 'Unknown'
+        : unitTenants.length === 1
+          ? unitTenants[0].name
+          : 'Unknown';
+
+      return { ...ticket, opened_by_label: openedByLabel };
+    });
+
     return NextResponse.json({
-      tickets: data ?? [],
-      count: data?.length ?? 0,
+      tickets: ticketsWithReporterNames,
+      count: tickets.length,
     });
   } catch (error) {
     console.error('GET /api/tickets failed:', error);

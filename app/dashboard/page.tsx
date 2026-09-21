@@ -25,6 +25,7 @@ type TicketRow = {
   property_id: string | null;
   unit_id: string | null;
   owner_notes?: string | null;
+  opened_by_label?: string | null;
 };
 
 type TicketFormState = {
@@ -140,12 +141,14 @@ const sanitizeTicketDescription = (description?: string | null) => {
 const parsePhotoUrls = (description?: string | null) => {
   if (!description) return [];
 
-  const entries: Array<{ url: string; type: 'image' | 'video' }> = [];
+  const entries: Array<{ label: string; url: string; type: 'image' | 'video' }> = [];
 
   for (const line of description.split(/\n+/)) {
     const attachmentMatch = line.match(/^(Photo|Video):\s*.*?\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
     if (attachmentMatch) {
+      const labelMatch = line.match(/^(Photo|Video):\s*(.*?)\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
       entries.push({
+        label: labelMatch?.[2]?.trim() || 'Attachment',
         url: attachmentMatch[2].replace(/[.,;!?]+$/, ''),
         type: attachmentMatch[1].toLowerCase() === 'video' ? 'video' : 'image',
       });
@@ -190,6 +193,10 @@ const getTicketReporterLabel = (
   ticket: Pick<TicketRow, 'description' | 'unit_id'>,
   properties: PropertyOption[],
 ) => {
+  if ('opened_by_label' in ticket && typeof ticket.opened_by_label === 'string' && ticket.opened_by_label.trim()) {
+    return ticket.opened_by_label.trim();
+  }
+
   const reporterEmail = parseReporterEmailFromDescription(ticket.description);
   const unitTenants = properties
     .flatMap((property) => property.units ?? [])
@@ -198,7 +205,7 @@ const getTicketReporterLabel = (
 
   if (reporterEmail) {
     const tenant = unitTenants.find((candidate) => candidate.email?.trim().toLowerCase() === reporterEmail);
-    return tenant?.name || reporterEmail;
+    return tenant?.name || 'Unknown';
   }
 
   if (unitTenants.length === 1) {
@@ -1353,12 +1360,24 @@ export default function DashboardPage() {
                         {attachmentEntries.length > 0 && (
                           <div className="flex max-w-2xl flex-wrap gap-2">
                             {attachmentEntries.slice(0, 8).map((attachment) => (
-                              <div key={attachment.url} className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                                {attachment.type === 'video' ? (
-                                  <video src={attachment.url} className="h-full w-full object-cover" muted playsInline />
-                                ) : (
-                                  <img src={attachment.url} alt="Ticket attachment" className="h-full w-full object-cover" />
-                                )}
+                              <div key={attachment.url} className="w-24 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                <div className="h-16 w-full">
+                                  {attachment.type === 'video' ? (
+                                    <video src={attachment.url} className="h-full w-full object-cover" muted playsInline />
+                                  ) : (
+                                    <img src={attachment.url} alt={attachment.label} className="h-full w-full object-cover" />
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openTicketView(ticket.id);
+                                  }}
+                                  className="block w-full bg-white px-2 py-1 text-left text-[11px] font-medium text-slate-600 hover:text-slate-900"
+                                >
+                                  Add/edit description
+                                </button>
                               </div>
                             ))}
                             {attachmentEntries.length > 8 && (
@@ -1370,9 +1389,6 @@ export default function DashboardPage() {
                         )}
 
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                          <span className="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-600">
-                            {ticket.category ?? 'General'}
-                          </span>
                           <span>Filed by: {reporterLabel}</span>
                           <span>{displayPriority} priority</span>
                           <span>Updated {new Date(ticket.updated_at).toLocaleDateString()}</span>

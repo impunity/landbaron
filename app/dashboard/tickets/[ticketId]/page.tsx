@@ -212,6 +212,7 @@ export default function TicketDetailPage() {
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const [reminding, setReminding] = useState(false);
   const [reminderMessage, setReminderMessage] = useState<string | null>(null);
+  const [photoDescriptionSaving, setPhotoDescriptionSaving] = useState<string | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -358,6 +359,42 @@ export default function TicketDetailPage() {
   }, [ticketId, session]);
 
   const selectedPhotos = useMemo(() => parsePhotoEntries(ticket?.description ?? ''), [ticket]);
+
+  const handlePhotoDescriptionUpdate = async (photoUrl: string, currentLabel: string) => {
+    if (!ticketId) {
+      return;
+    }
+
+    const nextLabel = window.prompt('Photo description', currentLabel);
+    if (nextLabel === null || nextLabel.trim() === currentLabel.trim()) {
+      return;
+    }
+
+    setPhotoDescriptionSaving(photoUrl);
+    setError(null);
+
+    try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/tickets/${ticketId}/photos`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ url: photoUrl, label: nextLabel }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Photo description could not be updated.');
+      await loadTicketDetail(ticketId);
+    } catch (photoDescriptionError) {
+      setError(photoDescriptionError instanceof Error ? photoDescriptionError.message : 'Photo description could not be updated.');
+    } finally {
+      setPhotoDescriptionSaving(null);
+    }
+  };
 
   const handleTicketUpdate = async (updates: { notes?: string; status?: string; assigned_to?: string; labor_cost?: number | null; materials_cost?: number | null }) => {
     if (!ticketId) {
@@ -710,6 +747,17 @@ export default function TicketDetailPage() {
                           <div className="border-t border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
                             {photoName}
                           </div>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void handlePhotoDescriptionUpdate(photoEntry.url, photoName);
+                            }}
+                            disabled={photoDescriptionSaving === photoEntry.url}
+                            className="block w-full border-t border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-60"
+                          >
+                            {photoDescriptionSaving === photoEntry.url ? 'Saving...' : 'Add/edit description'}
+                          </button>
                         </a>
                       );
                     })}
@@ -859,15 +907,11 @@ export default function TicketDetailPage() {
                     <dd>{normalizePriority(ticket.priority)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Category</dt>
-                    <dd>{ticket.category ?? 'General'}</dd>
-                  </div>
-                  <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Assigned To</dt>
                     <dd className="text-right">{formatAssignmentLabel(ticket.assigned_to) || parseAssignment(ticket.description).label}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Opened By</dt>
+                    <dt className="text-slate-500">Filed By</dt>
                     <dd className="text-right">{getTicketOpenedByLabel(ticket)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
