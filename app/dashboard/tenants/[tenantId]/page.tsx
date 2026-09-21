@@ -87,6 +87,7 @@ export default function TenantEditPage() {
           <button type="button" onClick={() => router.push('/dashboard/tenants')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">← Tenants Directory</button>
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => router.push('/dashboard')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Maintenance Tickets</button>
+            <button type="button" onClick={() => router.push('/dashboard/vendors')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</button>
             <LogoutButton />
           </div>
         </div>

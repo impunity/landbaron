@@ -690,6 +690,13 @@ export default function UnitDetailPage() {
             </button>
             <button
               type="button"
+              onClick={() => router.push('/dashboard/vendors')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Approved Vendors
+            </button>
+            <button
+              type="button"
               onClick={() => router.push(`/dashboard?propertyId=${unit.property_id}&unitId=${unit.id}`)}
               className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
             >

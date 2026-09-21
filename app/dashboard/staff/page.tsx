@@ -426,6 +426,13 @@ export default function StaffPage() {
             </button>
             <button
               type="button"
+              onClick={() => router.push('/dashboard/vendors')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Approved Vendors
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/dashboard/properties')}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
