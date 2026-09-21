@@ -58,9 +58,11 @@ export default function LoginPage() {
     }
 
     try {
+      const browserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
       const siteUrl =
-        process.env.NEXT_PUBLIC_SITE_URL ||
-        (typeof window !== 'undefined' ? window.location.origin : 'https://landbaron.vercel.app');
+        browserOrigin.startsWith('http://localhost') || browserOrigin.startsWith('http://127.0.0.1')
+          ? browserOrigin
+          : process.env.NEXT_PUBLIC_SITE_URL || browserOrigin || 'https://landbaron.vercel.app';
       const redirectTo = `${siteUrl.replace(/\/$/, '')}/dashboard/properties`;
 
       const { error: oauthError } = await client.auth.signInWithOAuth({

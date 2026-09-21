@@ -31,6 +31,23 @@ type TenantWithUnit = {
   };
 };
 
+type TenantSortKey = 'name' | 'property' | 'contact' | 'lease' | 'status';
+type SortDirection = 'asc' | 'desc';
+
+const getTenantPropertyLabel = (tenant: TenantWithUnit) => [
+  tenant.units?.properties?.name ?? tenant.units?.properties?.address ?? '',
+  tenant.units?.unit_number ? `Unit ${tenant.units.unit_number}` : '',
+].filter(Boolean).join(' ');
+
+const getTenantContactLabel = (tenant: TenantWithUnit) => tenant.email || tenant.phone || tenant.emergency_contact || '';
+
+const getTenantLeaseSortValue = (tenant: TenantWithUnit) => {
+  const value = tenant.lease_start || tenant.lease_end;
+  return value ? new Date(value).getTime() : Number.POSITIVE_INFINITY;
+};
+
+const compareText = (first: string, second: string) => first.localeCompare(second, undefined, { sensitivity: 'base' });
+
 export default function TenantsPage() {
   const router = useRouter();
   const [session, setSessionState] = useState<SessionUser | null>(null);
@@ -40,6 +57,10 @@ export default function TenantsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'past' | 'pending'>('all');
   const [propertyFilter, setPropertyFilter] = useState('all');
+  const [tenantSort, setTenantSort] = useState<{ key: TenantSortKey; direction: SortDirection }>({
+    key: 'name',
+    direction: 'asc',
+  });
 
   useEffect(() => {
     const client = supabase;
@@ -160,6 +181,34 @@ export default function TenantsPage() {
     });
   }, [tenants, searchTerm, statusFilter, propertyFilter]);
 
+  const sortedTenants = useMemo(() => {
+    const next = [...filteredTenants];
+
+    next.sort((first, second) => {
+      let result = 0;
+
+      if (tenantSort.key === 'name') {
+        result = compareText(first.name, second.name);
+      } else if (tenantSort.key === 'property') {
+        result = compareText(getTenantPropertyLabel(first), getTenantPropertyLabel(second));
+      } else if (tenantSort.key === 'contact') {
+        result = compareText(getTenantContactLabel(first), getTenantContactLabel(second));
+      } else if (tenantSort.key === 'lease') {
+        result = getTenantLeaseSortValue(first) - getTenantLeaseSortValue(second);
+      } else if (tenantSort.key === 'status') {
+        result = compareText(first.status, second.status);
+      }
+
+      if (result === 0) {
+        result = compareText(first.name, second.name);
+      }
+
+      return tenantSort.direction === 'asc' ? result : -result;
+    });
+
+    return next;
+  }, [filteredTenants, tenantSort]);
+
   const propertyOptions = useMemo(() => {
     const properties = new Map<string, string>();
     tenants.forEach((tenant) => {
@@ -168,6 +217,32 @@ export default function TenantsPage() {
     });
     return Array.from(properties.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [tenants]);
+
+  const handleSortChange = (key: TenantSortKey) => {
+    setTenantSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const renderSortHeader = (key: TenantSortKey, label: string) => {
+    const isActive = tenantSort.key === key;
+
+    return (
+      <th className="px-5 py-3.5">
+        <button
+          type="button"
+          onClick={() => handleSortChange(key)}
+          className="flex items-center gap-1 text-left font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-900"
+        >
+          <span>{label}</span>
+          <span aria-hidden="true" className="text-[10px] text-slate-400">
+            {isActive ? (tenantSort.direction === 'asc' ? 'A-Z' : 'Z-A') : 'Sort'}
+          </span>
+        </button>
+      </th>
+    );
+  };
 
   if (!session) return null;
 
@@ -277,7 +352,7 @@ export default function TenantsPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
             Loading tenants...
           </div>
-        ) : filteredTenants.length === 0 ? (
+        ) : sortedTenants.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
             <h3 className="text-base font-semibold text-slate-900">No tenants found</h3>
             <p className="mt-2 text-sm text-slate-500">
@@ -298,16 +373,16 @@ export default function TenantsPage() {
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-5 py-3.5">Tenant Name</th>
-                  <th className="px-5 py-3.5">Property & Unit</th>
-                  <th className="px-5 py-3.5">Contact Details</th>
-                  <th className="px-5 py-3.5">Lease Period</th>
-                  <th className="px-5 py-3.5">Status</th>
+                  {renderSortHeader('name', 'Tenant Name')}
+                  {renderSortHeader('property', 'Property & Unit')}
+                  {renderSortHeader('contact', 'Contact Details')}
+                  {renderSortHeader('lease', 'Lease Period')}
+                  {renderSortHeader('status', 'Status')}
                   <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredTenants.map((t) => {
+                {sortedTenants.map((t) => {
                   const unitPropId = t.units?.property_id;
                   const unitId = t.units?.id;
 

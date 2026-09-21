@@ -177,6 +177,37 @@ const parseAssignmentFromDescription = (description?: string | null) => {
   return assignmentMatch[1].trim();
 };
 
+const parseReporterEmailFromDescription = (description?: string | null) => {
+  if (!description) {
+    return '';
+  }
+
+  const reporterMatch = description.match(/(?:^|\n)Email:\s*([^\n]+)/i);
+  return reporterMatch?.[1]?.trim().toLowerCase() ?? '';
+};
+
+const getTicketReporterLabel = (
+  ticket: Pick<TicketRow, 'description' | 'unit_id'>,
+  properties: PropertyOption[],
+) => {
+  const reporterEmail = parseReporterEmailFromDescription(ticket.description);
+  const unitTenants = properties
+    .flatMap((property) => property.units ?? [])
+    .filter((unit) => unit.id === ticket.unit_id)
+    .flatMap((unit) => unit.tenants ?? []);
+
+  if (reporterEmail) {
+    const tenant = unitTenants.find((candidate) => candidate.email?.trim().toLowerCase() === reporterEmail);
+    return tenant?.name || reporterEmail;
+  }
+
+  if (unitTenants.length === 1) {
+    return unitTenants[0].name;
+  }
+
+  return 'Unknown';
+};
+
 const formatAssignmentLabel = (value?: string | null) => {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -1295,6 +1326,7 @@ export default function DashboardPage() {
                 const status = normalizeStatus(ticket.status);
                 const displayPriority = normalizePriority(ticket.priority);
                 const assignmentLabel = getTicketAssignmentLabel(ticket);
+                const reporterLabel = getTicketReporterLabel(ticket, propertyOptions);
                 const attachmentEntries = parsePhotoUrls(ticket.description);
 
                 return (
@@ -1341,6 +1373,7 @@ export default function DashboardPage() {
                           <span className="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-600">
                             {ticket.category ?? 'General'}
                           </span>
+                          <span>Filed by: {reporterLabel}</span>
                           <span>{displayPriority} priority</span>
                           <span>Updated {new Date(ticket.updated_at).toLocaleDateString()}</span>
                         </div>
