@@ -7,9 +7,21 @@ import { useRouter } from 'next/navigation';
 import { fetchUserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
+type OAuthProvider = 'google' | 'apple';
+
+const getAuthRedirectTo = () => {
+  const browserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const siteUrl =
+    browserOrigin.startsWith('http://localhost') || browserOrigin.startsWith('http://127.0.0.1')
+      ? browserOrigin
+      : process.env.NEXT_PUBLIC_SITE_URL || browserOrigin || 'https://landbaron.vercel.app';
+
+  return `${siteUrl.replace(/\/$/, '')}/dashboard/properties`;
+};
+
 export default function LoginPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -45,30 +57,23 @@ export default function LoginPage() {
     };
   }, [router]);
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
+  const handleOAuthLogin = async (provider: OAuthProvider) => {
+    setLoadingProvider(provider);
     setError(null);
 
     const client = supabase;
 
     if (!client) {
       setError('Supabase is not configured for this environment yet.');
-      setLoading(false);
+      setLoadingProvider(null);
       return;
     }
 
     try {
-      const browserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-      const siteUrl =
-        browserOrigin.startsWith('http://localhost') || browserOrigin.startsWith('http://127.0.0.1')
-          ? browserOrigin
-          : process.env.NEXT_PUBLIC_SITE_URL || browserOrigin || 'https://landbaron.vercel.app';
-      const redirectTo = `${siteUrl.replace(/\/$/, '')}/dashboard/properties`;
-
       const { error: oauthError } = await client.auth.signInWithOAuth({
-        provider: 'google',
+        provider,
         options: {
-          redirectTo,
+          redirectTo: getAuthRedirectTo(),
         },
       });
 
@@ -77,9 +82,9 @@ export default function LoginPage() {
       }
     } catch (loginError) {
       console.error(loginError);
-      setError('Google sign-in could not be started. Please try again.');
+      setError(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in could not be started. Please try again.`);
     } finally {
-      setLoading(false);
+      setLoadingProvider(null);
     }
   };
 
@@ -112,20 +117,30 @@ export default function LoginPage() {
       </div>
       <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-semibold text-slate-900">Sign in with Google</h1>
+          <h1 className="text-3xl font-semibold text-slate-900">Sign in</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Use your Google account to access the maintenance workspace.
+            Use your Google or Apple account to access the maintenance workspace.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={loading}
-          className="flex w-full items-center justify-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? 'Redirecting to Google...' : 'Continue with Google'}
-        </button>
+        <div className="grid gap-3">
+          <button
+            type="button"
+            onClick={() => void handleOAuthLogin('google')}
+            disabled={Boolean(loadingProvider)}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingProvider === 'google' ? 'Redirecting to Google...' : 'Continue with Google'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleOAuthLogin('apple')}
+            disabled={Boolean(loadingProvider)}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-900 bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingProvider === 'apple' ? 'Redirecting to Apple...' : 'Continue with Apple'}
+          </button>
+        </div>
 
         {error && (
           <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
