@@ -23,6 +23,7 @@ type TicketRow = {
   property_label?: string | null;
   unit_id: string | null;
   unit_label?: string | null;
+  opened_by_label?: string | null;
   owner_notes?: string | null;
   labor_cost?: number | null;
   materials_cost?: number | null;
@@ -176,6 +177,17 @@ const parseAssignment = (description?: string | null) => {
   const value = assignmentMatch[1].trim();
   return { label: formatAssignmentLabel(value) || 'Unassigned', value };
 };
+
+const parseReporterEmailFromDescription = (description?: string | null) => {
+  if (!description) {
+    return '';
+  }
+
+  const reporterMatch = description.match(/(?:^|\n)Email:\s*([^\n]+)/i);
+  return reporterMatch?.[1]?.trim() ?? '';
+};
+
+const getTicketOpenedByLabel = (ticket: TicketRow) => ticket.opened_by_label || parseReporterEmailFromDescription(ticket.description) || 'Unknown';
 
 export default function TicketDetailPage() {
   const router = useRouter();
@@ -853,6 +865,10 @@ export default function TicketDetailPage() {
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Assigned To</dt>
                     <dd className="text-right">{formatAssignmentLabel(ticket.assigned_to) || parseAssignment(ticket.description).label}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Opened By</dt>
+                    <dd className="text-right">{getTicketOpenedByLabel(ticket)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Property</dt>

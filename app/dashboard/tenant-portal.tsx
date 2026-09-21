@@ -36,6 +36,26 @@ const formatTicketNumber = (ticket: Pick<TenantTicket, 'id' | 'ticket_number'>) 
   `#${String(ticket.ticket_number ?? getFallbackTicketNumber(ticket.id)).padStart(5, '0')}`
 );
 
+const parseReporterEmailFromDescription = (description?: string | null) => {
+  if (!description) {
+    return '';
+  }
+
+  const reporterMatch = description.match(/(?:^|\n)Email:\s*([^\n]+)/i);
+  return reporterMatch?.[1]?.trim().toLowerCase() ?? '';
+};
+
+const getTicketOpenedByLabel = (ticket: TenantTicket, data: PortalData, session: SessionUser) => {
+  const reporterEmail = parseReporterEmailFromDescription(ticket.description);
+  const tenantEmail = data.tenant.email?.trim().toLowerCase() || session.email.trim().toLowerCase();
+
+  if (!reporterEmail || reporterEmail === tenantEmail) {
+    return data.tenant.name;
+  }
+
+  return reporterEmail;
+};
+
 const parseTicketAttachments = (description?: string | null) => {
   if (!description) return [] as Array<{ url: string; type: 'image' | 'video' }>;
 
@@ -248,11 +268,13 @@ export function TenantPortal({ session }: { session: SessionUser }) {
             <div className="mt-4 space-y-3">
               {openTickets.map((ticket) => {
                 const attachments = parseTicketAttachments(ticket.description);
+                const openedByLabel = getTicketOpenedByLabel(ticket, data, session);
                 return (
                 <div key={ticket.id} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div>
                     <p className="font-semibold">{ticket.title}</p>
                     <p className="text-xs uppercase tracking-wider text-slate-500">{formatTicketNumber(ticket)} · {normalizeStatus(ticket.status)} · {ticket.priority || 'Medium'}</p>
+                    <p className="mt-1 text-xs font-medium text-slate-600">Opened by: {openedByLabel}</p>
                     {attachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{attachments.slice(0, 6).map((attachment) => <div key={attachment.url} className="h-14 w-14 overflow-hidden rounded-lg border border-slate-200 bg-white">{attachment.type === 'video' ? <video src={attachment.url} className="h-full w-full object-cover" muted playsInline /> : <img src={attachment.url} alt="Maintenance request attachment" className="h-full w-full object-cover" />}</div>)}{attachments.length > 6 && <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500">+{attachments.length - 6}</div>}</div>}
                   </div>
                   <div className="flex items-center gap-2">

@@ -72,6 +72,15 @@ const buildDescription = ({
   return nextDescriptionParts.join('\n\n') || null;
 };
 
+const parseReporterEmailFromDescription = (description?: string | null) => {
+  if (!description) {
+    return '';
+  }
+
+  const reporterMatch = description.match(/(?:^|\n)Email:\s*([^\n]+)/i);
+  return reporterMatch?.[1]?.trim().toLowerCase() ?? '';
+};
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ ticketId: string }> },
@@ -112,6 +121,8 @@ export async function GET(
 
     let propertyLabel: string | null = null;
     let unitLabel: string | null = null;
+    let openedByLabel: string | null = null;
+    const reporterEmail = parseReporterEmailFromDescription(data.description);
 
     if (data.property_id) {
       const { data: property } = await supabaseAdmin
@@ -136,6 +147,28 @@ export async function GET(
       if (unit?.unit_number) {
         unitLabel = `Unit ${unit.unit_number}`;
       }
+
+      if (reporterEmail) {
+        const { data: tenant } = await supabaseAdmin
+          .from('tenants')
+          .select('name')
+          .eq('unit_id', data.unit_id)
+          .ilike('email', reporterEmail)
+          .maybeSingle();
+
+        openedByLabel = tenant?.name ?? reporterEmail;
+      }
+    }
+
+    if (!openedByLabel && reporterEmail) {
+      const { data: tenant } = await supabaseAdmin
+        .from('tenants')
+        .select('name')
+        .ilike('email', reporterEmail)
+        .limit(1)
+        .maybeSingle();
+
+      openedByLabel = tenant?.name ?? reporterEmail;
     }
 
     const { data: receipts, error: receiptsError } = await supabaseAdmin
@@ -151,7 +184,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ ticket: { ...data, property_label: propertyLabel, unit_label: unitLabel }, receipts: receipts ?? [] });
+    return NextResponse.json({ ticket: { ...data, property_label: propertyLabel, unit_label: unitLabel, opened_by_label: openedByLabel }, receipts: receipts ?? [] });
   } catch (error) {
     console.error('GET /api/tickets/[ticketId] failed:', error);
     return NextResponse.json(
