@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getVisibleTickets, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, getVisibleTickets, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { LogoutButton } from './logout-button';
 import { TenantPortal } from './tenant-portal';
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | 'Closed' | 'Archived';
@@ -1040,19 +1039,6 @@ export default function DashboardPage() {
                 Staff roster
               </button>
             )}
-            <div
-              className={[
-                'rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em]',
-                session.role === 'owner' || session.role === 'manager'
-                  ? 'bg-slate-900 text-white'
-                  : session.role === 'maintenance' || session.role === 'contractor'
-                    ? 'bg-emerald-700 text-white'
-                    : 'bg-slate-200 text-slate-700',
-              ].join(' ')}
-            >
-              {getRoleLabel(session.role)}
-            </div>
-            <LogoutButton />
           </div>
         </header>
 

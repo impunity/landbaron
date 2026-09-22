@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { LogoutButton } from '../logout-button';
+
 
 type Vendor = { id: string; name: string; company?: string | null; email?: string | null; phone?: string | null; service_type?: string | null; website?: string | null; address?: string | null; website_title?: string | null; website_description?: string | null; website_thumbnail_url?: string | null; notes?: string | null };
 
@@ -127,7 +127,6 @@ export default function VendorsPage() {
             </button>
             <h1 className="mt-3 text-3xl font-semibold">Approved Vendors</h1>
           </div>
-          <LogoutButton />
         </header>
 
         {error && <div className="mb-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}

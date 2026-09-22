@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { LogoutButton } from '../../logout-button';
 
 type TicketRow = {
   id: string;
@@ -687,10 +686,6 @@ export default function TicketDetailPage() {
                 Delete ticket
               </button>
             )}
-            <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white">
-              {getRoleLabel(session.role)}
-            </div>
-            <LogoutButton />
           </div>
         </div>
 

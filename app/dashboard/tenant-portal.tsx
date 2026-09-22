@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import type { SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { LogoutButton } from './logout-button';
+
 
 type PortalData = {
   tenant: { id: string; unit_id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null };
@@ -243,7 +243,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
             <h1 className="mt-2 text-3xl font-semibold">Welcome to the {data.property.name} Maintenance Portal</h1>
             <p className="mt-2 text-sm text-slate-600">File maintenance requests, share improvements, and stay connected with your maintenance team.</p>
           </div>
-          <div className="flex items-center gap-3"><button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button><button type="button" onClick={() => router.push('/dashboard/vendors')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/emergency-contacts')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</button><LogoutButton /></div>
+          <div className="flex items-center gap-3"><button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button><button type="button" onClick={() => router.push('/dashboard/vendors')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/emergency-contacts')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</button></div>
         </header>
 
         {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}

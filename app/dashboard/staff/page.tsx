@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { fetchUserRole, getRoleLabel, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
+import { fetchUserRole, getUserRoleByEmail, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { LogoutButton } from '../logout-button';
 
 type StaffMember = {
   id: string;
@@ -445,9 +444,6 @@ export default function StaffPage() {
             >
               Tenants
             </button>
-            <div className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white">
-              {getRoleLabel(session.role)}
-            </div>
             <button
               type="button"
               onClick={() => setShowAddForm((current) => !current)}
@@ -455,7 +451,6 @@ export default function StaffPage() {
             >
               ADD STAFF
             </button>
-            <LogoutButton />
           </div>
         </header>
 

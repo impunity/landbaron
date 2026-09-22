@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
 
+import { UserStatusBar } from './user-status-bar';
+
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  return children;
+  return (
+    <>
+      <UserStatusBar />
+      {children}
+    </>
+  );
 }

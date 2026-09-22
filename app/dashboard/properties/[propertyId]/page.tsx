@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { supabase } from '@/lib/supabase';
-import { LogoutButton } from '../../logout-button';
+
 
 type TenantSummary = {
   id: string;
@@ -420,7 +420,6 @@ export default function PropertyDetailPage() {
                 Delete property
               </button>
             )}
-            <LogoutButton />
           </div>
         </div>
 
