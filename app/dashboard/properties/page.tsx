@@ -8,12 +8,19 @@ import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
 
 
+type UnitFee = {
+  id: string;
+  label: string;
+  amount: number;
+};
+
 type UnitSummary = {
   id: string;
   unit_number: string;
   rent_amount?: number | null;
   has_garage?: boolean | null;
   garage_rent?: number | null;
+  unit_fees?: UnitFee[];
   tenants?: Array<{ id: string; name: string; email?: string | null; phone?: string | null }>;
   unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null; is_primary?: boolean | null }>;
 };
@@ -48,6 +55,21 @@ const emptyPropertyDraft: PropertyDraft = {
   notes: '',
 };
 
+const formatCurrency = (value: number) =>
+  value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+const getUnitThumbnail = (unit: UnitSummary) => {
+  const sorted = [...(unit.unit_photos ?? [])].sort(
+    (a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)),
+  );
+  return sorted[0]?.photo_url ?? null;
+};
+
+const getUnitFeesTotal = (unit: UnitSummary) =>
+  (unit.unit_fees ?? []).reduce((sum, fee) => sum + Number(fee.amount ?? 0), 0);
+
+const getUnitGrandTotal = (unit: UnitSummary) => getUnitTotalRent(unit) + getUnitFeesTotal(unit);
+
 export default function PropertiesPage() {
   const router = useRouter();
   const [session, setSessionState] = useState<SessionUser | null>(null);
@@ -58,6 +80,8 @@ export default function PropertiesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [draft, setDraft] = useState<PropertyDraft>(emptyPropertyDraft);
   const [saving, setSaving] = useState(false);
+  const [showAllUnits, setShowAllUnits] = useState(false);
+  const [unitsFilter, setUnitsFilter] = useState('all');
 
   useEffect(() => {
     const client = supabase;
@@ -170,6 +194,26 @@ export default function PropertiesPage() {
       return nameMatch || addressMatch || cityMatch;
     });
   }, [properties, searchTerm]);
+
+  const unitsFilteredProperties = useMemo(() => {
+    if (unitsFilter === 'all') return properties;
+    return properties.filter((prop) => prop.id === unitsFilter);
+  }, [properties, unitsFilter]);
+
+  const unitsSubtotals = useMemo(
+    () =>
+      unitsFilteredProperties.map((property) => {
+        const units = property.units ?? [];
+        const total = units.reduce((sum, unit) => sum + getUnitGrandTotal(unit), 0);
+        return { propertyId: property.id, total };
+      }),
+    [unitsFilteredProperties],
+  );
+
+  const unitsGrandTotal = useMemo(
+    () => unitsSubtotals.reduce((sum, subtotal) => sum + subtotal.total, 0),
+    [unitsSubtotals],
+  );
 
   const handleCreateProperty = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -307,7 +351,7 @@ export default function PropertiesPage() {
           </div>
         )}
 
-        <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <input
             type="text"
             placeholder="Search properties by name, address, or city..."
@@ -315,15 +359,137 @@ export default function PropertiesPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full max-w-md rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-slate-500"
           />
-          <p className="text-sm text-slate-500">
-            {filteredProperties.length} propert{filteredProperties.length === 1 ? 'y' : 'ies'}
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowAllUnits((current) => !current)}
+              className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                showAllUnits
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {showAllUnits ? 'Show Properties' : 'Show All Units'}
+            </button>
+            <select
+              value={unitsFilter}
+              onChange={(event) => setUnitsFilter(event.target.value)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-500"
+            >
+              <option value="all">All Units</option>
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>
+                  {property.name || property.address}
+                </option>
+              ))}
+            </select>
+            {!showAllUnits && (
+              <p className="text-sm text-slate-500">
+                {filteredProperties.length} propert{filteredProperties.length === 1 ? 'y' : 'ies'}
+              </p>
+            )}
+          </div>
         </div>
 
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
             Loading properties...
           </div>
+        ) : showAllUnits ? (
+          unitsFilteredProperties.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
+              No properties found.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {unitsFilteredProperties.map((property, propertyIndex) => {
+                const units = property.units ?? [];
+                const subtotal = unitsSubtotals[propertyIndex];
+                const canSeeRent = session.role === 'owner' || session.role === 'manager';
+
+                return (
+                  <section key={property.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+                      <div>
+                        <h2 className="text-lg font-semibold text-slate-900">{property.name || property.address}</h2>
+                        {property.city && <p className="text-sm text-slate-500">{property.city}</p>}
+                      </div>
+                    </div>
+
+                    {units.length === 0 ? (
+                      <p className="p-5 text-sm text-slate-500">No units on this property yet.</p>
+                    ) : (
+                      <div className="divide-y divide-slate-200">
+                        {units.map((unit) => {
+                          const thumbnail = getUnitThumbnail(unit);
+                          const fees = unit.unit_fees ?? [];
+                          const hasRent = Boolean(unit.rent_amount);
+
+                          return (
+                            <div key={unit.id} className="flex flex-col gap-4 p-5 md:flex-row md:items-center">
+                              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                {thumbnail ? (
+                                  <img src={thumbnail} alt={`Unit ${unit.unit_number}`} className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">No photo</div>
+                                )}
+                              </div>
+
+                              <div className="min-w-[200px] flex-1">
+                                <p className="font-medium text-slate-900">Unit {unit.unit_number}</p>
+                                {canSeeRent && (
+                                  <>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Rent: {hasRent ? formatCurrency(unit.rent_amount ?? 0) : 'Not set'}
+                                    </p>
+                                    {unit.has_garage && unit.garage_rent ? (
+                                      <p className="text-xs text-slate-500">
+                                        Garage rent: {formatCurrency(Number(unit.garage_rent))}
+                                      </p>
+                                    ) : null}
+                                    {fees.length > 0 && (
+                                      <p className="text-xs text-slate-500">
+                                        {fees.map((fee) => `${fee.label}: ${formatCurrency(Number(fee.amount))}`).join(' \u00b7 ')}
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+
+                              {canSeeRent && (
+                                <div className="min-w-[140px] text-right">
+                                  <p className="text-xs uppercase tracking-wider text-slate-500">Total</p>
+                                  <p className="text-lg font-semibold text-emerald-700">
+                                    {hasRent || fees.length > 0 ? formatCurrency(getUnitGrandTotal(unit)) : '\u2014'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {canSeeRent && (
+                      <div className="flex flex-wrap items-center justify-end gap-8 border-t border-slate-200 bg-slate-50 px-5 py-4">
+                        <div className="text-right">
+                          <p className="text-xs uppercase tracking-wider text-slate-500">Total Rents</p>
+                          <p className="text-lg font-semibold text-emerald-700">{formatCurrency(subtotal?.total ?? 0)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+
+              {(session.role === 'owner' || session.role === 'manager') && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Total Rents (All Units)</p>
+                  <p className="mt-1 text-2xl font-semibold text-emerald-700">{formatCurrency(unitsGrandTotal)}</p>
+                </div>
+              )}
+            </div>
+          )
         ) : filteredProperties.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
             <h3 className="text-base font-semibold text-slate-900">No properties found</h3>
