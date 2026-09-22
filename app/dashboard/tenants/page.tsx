@@ -15,6 +15,7 @@ type TenantWithUnit = {
   name: string;
   email?: string | null;
   phone?: string | null;
+  avatar_url?: string | null;
   lease_start?: string | null;
   lease_end?: string | null;
   status: string;
@@ -78,6 +79,23 @@ const getTenantLeaseSortValue = (tenant: TenantWithUnit) => {
 };
 
 const compareText = (first: string, second: string) => first.localeCompare(second, undefined, { sensitivity: 'base' });
+
+const getInitials = (name: string) => {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return 'T';
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? '').join('');
+};
+
+const getTenantAvatarSrc = (tenant: Pick<TenantWithUnit, 'name' | 'avatar_url'>) =>
+  tenant.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(getInitials(tenant.name))}&background=0f766e&color=fff`;
 
 export default function TenantsPage() {
   const router = useRouter();
@@ -369,6 +387,7 @@ export default function TenantsPage() {
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
+                  <th className="px-5 py-3.5">Avatar</th>
                   {renderSortHeader('name', 'Tenant Name')}
                   {renderSortHeader('property', 'Property & Unit')}
                   {renderSortHeader('contact', 'Contact Details')}
@@ -384,6 +403,13 @@ export default function TenantsPage() {
 
                   return (
                     <tr key={t.id} className="transition hover:bg-slate-50">
+                      <td className="px-5 py-4">
+                        <img
+                          src={getTenantAvatarSrc(t)}
+                          alt={`${t.name} avatar`}
+                          className="h-9 w-9 rounded-full border border-slate-200 object-cover"
+                        />
+                      </td>
                       <td className="px-5 py-4 font-semibold text-slate-900">
                         <button
                           type="button"

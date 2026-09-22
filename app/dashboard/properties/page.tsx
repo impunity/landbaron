@@ -23,7 +23,7 @@ type UnitSummary = {
   has_garage?: boolean | null;
   garage_rent?: number | null;
   unit_fees?: UnitFee[];
-  tenants?: Array<{ id: string; name: string; email?: string | null; phone?: string | null }>;
+  tenants?: Array<{ id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null }>;
   unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null; is_primary?: boolean | null }>;
 };
 
@@ -71,6 +71,23 @@ const getUnitFeesTotal = (unit: UnitSummary) =>
   (unit.unit_fees ?? []).reduce((sum, fee) => sum + Number(fee.amount ?? 0), 0);
 
 const getUnitGrandTotal = (unit: UnitSummary) => getUnitTotalRent(unit) + getUnitFeesTotal(unit);
+
+const getInitials = (name: string) => {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return 'T';
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? '').join('');
+};
+
+const getTenantAvatarSrc = (tenant: { name: string; avatar_url?: string | null }) =>
+  tenant.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(getInitials(tenant.name))}&background=0f766e&color=fff`;
 
 export default function PropertiesPage() {
   const router = useRouter();
@@ -328,7 +345,7 @@ export default function PropertiesPage() {
               onChange={(event) => setUnitsFilter(event.target.value)}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-500"
             >
-              <option value="all">All Units</option>
+              <option value="all">For All Properties</option>
               {properties.map((property) => (
                 <option key={property.id} value={property.id}>
                   {property.name || property.address}
@@ -364,7 +381,9 @@ export default function PropertiesPage() {
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
                       <div>
                         <h2 className="text-lg font-semibold text-slate-900">{property.name || property.address}</h2>
-                        {property.city && <p className="text-sm text-slate-500">{property.city}</p>}
+                        <p className="text-sm text-slate-500">
+                          {[property.address, property.city, property.state, property.postal_code].filter(Boolean).join(', ')}
+                        </p>
                       </div>
                     </div>
 
@@ -388,7 +407,29 @@ export default function PropertiesPage() {
                               </div>
 
                               <div className="min-w-[200px] flex-1">
-                                <p className="font-medium text-slate-900">Unit {unit.unit_number}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => router.push(`/dashboard/properties/${property.id}/units/${unit.id}`)}
+                                  className="text-left font-medium text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-800"
+                                >
+                                  Unit {unit.unit_number}
+                                </button>
+                                <div className="mt-1 flex items-center gap-2">
+                                  {(unit.tenants ?? []).length > 0 ? (
+                                    <>
+                                      <img
+                                        src={getTenantAvatarSrc(unit.tenants![0])}
+                                        alt={`${unit.tenants![0].name} avatar`}
+                                        className="h-5 w-5 rounded-full border border-slate-200 object-cover"
+                                      />
+                                      <span className="text-xs text-slate-600">
+                                        {(unit.tenants ?? []).map((tenant) => tenant.name).join(', ')}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">Vacant</span>
+                                  )}
+                                </div>
                                 {canSeeRent && (
                                   <>
                                     <p className="mt-1 text-xs text-slate-500">

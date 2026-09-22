@@ -1300,6 +1300,7 @@ export default function DashboardPage() {
                 const status = normalizeStatus(ticket.status);
                 const displayPriority = normalizePriority(ticket.priority);
                 const reporterLabel = getTicketReporterLabel(ticket, propertyOptions);
+                const assignmentLabel = getTicketAssignmentLabel(ticket);
                 const locationLabel = getTicketLocationLabel(ticket, propertyOptions);
                 const attachmentEntries = parsePhotoUrls(ticket.description);
 
@@ -1358,6 +1359,7 @@ export default function DashboardPage() {
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                           {locationLabel && <span>{locationLabel}</span>}
                           <span>Filed by: {reporterLabel}</span>
+                          <span>Assigned to: {assignmentLabel}</span>
                           <span>{displayPriority} priority</span>
                           <span>Updated {new Date(ticket.updated_at).toLocaleDateString()}</span>
                         </div>
