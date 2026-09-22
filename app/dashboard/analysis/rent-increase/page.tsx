@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
+import { Breadcrumbs } from '../../breadcrumbs';
+import { DashboardNavButtons } from '../../nav-buttons';
 
 type UnitTenant = {
   id: string;
@@ -225,19 +227,13 @@ export default function RentIncreaseAnalysisPage() {
       <div className="mx-auto max-w-6xl px-6 py-10">
         <header className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => router.push('/dashboard/analysis')}
-                className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 hover:text-slate-800"
-              >
-                Analysis
-              </button>
-              <span className="text-xs text-slate-400">/</span>
-              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-700">
-                Rent Increase Analysis
-              </span>
-            </div>
+            <Breadcrumbs
+              items={[
+                { label: 'Dashboard', href: '/dashboard' },
+                { label: 'Analysis', href: '/dashboard/analysis' },
+                { label: 'Rent Increase Analysis', href: '/dashboard/analysis/rent-increase' },
+              ]}
+            />
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Rent Increase Analysis</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-600">
               California&apos;s AB 1482 caps most annual increases at 5% plus local CPI, up to a 10% ceiling. Adjust the
@@ -246,41 +242,7 @@ export default function RentIncreaseAnalysisPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Maintenance Tickets
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/vendors')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Approved Vendors
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/properties')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Properties & Units
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/tenants')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Tenants
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/staff')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Staff roster
-            </button>
+            <DashboardNavButtons current="dashboard" role={session.role} />
           </div>
         </header>
 

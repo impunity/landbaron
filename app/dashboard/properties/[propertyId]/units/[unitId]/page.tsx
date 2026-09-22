@@ -7,6 +7,8 @@ import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
+import { Breadcrumbs } from '../../../../breadcrumbs';
+import { DashboardNavButtons } from '../../../../nav-buttons';
 
 
 type Tenant = {
@@ -740,43 +742,18 @@ export default function UnitDetailPage() {
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto max-w-6xl px-6 py-10">
-        {/* Navigation Breadcrumbs */}
         <div className="mb-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/properties')}
-              className="hover:text-slate-800"
-            >
-              Properties
-            </button>
-            <span>/</span>
-            <button
-              type="button"
-              onClick={() => router.push(`/dashboard/properties/${unit.property_id}`)}
-              className="hover:text-slate-800"
-            >
-              {unit.properties?.name || 'Property'}
-            </button>
-            <span>/</span>
-            <span className="text-slate-800">Unit {unit.unit_number}</span>
-          </div>
+          <Breadcrumbs
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Properties & Units', href: '/dashboard/properties' },
+              { label: unit.properties?.name || 'Property', href: `/dashboard/properties/${unit.property_id}` },
+              { label: `Unit ${unit.unit_number}`, href: `/dashboard/properties/${unit.property_id}/units/${unit.id}` },
+            ]}
+          />
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Maintenance Tickets
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/vendors')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Approved Vendors
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <DashboardNavButtons current="properties" role={session.role} />
             <button
               type="button"
               onClick={() => router.push(`/dashboard?propertyId=${unit.property_id}&unitId=${unit.id}`)}

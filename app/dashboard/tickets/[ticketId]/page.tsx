@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { Breadcrumbs } from '../../breadcrumbs';
+import { DashboardNavButtons } from '../../nav-buttons';
 
 type TicketRow = {
   id: string;
@@ -620,7 +622,7 @@ export default function TicketDetailPage() {
     return (
       <main className="min-h-screen bg-slate-100 px-6 py-12">
         <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">LANDBARON</p>
+          <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }]} />
           <h1 className="mt-3 text-2xl font-semibold text-slate-900">Ticket unavailable</h1>
           <p className="mt-3 text-sm text-rose-700">{error}</p>
           <button
@@ -643,31 +645,19 @@ export default function TicketDetailPage() {
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              ← Back to Tickets
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Maintenance Tickets
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/vendors')}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Approved Vendors
-            </button>
-          </div>
+          <Breadcrumbs
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: formatTicketNumber(ticket), href: `/dashboard/tickets/${ticketId}` },
+            ]}
+          />
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <DashboardNavButtons current="dashboard" role={session.role} />
+          </div>
+        </div>
+
+        <div className="mb-6 flex items-center justify-between gap-4">
             <button
               type="button"
               onClick={() => void handleRemindMaintenance()}
@@ -686,7 +676,6 @@ export default function TicketDetailPage() {
                 Delete ticket
               </button>
             )}
-          </div>
         </div>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

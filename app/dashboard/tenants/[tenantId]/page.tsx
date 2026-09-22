@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { Breadcrumbs } from '../../breadcrumbs';
+import { DashboardNavButtons } from '../../nav-buttons';
 
 
 type Tenant = {
@@ -84,10 +86,15 @@ export default function TenantEditPage() {
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <button type="button" onClick={() => router.push('/dashboard/tenants')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">← Tenants Directory</button>
+          <Breadcrumbs
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Tenants', href: '/dashboard/tenants' },
+              { label: tenant?.name ?? 'Edit Tenant', href: `/dashboard/tenants/${tenantId}` },
+            ]}
+          />
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => router.push('/dashboard')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Maintenance Tickets</button>
-            <button type="button" onClick={() => router.push('/dashboard/vendors')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</button>
+            <DashboardNavButtons current="tenants" role={session.role} />
           </div>
         </div>
         <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

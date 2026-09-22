@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import type { SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { Breadcrumbs } from './breadcrumbs';
 
 
 type PortalData = {
@@ -239,7 +240,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-6">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">LANDBARON</p>
+            <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }]} />
             <h1 className="mt-2 text-3xl font-semibold">Welcome to the {data.property.name} Maintenance Portal</h1>
             <p className="mt-2 text-sm text-slate-600">File maintenance requests, share improvements, and stay connected with your maintenance team.</p>
           </div>
