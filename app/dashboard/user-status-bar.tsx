@@ -54,7 +54,7 @@ export function UserStatusBar() {
 
     void syncSession();
 
-    const { data: authListener } = client.auth.onAuthStateChange(async (_event, nextSession) => {
+    const { data: authListener } = client.auth.onAuthStateChange(async (event, nextSession) => {
       const nextUser = nextSession?.user;
       if (!nextUser) {
         setSession(null);
@@ -68,6 +68,13 @@ export function UserStatusBar() {
         email: nextUser.email || '',
         role,
       });
+
+      if (event === 'SIGNED_IN' && nextSession?.access_token) {
+        void fetch('/api/login-events', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${nextSession.access_token}` },
+        }).catch(() => {});
+      }
     });
 
     return () => {

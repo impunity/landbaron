@@ -269,6 +269,15 @@ export default function PropertiesPage() {
                 Staff roster
               </button>
             )}
+            {(session.role === 'owner' || session.role === 'manager') && (
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard/usage-log')}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Usage Log
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowAddModal(true)}

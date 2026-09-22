@@ -65,9 +65,9 @@ export async function fetchUserRole(
 }
 
 export function getRoleLabel(role: UserRole) {
-  if (role === 'owner') return 'Owner / Manager';
+  if (role === 'owner') return 'Owner';
   if (role === 'manager') return 'Manager';
-  if (role === 'maintenance' || role === 'contractor') return 'Maintenance Person';
+  if (role === 'maintenance' || role === 'contractor') return 'Maintenance';
   return 'Tenant';
 }
 
