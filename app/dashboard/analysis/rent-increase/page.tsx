@@ -6,11 +6,19 @@ import { useRouter } from 'next/navigation';
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
+type UnitTenant = {
+  id: string;
+  name: string;
+  email?: string | null;
+  avatar_url?: string | null;
+};
+
 type UnitSummary = {
   id: string;
   unit_number: string;
   rent_amount?: number | null;
   status?: string | null;
+  tenants?: UnitTenant[];
   unit_photos?: Array<{ id: string; photo_url: string; is_primary?: boolean | null }>;
 };
 
@@ -38,8 +46,22 @@ const getUnitThumbnail = (unit: UnitSummary) => {
   return sorted[0]?.photo_url ?? null;
 };
 
-const getUnitAddress = (property: Property, unit: UnitSummary) =>
-  `Unit ${unit.unit_number} \u2014 ${property.address}${property.city ? `, ${property.city}` : ''}`;
+const getInitials = (name: string) => {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return 'T';
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? '').join('');
+};
+
+const getTenantAvatarSrc = (tenant: UnitTenant) =>
+  tenant.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(getInitials(tenant.name))}&background=0f766e&color=fff`;
 
 export default function RentIncreaseAnalysisPage() {
   const router = useRouter();
@@ -315,11 +337,7 @@ export default function RentIncreaseAnalysisPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
                     <div>
                       <h2 className="text-lg font-semibold text-slate-900">{property.name || property.address}</h2>
-                      <p className="text-sm text-slate-500">{property.address}</p>
-                    </div>
-                    <div className="text-right text-sm text-slate-600">
-                      <p>Current: <span className="font-semibold text-slate-900">{formatCurrency(subtotal?.currentTotal ?? 0)}</span></p>
-                      <p>Potential: <span className="font-semibold text-emerald-700">{formatCurrency(subtotal?.potentialTotal ?? 0)}</span></p>
+                      {property.city && <p className="text-sm text-slate-500">{property.city}</p>}
                     </div>
                   </div>
 
@@ -345,8 +363,24 @@ export default function RentIncreaseAnalysisPage() {
                             </div>
 
                             <div className="min-w-[200px] flex-1">
-                              <p className="font-medium text-slate-900">{getUnitAddress(property, unit)}</p>
-                              <p className="text-xs text-slate-500">Current rent: {hasRent ? formatCurrency(currentRent) : 'Not set'}</p>
+                              <p className="font-medium text-slate-900">Unit {unit.unit_number}</p>
+                              <div className="mt-1 flex items-center gap-2">
+                                {(unit.tenants ?? []).length > 0 ? (
+                                  <>
+                                    <img
+                                      src={getTenantAvatarSrc(unit.tenants![0])}
+                                      alt={`${unit.tenants![0].name} avatar`}
+                                      className="h-5 w-5 rounded-full border border-slate-200 object-cover"
+                                    />
+                                    <span className="text-xs text-slate-600">
+                                      {(unit.tenants ?? []).map((tenant) => tenant.name).join(', ')}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-xs text-slate-400">Vacant</span>
+                                )}
+                              </div>
+                              <p className="mt-1 text-xs text-slate-500">Current rent: {hasRent ? formatCurrency(currentRent) : 'Not set'}</p>
                             </div>
 
                             <div className="flex flex-1 items-center gap-3">
@@ -376,18 +410,41 @@ export default function RentIncreaseAnalysisPage() {
                       })}
                     </div>
                   )}
+
+                  <div className="flex flex-wrap items-center justify-end gap-8 border-t border-slate-200 bg-slate-50 px-5 py-4">
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-wider text-slate-500">Current Rents</p>
+                      <p className="text-lg font-semibold text-slate-900">{formatCurrency(subtotal?.currentTotal ?? 0)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-wider text-slate-500">Total Rents</p>
+                      <p className="text-lg font-semibold text-emerald-700">{formatCurrency(subtotal?.potentialTotal ?? 0)}</p>
+                    </div>
+                  </div>
                 </section>
               );
             })}
 
-            <div className="flex flex-wrap items-center justify-end gap-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-wider text-slate-500">Current Total Rents</p>
-                <p className="text-2xl font-semibold text-slate-900">{formatCurrency(grandTotals.currentTotal)}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Current Total Rents</p>
+                  <p className="text-2xl font-semibold text-slate-900">{formatCurrency(grandTotals.currentTotal)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Potential New Total Rents</p>
+                  <p className="text-2xl font-semibold text-emerald-700">{formatCurrency(grandTotals.potentialTotal)}</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-wider text-slate-500">Potential New Total Rents</p>
-                <p className="text-2xl font-semibold text-emerald-700">{formatCurrency(grandTotals.potentialTotal)}</p>
+              <div className="mt-4 grid gap-6 border-t border-slate-200 pt-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Annualized Current Rents</p>
+                  <p className="text-xl font-semibold text-slate-900">{formatCurrency(grandTotals.currentTotal * 12)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Annualized Potential Rents</p>
+                  <p className="text-xl font-semibold text-emerald-700">{formatCurrency(grandTotals.potentialTotal * 12)}</p>
+                </div>
               </div>
             </div>
           </div>
