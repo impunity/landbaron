@@ -161,6 +161,44 @@ export default function UsageLogPage() {
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Usage Log</h1>
             <p className="mt-2 text-sm text-slate-600">A running log of every sign-in to the system.</p>
           </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Maintenance Tickets
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/vendors')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Approved Vendors
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/properties')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Properties & Units
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/tenants')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Tenants
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/staff')}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Staff roster
+            </button>
+          </div>
         </header>
 
         {error && (
