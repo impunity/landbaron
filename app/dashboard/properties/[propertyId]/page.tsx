@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
+import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
 
 
@@ -21,6 +22,8 @@ type UnitDetail = {
   property_id: string;
   unit_number: string;
   rent_amount?: number | null;
+  has_garage?: boolean | null;
+  garage_rent?: number | null;
   bedrooms: number;
   bathrooms: number;
   square_feet?: number | null;
@@ -29,6 +32,13 @@ type UnitDetail = {
   tenants?: TenantSummary[];
   unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null; is_primary?: boolean | null }>;
   unit_maintenance_notes?: Array<{ id: string; note: string; category: string }>;
+};
+
+type PropertyIncomeSource = {
+  id: string;
+  label: string;
+  amount: number;
+  created_at: string;
 };
 
 type PropertyWithUnits = {
@@ -41,6 +51,7 @@ type PropertyWithUnits = {
   notes?: string | null;
   created_at: string;
   units?: UnitDetail[];
+  property_income_sources?: PropertyIncomeSource[];
 };
 
 type MaintenanceStaff = {
@@ -102,6 +113,9 @@ export default function PropertyDetailPage() {
   const [savingProp, setSavingProp] = useState(false);
   const [maintenanceStaff, setMaintenanceStaff] = useState<MaintenanceStaff[]>([]);
   const [propertyAssignments, setPropertyAssignments] = useState<PropertyAssignment[]>([]);
+  const [newIncomeLabel, setNewIncomeLabel] = useState('Laundry');
+  const [newIncomeAmount, setNewIncomeAmount] = useState('');
+  const [savingIncome, setSavingIncome] = useState(false);
 
   useEffect(() => {
     const client = supabase;
@@ -216,6 +230,66 @@ export default function PropertyDetailPage() {
       void loadProperty();
     }
   }, [session, propertyId]);
+
+  const handleAddIncome = async () => {
+    if (!propertyId) return;
+    const label = newIncomeLabel.trim();
+    if (!label) {
+      setError('An income label is required.');
+      return;
+    }
+
+    setSavingIncome(true);
+    setError(null);
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/properties/${propertyId}/income`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ label, amount: newIncomeAmount ? Number(newIncomeAmount) : 0 }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Income source could not be saved.');
+
+      setNewIncomeLabel('Laundry');
+      setNewIncomeAmount('');
+      await loadProperty();
+    } catch (incomeError) {
+      console.error(incomeError);
+      setError(incomeError instanceof Error ? incomeError.message : 'Income source could not be saved.');
+    } finally {
+      setSavingIncome(false);
+    }
+  };
+
+  const handleRemoveIncome = async (incomeId: string) => {
+    if (!propertyId || !window.confirm('Remove this income source?')) return;
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/properties/${propertyId}/income?incomeId=${incomeId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!response.ok) throw new Error('Income source could not be removed.');
+      await loadProperty();
+    } catch (incomeError) {
+      console.error(incomeError);
+      setError(incomeError instanceof Error ? incomeError.message : 'Income source could not be removed.');
+    }
+  };
 
   const handleCreateUnit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -468,7 +542,7 @@ export default function PropertyDetailPage() {
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-center">
                   <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Total Rent</p>
                   <p className="mt-1 text-2xl font-bold text-emerald-900">
-                    ${(property.units ?? []).reduce((sum, unit) => sum + Number(unit.rent_amount ?? 0), 0).toLocaleString()}
+                    ${(property.units ?? []).reduce((sum, unit) => sum + getUnitTotalRent(unit), 0).toLocaleString()}
                   </p>
                   <p className="text-[10px] text-emerald-700">per month</p>
                 </div>
@@ -482,6 +556,55 @@ export default function PropertyDetailPage() {
                 Property Notes
               </p>
               <p className="mt-1 text-sm text-slate-700">{property.notes}</p>
+            </div>
+          )}
+
+          {(session.role === 'owner' || session.role === 'manager') && (
+            <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Estimated Additional Income
+              </p>
+              {(property.property_income_sources ?? []).length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {(property.property_income_sources ?? []).map((income) => (
+                    <li key={income.id} className="flex items-center justify-between text-sm text-slate-700">
+                      <span>{income.label}: ${Number(income.amount).toLocaleString()}/mo</span>
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveIncome(income.id)}
+                        className="text-xs font-medium text-rose-700 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Label (e.g. Laundry)"
+                  value={newIncomeLabel}
+                  onChange={(e) => setNewIncomeLabel(e.target.value)}
+                  className="w-40 rounded-xl border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-slate-500"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Amount / mo"
+                  value={newIncomeAmount}
+                  onChange={(e) => setNewIncomeAmount(e.target.value)}
+                  className="w-28 rounded-xl border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-slate-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleAddIncome()}
+                  disabled={savingIncome}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {savingIncome ? 'Adding...' : 'Add Income'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -637,9 +760,14 @@ export default function PropertyDetailPage() {
                                 <p className="text-[11px] font-medium text-slate-500">Actual Rent</p>
                                 <p className="text-sm font-bold text-slate-900">
                                   {unit.rent_amount !== null && unit.rent_amount !== undefined
-                                    ? `$${Number(unit.rent_amount).toLocaleString()}/mo`
+                                    ? `$${getUnitTotalRent(unit).toLocaleString()}/mo`
                                     : 'Not set'}
                                 </p>
+                                {unit.has_garage && unit.garage_rent ? (
+                                  <p className="text-[10px] text-slate-500">
+                                    Includes garage rent of ${Number(unit.garage_rent).toLocaleString()}
+                                  </p>
+                                ) : null}
                               </div>
                               <div>
                                 <p className="text-[11px] font-medium text-slate-500">Est. Market Rent</p>

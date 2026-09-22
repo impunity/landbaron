@@ -38,7 +38,7 @@ export async function GET(
 
     const { data: property, error: propError } = await supabaseAdmin
       .from('properties')
-      .select('*, units(*, tenants(*), unit_photos(*), unit_maintenance_notes(*))')
+      .select('*, units(*, tenants(*), unit_photos(*), unit_maintenance_notes(*), unit_fees(*)), property_income_sources(*)')
       .eq('id', propertyId)
       .maybeSingle();
 
@@ -79,6 +79,8 @@ export async function GET(
       ? property.units.map((unit: Record<string, unknown>) => ({
           ...unit,
           rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
+          garage_rent: user.role === 'owner' || user.role === 'manager' ? unit.garage_rent : null,
+          unit_fees: user.role === 'owner' || user.role === 'manager' ? (unit.unit_fees ?? []) : [],
           unit_photos: Array.isArray(unit.unit_photos)
             ? [...unit.unit_photos].sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
             : [],
@@ -89,6 +91,7 @@ export async function GET(
       property: {
         ...property,
         units,
+        property_income_sources: user.role === 'owner' || user.role === 'manager' ? (property.property_income_sources ?? []) : [],
       },
       assignments,
       maintenanceStaff: maintenanceStaff ?? [],

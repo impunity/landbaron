@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
+import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
 
 
@@ -11,6 +12,8 @@ type UnitSummary = {
   id: string;
   unit_number: string;
   rent_amount?: number | null;
+  has_garage?: boolean | null;
+  garage_rent?: number | null;
   tenants?: Array<{ id: string; name: string; email?: string | null; phone?: string | null }>;
   unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null; is_primary?: boolean | null }>;
 };
@@ -298,7 +301,7 @@ export default function PropertiesPage() {
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Total rent across all properties</p>
             <p className="mt-1 text-3xl font-semibold text-slate-900">
-              ${properties.reduce((total, property) => total + (property.units ?? []).reduce((sum, unit) => sum + Number(unit.rent_amount ?? 0), 0), 0).toLocaleString()}
+              ${properties.reduce((total, property) => total + (property.units ?? []).reduce((sum, unit) => sum + getUnitTotalRent(unit), 0), 0).toLocaleString()}
               <span className="ml-1 text-sm font-medium text-slate-500">/ month</span>
             </p>
           </div>
@@ -345,7 +348,7 @@ export default function PropertiesPage() {
                 (sum, u) => sum + (u.tenants?.length ?? 0),
                 0,
               );
-              const totalRent = (prop.units ?? []).reduce((sum, unit) => sum + Number(unit.rent_amount ?? 0), 0);
+              const totalRent = (prop.units ?? []).reduce((sum, unit) => sum + getUnitTotalRent(unit), 0);
 
               // Find first available photo from the property's units
               const firstUnitWithPhoto = (prop.units ?? []).find(

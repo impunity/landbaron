@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const { data: properties, error: propError } = await supabaseAdmin
       .from('properties')
-      .select('*, units(id, unit_number, rent_amount, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone, avatar_url), unit_photos(id, photo_url, caption, is_primary, created_at))')
+      .select('*, units(id, unit_number, rent_amount, has_garage, garage_rent, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone, avatar_url), unit_photos(id, photo_url, caption, is_primary, created_at), unit_fees(id, label, amount, created_at)), property_income_sources(id, label, amount, created_at)')
       .order('name', { ascending: true });
 
     if (propError) {
@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
         ? prop.units.map((unit: Record<string, unknown>) => ({
             ...unit,
             rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
+            garage_rent: user.role === 'owner' || user.role === 'manager' ? unit.garage_rent : null,
+            unit_fees: user.role === 'owner' || user.role === 'manager' ? (unit.unit_fees ?? []) : [],
             unit_photos: Array.isArray(unit.unit_photos)
               ? [...unit.unit_photos].sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
               : [],
@@ -55,6 +57,7 @@ export async function GET(request: NextRequest) {
       return {
         ...prop,
         units,
+        property_income_sources: user.role === 'owner' || user.role === 'manager' ? (prop.property_income_sources ?? []) : [],
       };
     });
 

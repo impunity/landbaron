@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
+import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
 
 type UnitTenant = {
@@ -17,6 +18,8 @@ type UnitSummary = {
   id: string;
   unit_number: string;
   rent_amount?: number | null;
+  has_garage?: boolean | null;
+  garage_rent?: number | null;
   status?: string | null;
   tenants?: UnitTenant[];
   unit_photos?: Array<{ id: string; photo_url: string; is_primary?: boolean | null }>;
@@ -187,7 +190,7 @@ export default function RentIncreaseAnalysisPage() {
   };
 
   const getPotentialRent = (unit: UnitSummary) => {
-    const currentRent = unit.rent_amount ?? 0;
+    const currentRent = getUnitTotalRent(unit);
     const percent = getUnitPercent(unit.id);
     return currentRent * (1 + percent / 100);
   };
@@ -195,7 +198,7 @@ export default function RentIncreaseAnalysisPage() {
   const propertySubtotals = useMemo(() => {
     return filteredProperties.map((property) => {
       const units = property.units ?? [];
-      const currentTotal = units.reduce((sum, unit) => sum + (unit.rent_amount ?? 0), 0);
+      const currentTotal = units.reduce((sum, unit) => sum + getUnitTotalRent(unit), 0);
       const potentialTotal = units.reduce((sum, unit) => sum + getPotentialRent(unit), 0);
       return { propertyId: property.id, currentTotal, potentialTotal };
     });
@@ -347,7 +350,7 @@ export default function RentIncreaseAnalysisPage() {
                     <div className="divide-y divide-slate-200">
                       {units.map((unit) => {
                         const thumbnail = getUnitThumbnail(unit);
-                        const currentRent = unit.rent_amount ?? 0;
+                        const currentRent = getUnitTotalRent(unit);
                         const percent = getUnitPercent(unit.id);
                         const potentialRent = getPotentialRent(unit);
                         const hasRent = Boolean(unit.rent_amount);
@@ -381,6 +384,11 @@ export default function RentIncreaseAnalysisPage() {
                                 )}
                               </div>
                               <p className="mt-1 text-xs text-slate-500">Current rent: {hasRent ? formatCurrency(currentRent) : 'Not set'}</p>
+                              {unit.has_garage && unit.garage_rent ? (
+                                <p className="text-[11px] text-slate-400">
+                                  Includes garage rent of {formatCurrency(Number(unit.garage_rent))}
+                                </p>
+                              ) : null}
                             </div>
 
                             <div className="flex flex-1 items-center gap-3">

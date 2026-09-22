@@ -38,7 +38,7 @@ export async function GET(
 
     const { data: unit, error: unitError } = await supabaseAdmin
       .from('units')
-      .select('*, properties(*), tenants(*), unit_photos(*), unit_maintenance_notes(*)')
+      .select('*, properties(*), tenants(*), unit_photos(*), unit_maintenance_notes(*), unit_fees(*)')
       .eq('id', unitId)
       .maybeSingle();
 
@@ -102,6 +102,8 @@ export async function GET(
       unit: {
         ...unit,
         rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
+        garage_rent: user.role === 'owner' || user.role === 'manager' ? unit.garage_rent : null,
+        unit_fees: user.role === 'owner' || user.role === 'manager' ? (unit.unit_fees ?? []) : [],
         unit_photos: photos,
         unit_maintenance_notes: notes,
       },
@@ -156,6 +158,14 @@ export async function PATCH(
       updates.rent_amount = body.rent_amount !== '' && body.rent_amount !== null ? Number(body.rent_amount) : null;
     }
 
+    if ((user.role === 'owner' || user.role === 'manager') && body.has_garage !== undefined) {
+      updates.has_garage = Boolean(body.has_garage);
+    }
+
+    if ((user.role === 'owner' || user.role === 'manager') && body.garage_rent !== undefined) {
+      updates.garage_rent = body.garage_rent !== '' && body.garage_rent !== null ? Number(body.garage_rent) : null;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('units')
       .update(updates)
@@ -172,6 +182,7 @@ export async function PATCH(
       unit: {
         ...data,
         rent_amount: user.role === 'owner' || user.role === 'manager' ? data.rent_amount : null,
+        garage_rent: user.role === 'owner' || user.role === 'manager' ? data.garage_rent : null,
       },
     });
   } catch (error) {

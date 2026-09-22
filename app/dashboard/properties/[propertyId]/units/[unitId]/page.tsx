@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
+import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
 
 
@@ -53,11 +54,21 @@ type TicketSummary = {
   assigned_to?: string | null;
 };
 
+type UnitFee = {
+  id: string;
+  label: string;
+  amount: number;
+  created_at: string;
+};
+
 type UnitFullDetail = {
   id: string;
   property_id: string;
   unit_number: string;
   rent_amount?: number | null;
+  has_garage?: boolean | null;
+  garage_rent?: number | null;
+  unit_fees?: UnitFee[];
   bedrooms: number;
   bathrooms: number;
   square_feet?: number | null;
@@ -159,6 +170,8 @@ export default function UnitDetailPage() {
   const [unitEditDraft, setUnitEditDraft] = useState({
     unit_number: '',
     rent_amount: '',
+    has_garage: false,
+    garage_rent: '',
     bedrooms: '1',
     bathrooms: '1',
     square_feet: '',
@@ -166,6 +179,10 @@ export default function UnitDetailPage() {
     notes: '',
   });
   const [savingUnitEdit, setSavingUnitEdit] = useState(false);
+  const [newFeeLabel, setNewFeeLabel] = useState('Utility');
+  const [newFeeCustomLabel, setNewFeeCustomLabel] = useState('');
+  const [newFeeAmount, setNewFeeAmount] = useState('');
+  const [savingFee, setSavingFee] = useState(false);
 
   useEffect(() => {
     const client = supabase;
@@ -257,6 +274,8 @@ export default function UnitDetailPage() {
         setUnitEditDraft({
           unit_number: unitData.unit_number ?? '',
           rent_amount: unitData.rent_amount !== null && unitData.rent_amount !== undefined ? String(unitData.rent_amount) : '',
+          has_garage: Boolean(unitData.has_garage),
+          garage_rent: unitData.garage_rent !== null && unitData.garage_rent !== undefined ? String(unitData.garage_rent) : '',
           bedrooms: String(unitData.bedrooms ?? 1),
           bathrooms: String(unitData.bathrooms ?? 1),
           square_feet: unitData.square_feet ? String(unitData.square_feet) : '',
@@ -580,6 +599,8 @@ export default function UnitDetailPage() {
 
       if (session?.role === 'owner' || session?.role === 'manager') {
         payload.rent_amount = unitEditDraft.rent_amount ? Number(unitEditDraft.rent_amount) : null;
+        payload.has_garage = unitEditDraft.has_garage;
+        payload.garage_rent = unitEditDraft.has_garage && unitEditDraft.garage_rent ? Number(unitEditDraft.garage_rent) : null;
       }
 
       const response = await fetch(`/api/units/${unitId}`, {
@@ -609,6 +630,67 @@ export default function UnitDetailPage() {
     if (noteFilter === 'all') return list;
     return list.filter((n) => n.category === noteFilter);
   }, [unit, noteFilter]);
+
+  const handleAddFee = async () => {
+    if (!unitId) return;
+    const label = newFeeLabel === 'Other' ? newFeeCustomLabel.trim() : newFeeLabel;
+    if (!label) {
+      setError('A fee label is required.');
+      return;
+    }
+
+    setSavingFee(true);
+    setError(null);
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/units/${unitId}/fees`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ label, amount: newFeeAmount ? Number(newFeeAmount) : 0 }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Fee could not be saved.');
+
+      setNewFeeLabel('Utility');
+      setNewFeeCustomLabel('');
+      setNewFeeAmount('');
+      await loadUnitDetail();
+    } catch (feeError) {
+      console.error(feeError);
+      setError(feeError instanceof Error ? feeError.message : 'Fee could not be saved.');
+    } finally {
+      setSavingFee(false);
+    }
+  };
+
+  const handleRemoveFee = async (feeId: string) => {
+    if (!unitId || !window.confirm('Remove this fee?')) return;
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/units/${unitId}/fees?feeId=${feeId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!response.ok) throw new Error('Fee could not be removed.');
+      await loadUnitDetail();
+    } catch (feeError) {
+      console.error(feeError);
+      setError(feeError instanceof Error ? feeError.message : 'Fee could not be removed.');
+    }
+  };
 
   if (!session) return null;
 
@@ -763,9 +845,14 @@ export default function UnitDetailPage() {
                       </p>
                       <p className="mt-1 text-2xl font-bold text-slate-900">
                         {unit.rent_amount !== null && unit.rent_amount !== undefined
-                          ? `$${Number(unit.rent_amount).toLocaleString()}/mo`
+                          ? `$${getUnitTotalRent(unit).toLocaleString()}/mo`
                           : 'Not set'}
                       </p>
+                      {unit.has_garage && unit.garage_rent ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Includes garage rent of ${Number(unit.garage_rent).toLocaleString()}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div>
@@ -1542,6 +1629,34 @@ export default function UnitDetailPage() {
                   </div>
                 )}
 
+                {(session.role === 'owner' || session.role === 'manager') && (
+                  <div>
+                    <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={unitEditDraft.has_garage}
+                        onChange={(e) =>
+                          setUnitEditDraft({ ...unitEditDraft, has_garage: e.target.checked })
+                        }
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      Garage
+                    </label>
+                    {unitEditDraft.has_garage && (
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Includes garage rent of $"
+                        value={unitEditDraft.garage_rent}
+                        onChange={(e) =>
+                          setUnitEditDraft({ ...unitEditDraft, garage_rent: e.target.value })
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                      />
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-700">Bedrooms</label>
@@ -1626,6 +1741,65 @@ export default function UnitDetailPage() {
                   </button>
                 </div>
               </form>
+
+              {(session.role === 'owner' || session.role === 'manager') && (
+                <div className="mt-5 border-t border-slate-200 pt-4">
+                  <p className="text-xs font-medium text-slate-700">Fees (utility, administrative, other)</p>
+                  {(unit.unit_fees ?? []).length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {(unit.unit_fees ?? []).map((fee) => (
+                        <li key={fee.id} className="flex items-center justify-between text-sm text-slate-700">
+                          <span>{fee.label}: ${Number(fee.amount).toLocaleString()}</span>
+                          <button
+                            type="button"
+                            onClick={() => void handleRemoveFee(fee.id)}
+                            className="text-xs font-medium text-rose-700 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <select
+                      value={newFeeLabel}
+                      onChange={(e) => setNewFeeLabel(e.target.value)}
+                      className="rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none focus:border-slate-500"
+                    >
+                      <option value="Utility">Utility</option>
+                      <option value="Administrative">Administrative</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    {newFeeLabel === 'Other' && (
+                      <input
+                        type="text"
+                        placeholder="Fee label"
+                        value={newFeeCustomLabel}
+                        onChange={(e) => setNewFeeCustomLabel(e.target.value)}
+                        className="w-28 rounded-xl border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-slate-500"
+                      />
+                    )}
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Amount"
+                      value={newFeeAmount}
+                      onChange={(e) => setNewFeeAmount(e.target.value)}
+                      className="w-24 rounded-xl border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-slate-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleAddFee()}
+                      disabled={savingFee}
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {savingFee ? 'Adding...' : 'Add Fee'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
