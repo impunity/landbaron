@@ -34,6 +34,35 @@ type TenantWithUnit = {
 type TenantSortKey = 'name' | 'property' | 'contact' | 'lease' | 'status';
 type SortDirection = 'asc' | 'desc';
 
+const getTenantNameParts = (name: string) => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { firstName: '', lastName: '', displayName: '' };
+  }
+
+  if (trimmed.includes(',')) {
+    const [lastName, ...firstParts] = trimmed.split(',').map((part) => part.trim()).filter(Boolean);
+    const firstName = firstParts.join(', ');
+    return { firstName, lastName, displayName: [lastName, firstName].filter(Boolean).join(', ') };
+  }
+
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return { firstName: '', lastName: parts[0], displayName: parts[0] };
+  }
+
+  const lastName = parts.at(-1) ?? '';
+  const firstName = parts.slice(0, -1).join(' ');
+  return { firstName, lastName, displayName: `${lastName}, ${firstName}` };
+};
+
+const getTenantNameSortValue = (tenant: TenantWithUnit) => {
+  const { firstName, lastName } = getTenantNameParts(tenant.name);
+  return [lastName, firstName].filter(Boolean).join(' ');
+};
+
+const formatTenantName = (name: string) => getTenantNameParts(name).displayName || name;
+
 const getTenantPropertyLabel = (tenant: TenantWithUnit) => [
   tenant.units?.properties?.name ?? tenant.units?.properties?.address ?? '',
   tenant.units?.unit_number ? `Unit ${tenant.units.unit_number}` : '',
@@ -188,7 +217,7 @@ export default function TenantsPage() {
       let result = 0;
 
       if (tenantSort.key === 'name') {
-        result = compareText(first.name, second.name);
+        result = compareText(getTenantNameSortValue(first), getTenantNameSortValue(second));
       } else if (tenantSort.key === 'property') {
         result = compareText(getTenantPropertyLabel(first), getTenantPropertyLabel(second));
       } else if (tenantSort.key === 'contact') {
@@ -200,7 +229,7 @@ export default function TenantsPage() {
       }
 
       if (result === 0) {
-        result = compareText(first.name, second.name);
+        result = compareText(getTenantNameSortValue(first), getTenantNameSortValue(second));
       }
 
       return tenantSort.direction === 'asc' ? result : -result;
@@ -401,7 +430,7 @@ export default function TenantsPage() {
                           onClick={() => router.push(`/dashboard/tenants/${t.id}`)}
                           className="text-left font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-800"
                         >
-                          {t.name}
+                          {formatTenantName(t.name)}
                         </button>
                         {t.notes && <p className="text-xs font-normal text-slate-500 italic mt-0.5">{t.notes}</p>}
                       </td>

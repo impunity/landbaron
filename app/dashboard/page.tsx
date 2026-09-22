@@ -130,6 +130,7 @@ const sanitizeTicketDescription = (description?: string | null) => {
 
   return description
     .replace(/(^|\n)\s*Email:\s*[^\n]*$/gim, '$1')
+    .replace(/(^|\n)\s*Address:\s*[^\n]*$/gim, '$1')
     .replace(/(^|\n)\s*Assigned to:\s*[^\n]*$/gim, '$1')
     .replace(/(^|\n)\s*Photo:\s*[^\n]*$/gim, '$1')
     .replace(/(^|\n)\s*Video:\s*[^\n]*$/gim, '$1')
@@ -166,6 +167,17 @@ const getFallbackTicketNumber = (id: string) => {
 const formatTicketNumber = (ticket: Pick<TicketRow, 'id' | 'ticket_number'>) => (
   `#${String(ticket.ticket_number ?? getFallbackTicketNumber(ticket.id)).padStart(5, '0')}`
 );
+
+const getTicketLocationLabel = (
+  ticket: Pick<TicketRow, 'property_id' | 'unit_id'>,
+  properties: PropertyOption[],
+) => {
+  const property = properties.find((item) => item.id === ticket.property_id);
+  const unit = property?.units?.find((item) => item.id === ticket.unit_id);
+  const unitLabel = unit?.unit_number ? `Unit ${unit.unit_number}` : '';
+
+  return [unitLabel, property?.name].filter(Boolean).join(' / ');
+};
 
 const parseAssignmentFromDescription = (description?: string | null) => {
   if (!description) {
@@ -1332,8 +1344,8 @@ export default function DashboardPage() {
               {sortedTickets.map((ticket) => {
                 const status = normalizeStatus(ticket.status);
                 const displayPriority = normalizePriority(ticket.priority);
-                const assignmentLabel = getTicketAssignmentLabel(ticket);
                 const reporterLabel = getTicketReporterLabel(ticket, propertyOptions);
+                const locationLabel = getTicketLocationLabel(ticket, propertyOptions);
                 const attachmentEntries = parsePhotoUrls(ticket.description);
 
                 return (
@@ -1389,6 +1401,7 @@ export default function DashboardPage() {
                         )}
 
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                          {locationLabel && <span>{locationLabel}</span>}
                           <span>Filed by: {reporterLabel}</span>
                           <span>{displayPriority} priority</span>
                           <span>Updated {new Date(ticket.updated_at).toLocaleDateString()}</span>
