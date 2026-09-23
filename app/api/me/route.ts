@@ -37,7 +37,20 @@ export async function GET(request: NextRequest) {
       avatarUrl = staff?.avatar_url ?? null;
     }
 
-    return NextResponse.json({ email: user.email, role: user.role, name, avatarUrl });
+    const { data: organization } = await supabaseAdmin
+      .from('organizations')
+      .select('name')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    return NextResponse.json({
+      email: user.email,
+      role: user.role,
+      name,
+      avatarUrl,
+      organizationName: organization?.name ?? null,
+    });
   } catch (error) {
     console.error('GET /api/me failed:', error);
     return NextResponse.json({ error: 'Unable to load profile.' }, { status: 500 });

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 
 import type { UserRole } from '@/lib/auth';
 
-export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis';
+export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization';
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserRole[] }> = [
   { key: 'dashboard', label: 'Maintenance Tickets', href: '/dashboard' },
@@ -13,6 +13,7 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserR
   { key: 'tenants', label: 'Tenants', href: '/dashboard/tenants' },
   { key: 'staff', label: 'Staff roster', href: '/dashboard/staff', roles: ['owner', 'manager'] },
   { key: 'analysis', label: 'Analysis', href: '/dashboard/analysis', roles: ['owner', 'manager'] },
+  { key: 'organization', label: 'Organization', href: '/dashboard/organization', roles: ['owner', 'manager'] },
 ];
 
 // Same canonical button set on every dashboard page, minus the button for the page you're already on.

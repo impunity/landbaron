@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, getRoleLabel, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
@@ -9,6 +10,7 @@ import { LogoutButton } from './logout-button';
 type MeProfile = {
   name: string | null;
   avatarUrl: string | null;
+  organizationName: string | null;
 };
 
 const getInitials = (name: string) => {
@@ -26,6 +28,7 @@ const getInitials = (name: string) => {
 };
 
 export function UserStatusBar() {
+  const router = useRouter();
   const [session, setSession] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<MeProfile | null>(null);
 
@@ -98,7 +101,11 @@ export function UserStatusBar() {
       const response = await fetch('/api/me', { headers: { Authorization: `Bearer ${accessToken}` } });
       const result = await response.json().catch(() => ({}));
       if (response.ok) {
-        setProfile({ name: result.name ?? null, avatarUrl: result.avatarUrl ?? null });
+        setProfile({
+          name: result.name ?? null,
+          avatarUrl: result.avatarUrl ?? null,
+          organizationName: result.organizationName ?? null,
+        });
       }
     })();
   }, [session]);
@@ -113,7 +120,24 @@ export function UserStatusBar() {
 
   return (
     <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-end gap-3">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        {profile?.organizationName ? (
+          (session.role === 'owner' || session.role === 'manager') ? (
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/organization')}
+              className="text-sm font-semibold text-slate-900 hover:text-slate-700"
+            >
+              {profile.organizationName}
+            </button>
+          ) : (
+            <span className="text-sm font-semibold text-slate-900">{profile.organizationName}</span>
+          )
+        ) : (
+          <span />
+        )}
+
+        <div className="flex items-center gap-3">
         <img
           src={avatarSrc}
           alt={`${displayName} avatar`}
@@ -129,6 +153,7 @@ export function UserStatusBar() {
           </p>
         </div>
         <LogoutButton />
+        </div>
       </div>
     </div>
   );
