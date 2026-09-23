@@ -37,7 +37,14 @@ export async function GET(request: NextRequest) {
       avatarUrl = staff?.avatar_url ?? null;
     }
 
-    const { data: organization } = await supabaseAdmin
+    const { data: ownedOrganization } = await supabaseAdmin
+      .from('organizations')
+      .select('name')
+      .or(`owner_user_id.eq.${user.id},owner_email.ilike.${user.email}`)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const { data: organization } = ownedOrganization ? { data: ownedOrganization } : await supabaseAdmin
       .from('organizations')
       .select('name')
       .order('created_at', { ascending: true })

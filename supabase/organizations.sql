@@ -37,6 +37,12 @@ where not exists (select 1 from public.organizations);
 alter table public.properties
   add column if not exists organization_id uuid references public.organizations(id);
 
+alter table public.units
+  add column if not exists organization_id uuid references public.organizations(id);
+
+alter table public.tenants
+  add column if not exists organization_id uuid references public.organizations(id);
+
 alter table public.staff_members
   add column if not exists organization_id uuid references public.organizations(id);
 
@@ -53,6 +59,14 @@ alter table public.login_events
 -- or reassigned away from their current data; this only fills in a previously
 -- nonexistent column.
 update public.properties
+set organization_id = (select id from public.organizations order by created_at asc limit 1)
+where organization_id is null;
+
+update public.units
+set organization_id = (select id from public.organizations order by created_at asc limit 1)
+where organization_id is null;
+
+update public.tenants
 set organization_id = (select id from public.organizations order by created_at asc limit 1)
 where organization_id is null;
 
@@ -73,6 +87,8 @@ set organization_id = (select id from public.organizations order by created_at a
 where organization_id is null;
 
 create index if not exists properties_organization_id_idx on public.properties (organization_id);
+create index if not exists units_organization_id_idx on public.units (organization_id);
+create index if not exists tenants_organization_id_idx on public.tenants (organization_id);
 create index if not exists staff_members_organization_id_idx on public.staff_members (organization_id);
 create index if not exists approved_vendors_organization_id_idx on public.approved_vendors (organization_id);
 create index if not exists tickets_organization_id_idx on public.tickets (organization_id);

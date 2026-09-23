@@ -20,6 +20,7 @@ type Organization = {
   tax_id?: string | null;
   website_url?: string | null;
   avatar_url?: string | null;
+  invite_code?: string | null;
 };
 
 type OrganizationDraft = {
@@ -311,6 +312,14 @@ export default function OrganizationPage() {
                 </label>
               )}
             </div>
+
+            {organization?.invite_code && (
+              <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Access request invite code</p>
+                <p className="mt-1 font-mono text-lg font-semibold tracking-widest text-slate-900">{organization.invite_code}</p>
+                <p className="mt-1 text-xs text-slate-500">Share this code with people who need to request access to this organization.</p>
+              </div>
+            )}
 
             <form onSubmit={handleSave} className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
