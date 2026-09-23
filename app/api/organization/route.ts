@@ -117,6 +117,22 @@ export async function PATCH(request: NextRequest) {
       throw error;
     }
 
+    const { error: ownerError } = await supabaseAdmin
+      .from('staff_members')
+      .upsert(
+        {
+          organization_id: data.id,
+          name: data.name,
+          email: user.email,
+          role: 'Owner',
+        },
+        { onConflict: 'email' },
+      );
+
+    if (ownerError) {
+      throw ownerError;
+    }
+
     return NextResponse.json({ ok: true, organization: data });
   } catch (error) {
     console.error('PATCH /api/organization failed:', error);
@@ -133,6 +149,30 @@ export async function POST(request: NextRequest) {
     const user = await getAuthenticatedRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    const { data: existingOrganization } = await supabaseAdmin
+      .from('organizations')
+      .select('*')
+      .or(`owner_user_id.eq.${user.id},owner_email.ilike.${user.email}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingOrganization) {
+      const { error: repairError } = await supabaseAdmin
+        .from('staff_members')
+        .upsert(
+          {
+            organization_id: existingOrganization.id,
+            name: existingOrganization.name,
+            email: user.email,
+            role: 'Owner',
+          },
+          { onConflict: 'email' },
+        );
+
+      if (repairError) throw repairError;
+      return NextResponse.json({ ok: true, organization: existingOrganization, repaired: true });
     }
 
     const { data: existingTenant } = await supabaseAdmin
@@ -179,6 +219,22 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       throw error;
+    }
+
+    const { error: ownerError } = await supabaseAdmin
+      .from('staff_members')
+      .upsert(
+        {
+          organization_id: data.id,
+          name,
+          email: user.email,
+          role: 'Owner',
+        },
+        { onConflict: 'email' },
+      );
+
+    if (ownerError) {
+      throw ownerError;
     }
 
     return NextResponse.json({ ok: true, organization: data });
