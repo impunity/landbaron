@@ -1336,16 +1336,34 @@ export default function DashboardPage() {
                                     <img src={attachment.url} alt={attachment.label} className="h-full w-full object-cover" />
                                   )}
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openTicketView(ticket.id);
-                                  }}
-                                  className="block w-full bg-white px-2 py-1 text-left text-[11px] font-medium text-slate-600 hover:text-slate-900"
-                                >
-                                  Add/edit description
-                                </button>
+                                {attachment.label && attachment.label !== 'Attachment' ? (
+                                  <div className="flex items-center gap-1 bg-white px-2 py-1">
+                                    <span className="truncate text-[11px] font-medium text-slate-600" title={attachment.label}>
+                                      {attachment.label}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openTicketView(ticket.id);
+                                      }}
+                                      className="shrink-0 text-[11px] font-medium text-slate-500 underline hover:text-slate-900"
+                                    >
+                                      (Edit)
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openTicketView(ticket.id);
+                                    }}
+                                    className="block w-full bg-white px-2 py-1 text-left text-[11px] font-medium text-slate-600 hover:text-slate-900"
+                                  >
+                                    Add/edit description
+                                  </button>
+                                )}
                               </div>
                             ))}
                             {attachmentEntries.length > 8 && (
