@@ -38,6 +38,26 @@ export async function fetchUserRole(
 
   if (ownerEmails.includes(normalized)) return 'owner';
 
+  if (typeof window !== 'undefined' && client?.auth?.getSession) {
+    try {
+      const { data } = await client.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (accessToken) {
+        const response = await fetch('/api/account-status', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const accountStatus = await response.json().catch(() => ({}));
+        const accountRole = String(accountStatus?.role ?? '').toLowerCase();
+        if (accountRole === 'owner') return 'owner';
+        if (accountRole === 'manager') return 'manager';
+        if (accountRole === 'maintenance') return 'maintenance';
+        if (accountRole === 'contractor') return 'contractor';
+      }
+    } catch {
+      // Fall back to the client-side staff lookup below.
+    }
+  }
+
   if (client && typeof client.from === 'function') {
     try {
       const { data } = await client

@@ -40,6 +40,23 @@ export async function getAuthenticatedRequestUser(request: Request) {
     } catch {
       // fallback
     }
+
+    if (role === 'tenant') {
+      try {
+        const { data: organization } = await supabaseAdmin
+          .from('organizations')
+          .select('id')
+          .or(`owner_user_id.eq.${data.user.id},owner_email.ilike.${email}`)
+          .limit(1)
+          .maybeSingle();
+
+        if (organization) {
+          role = 'owner';
+        }
+      } catch {
+        // Preserve the existing fallback when the organizations migration is unavailable.
+      }
+    }
   }
 
   return {
