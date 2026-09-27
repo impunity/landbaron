@@ -52,6 +52,8 @@ type PropertyWithUnits = {
   state?: string | null;
   postal_code?: string | null;
   notes?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   created_at: string;
   units?: UnitDetail[];
   property_income_sources?: PropertyIncomeSource[];
@@ -110,10 +112,13 @@ export default function PropertyDetailPage() {
     state: '',
     postal_code: '',
     notes: '',
+    latitude: '',
+    longitude: '',
     primary_staff_id: '',
     secondary_staff_id: '',
   });
   const [savingProp, setSavingProp] = useState(false);
+  const [lookingUpCoordinates, setLookingUpCoordinates] = useState(false);
   const [maintenanceStaff, setMaintenanceStaff] = useState<MaintenanceStaff[]>([]);
   const [propertyAssignments, setPropertyAssignments] = useState<PropertyAssignment[]>([]);
   const [newIncomeLabel, setNewIncomeLabel] = useState('Laundry');
@@ -216,6 +221,8 @@ export default function PropertyDetailPage() {
           state: propData.state ?? '',
           postal_code: propData.postal_code ?? '',
           notes: propData.notes ?? '',
+          latitude: propData.latitude !== null && propData.latitude !== undefined ? String(propData.latitude) : '',
+          longitude: propData.longitude !== null && propData.longitude !== undefined ? String(propData.longitude) : '',
           primary_staff_id: primary,
           secondary_staff_id: secondary,
         });
@@ -385,6 +392,43 @@ export default function PropertyDetailPage() {
     }
   };
 
+  const handleLookupCoordinates = async () => {
+    const lookupAddress = [propEditDraft.address, propEditDraft.city, propEditDraft.state, propEditDraft.postal_code]
+      .filter(Boolean)
+      .join(', ')
+      .trim();
+
+    if (!lookupAddress) {
+      setError('Enter an address before looking up coordinates.');
+      return;
+    }
+
+    setLookingUpCoordinates(true);
+    setError(null);
+
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const response = await fetch(`/api/geocode?address=${encodeURIComponent(lookupAddress)}`, {
+        headers: { Authorization: `Bearer ${authData.session?.access_token ?? ''}` },
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result?.error || 'Address could not be looked up.');
+      }
+
+      setPropEditDraft((current) => ({
+        ...current,
+        latitude: String(result.latitude),
+        longitude: String(result.longitude),
+      }));
+    } catch (lookupError) {
+      setError(lookupError instanceof Error ? lookupError.message : 'Address could not be looked up.');
+    } finally {
+      setLookingUpCoordinates(false);
+    }
+  };
+
   const handleDeleteProperty = async () => {
     if (!propertyId || !session || (session.role !== 'owner' && session.role !== 'manager')) return;
 
@@ -545,6 +589,8 @@ export default function PropertyDetailPage() {
             city={property.city}
             state={property.state}
             postalCode={property.postal_code}
+            latitude={property.latitude}
+            longitude={property.longitude}
           />
 
           {property.notes && (
@@ -1053,6 +1099,39 @@ export default function PropertyDetailPage() {
                     }
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
                   />
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-sm font-medium text-slate-700">Map coordinates</label>
+                    <button
+                      type="button"
+                      onClick={() => void handleLookupCoordinates()}
+                      disabled={lookingUpCoordinates}
+                      className="text-xs font-medium text-slate-600 underline hover:text-slate-900 disabled:opacity-60"
+                    >
+                      {lookingUpCoordinates ? 'Looking up...' : 'Look up from address'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Latitude"
+                      value={propEditDraft.latitude}
+                      onChange={(e) => setPropEditDraft({ ...propEditDraft, latitude: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Longitude"
+                      value={propEditDraft.longitude}
+                      onChange={(e) => setPropEditDraft({ ...propEditDraft, longitude: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">Optional. Makes satellite and Street View links exact.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

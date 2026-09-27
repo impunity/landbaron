@@ -5,25 +5,34 @@ type PropertyMapProps = {
   city?: string | null;
   state?: string | null;
   postalCode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 // Works without a Google Maps API key. If NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is set,
-// the official Embed API is used instead.
-export function PropertyMap({ address, city, state, postalCode }: PropertyMapProps) {
+// the official Embed API is used instead. Stored coordinates make the satellite and
+// Street View links exact; otherwise they fall back to address lookup.
+export function PropertyMap({ address, city, state, postalCode, latitude, longitude }: PropertyMapProps) {
   const fullAddress = [address, city, state, postalCode].filter(Boolean).join(', ').trim();
+  const hasCoordinates = typeof latitude === 'number' && typeof longitude === 'number';
 
-  if (!fullAddress) {
+  if (!fullAddress && !hasCoordinates) {
     return null;
   }
 
-  const query = encodeURIComponent(fullAddress);
+  const coordinates = hasCoordinates ? `${latitude},${longitude}` : '';
+  const query = encodeURIComponent(hasCoordinates ? coordinates : fullAddress);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   const embedSrc = apiKey
-    ? `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${query}&zoom=18&maptype=satellite`
-    : `https://maps.google.com/maps?q=${query}&z=18&output=embed`;
+    ? hasCoordinates
+      ? `https://www.google.com/maps/embed/v1/view?key=${apiKey}&center=${coordinates}&zoom=19&maptype=satellite`
+      : `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${query}&zoom=18&maptype=satellite`
+    : `https://maps.google.com/maps?q=${query}&z=${hasCoordinates ? 19 : 18}&output=embed`;
   const satelliteUrl = `https://maps.google.com/maps?q=${query}&t=k`;
-  const streetViewUrl = `https://www.google.com/maps?q=${query}&layer=c`;
+  const streetViewUrl = hasCoordinates
+    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${coordinates}`
+    : `https://www.google.com/maps?q=${query}&layer=c`;
 
   return (
     <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
@@ -36,7 +45,7 @@ export function PropertyMap({ address, city, state, postalCode }: PropertyMapPro
       >
         <iframe
           src={embedSrc}
-          title={`Map of ${fullAddress}`}
+          title={`Map of ${fullAddress || coordinates}`}
           loading="lazy"
           referrerPolicy="no-referrer-when-downgrade"
           className="pointer-events-none h-full w-full border-0"
@@ -46,7 +55,7 @@ export function PropertyMap({ address, city, state, postalCode }: PropertyMapPro
         </span>
       </a>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-2.5">
-        <p className="text-xs text-slate-500">{fullAddress}</p>
+        <p className="text-xs text-slate-500">{fullAddress || coordinates}</p>
         <a
           href={streetViewUrl}
           target="_blank"

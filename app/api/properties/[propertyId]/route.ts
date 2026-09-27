@@ -146,6 +146,16 @@ export async function PATCH(
     if (body.postal_code !== undefined) updates.postal_code = typeof body.postal_code === 'string' ? body.postal_code.trim() : null;
     if (body.notes !== undefined) updates.notes = typeof body.notes === 'string' ? body.notes.trim() : null;
 
+    for (const field of ['latitude', 'longitude'] as const) {
+      if (body[field] !== undefined) {
+        const value = body[field] === null || body[field] === '' ? null : Number(body[field]);
+        if (value !== null && !Number.isFinite(value)) {
+          return NextResponse.json({ error: 'Latitude and longitude must be numbers.' }, { status: 400 });
+        }
+        updates[field] = value;
+      }
+    }
+
     const primaryStaffId = typeof body.primary_staff_id === 'string' && body.primary_staff_id.trim()
       ? body.primary_staff_id.trim()
       : null;
