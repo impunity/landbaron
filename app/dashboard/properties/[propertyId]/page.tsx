@@ -9,6 +9,7 @@ import { getUnitTotalRent } from '@/lib/rent';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
+import { PropertyMap } from '../../property-map';
 
 
 type TenantSummary = {
@@ -538,6 +539,13 @@ export default function PropertyDetailPage() {
               )}
             </div>
           </div>
+
+          <PropertyMap
+            address={property.address}
+            city={property.city}
+            state={property.state}
+            postalCode={property.postal_code}
+          />
 
           {property.notes && (
             <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
