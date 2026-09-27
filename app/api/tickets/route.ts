@@ -184,10 +184,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ticket, notificationError, notificationSent });
   } catch (error) {
     console.error('POST /api/tickets failed:', error);
+    const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : '';
     return NextResponse.json(
       {
-        error:
-          'Ticket could not be submitted. This usually means the tickets table has an RLS policy or a schema constraint that still needs to be updated in Supabase.',
+        error: message
+          ? `Ticket could not be submitted: ${message}`
+          : 'Ticket could not be submitted. Please try again.',
       },
       { status: 500 },
     );
