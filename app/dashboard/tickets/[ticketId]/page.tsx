@@ -329,9 +329,12 @@ export default function TicketDetailPage() {
 
     const loadStaffMembers = async () => {
       try {
+        const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
         const response = await fetch('/api/staff', {
           headers: {
             'x-user-role': session.role,
+            'x-user-email': session.email,
+            Authorization: `Bearer ${authData.session?.access_token ?? ''}`,
           },
         });
 
@@ -866,6 +869,9 @@ export default function TicketDetailPage() {
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                   >
                     <option value="">Unassigned</option>
+                    {assignedStaff && !staffMembers.some((member) => `${member.name} <${member.email}>` === assignedStaff) && (
+                      <option value={assignedStaff}>{formatAssignmentLabel(assignedStaff)}</option>
+                    )}
                     {staffMembers.map((member) => (
                       <option key={member.id} value={`${member.name} <${member.email}>`}>
                         {member.name} ({member.role})
@@ -892,7 +898,7 @@ export default function TicketDetailPage() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Assigned To</dt>
-                    <dd className="text-right">{formatAssignmentLabel(ticket.assigned_to) || parseAssignment(ticket.description).label}</dd>
+                    <dd className="text-right">{ticket.assigned_to?.trim() ? formatAssignmentLabel(ticket.assigned_to) : parseAssignment(ticket.description).label}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Filed By</dt>
