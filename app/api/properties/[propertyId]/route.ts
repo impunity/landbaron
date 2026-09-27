@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getRequestOrganizationId } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -47,6 +48,11 @@ export async function GET(
     }
 
     if (!property) {
+      return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
+    }
+
+    const organizationId = await getRequestOrganizationId(user);
+    if (property.organization_id && property.organization_id !== organizationId) {
       return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     }
 

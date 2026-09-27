@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getRequestOrganizationId } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const normalizeRole = (value?: string | null) => {
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('staff_members')
       .select('*')
+      .eq('organization_id', (authUser ? await getRequestOrganizationId(authUser) : null) ?? '')
       .order('name', { ascending: true });
 
     if (error) {
@@ -148,6 +150,7 @@ export async function POST(request: NextRequest) {
           phone_number: phoneNumber || null,
           role,
           avatar_url: avatarUrl,
+          organization_id: authUser ? await getRequestOrganizationId(authUser) : null,
         },
         { onConflict: 'email' },
       )

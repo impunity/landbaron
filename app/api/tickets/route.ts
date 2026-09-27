@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketCreatedEmails } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getRequestOrganizationId } from '@/lib/organization-context';
 
 const parseReporterEmailFromDescription = (description?: string | null) => {
   if (!description) {
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('tickets')
       .select('*')
+      .eq('organization_id', (await getRequestOrganizationId(user)) ?? '')
       .order('updated_at', { ascending: false });
 
     if (user.role === 'tenant') {
@@ -131,6 +133,7 @@ export async function POST(request: NextRequest) {
           priority,
           assigned_to: normalizedAssignee || null,
           created_by: user.id,
+          organization_id: await getRequestOrganizationId(user),
           property_id: typeof property_id === 'string' && property_id.trim() ? property_id.trim() : null,
           unit_id: typeof unit_id === 'string' && unit_id.trim() ? unit_id.trim() : null,
         },

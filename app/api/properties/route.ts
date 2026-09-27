@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getRequestOrganizationId } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -31,9 +32,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
     }
 
+    const organizationId = await getRequestOrganizationId(user);
+
     const { data: properties, error: propError } = await supabaseAdmin
       .from('properties')
       .select('*, units(id, unit_number, rent_amount, has_garage, garage_rent, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone, avatar_url), unit_photos(id, photo_url, caption, is_primary, created_at), unit_fees(id, label, amount, created_at)), property_income_sources(id, label, amount, created_at)')
+      .eq('organization_id', organizationId ?? '')
       .order('name', { ascending: true });
 
     if (propError) {
@@ -104,6 +108,7 @@ export async function POST(request: NextRequest) {
     const insertPayload: Record<string, unknown> = {
       name,
       address,
+      organization_id: await getRequestOrganizationId(user),
     };
     if (city !== null) insertPayload.city = city;
     if (state !== null) insertPayload.state = state;

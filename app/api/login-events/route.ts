@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getRequestOrganizationId } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('login_events')
       .select('*')
+      .eq('organization_id', (await getRequestOrganizationId(user)) ?? '')
       .order('created_at', { ascending: false })
       .limit(200);
 
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
         name,
         avatar_url: avatarUrl,
         role: user.role,
+        organization_id: await getRequestOrganizationId(user),
       },
     ]);
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getRequestOrganizationId } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getString = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
@@ -130,7 +131,8 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await authorize(request, true);
     if (auth.response) return auth.response;
-    const { data, error } = await supabaseAdmin!.from('approved_vendors').select('*').order('name');
+    const organizationId = auth.user ? await getRequestOrganizationId(auth.user) : null;
+    const { data, error } = await supabaseAdmin!.from('approved_vendors').select('*').eq('organization_id', organizationId ?? '').order('name');
     if (error) throw error;
     return NextResponse.json({ vendors: data ?? [] });
   } catch (error) {
@@ -149,9 +151,10 @@ export async function POST(request: NextRequest) {
     if (!name) return NextResponse.json({ error: 'Vendor name is required.' }, { status: 400 });
     if (!phone) return NextResponse.json({ error: 'Vendor phone number is required.' }, { status: 400 });
     const websiteInfo = await fetchVendorWebsiteInfo(website);
-    let { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: cleanVendorAddress(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).select().single();
+    const vendorOrganizationId = auth.user ? await getRequestOrganizationId(auth.user) : null;
+    let { data, error } = await supabaseAdmin!.from('approved_vendors').insert({ name, organization_id: vendorOrganizationId, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, address: cleanVendorAddress(body?.address) || websiteInfo.address, website_title: websiteInfo.website_title, website_description: websiteInfo.website_description, website_thumbnail_url: websiteInfo.website_thumbnail_url, notes: getString(body?.notes) || null }).select().single();
     if (error && isMissingEnrichmentColumnError(error)) {
-      const retry = await supabaseAdmin!.from('approved_vendors').insert({ name, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, notes: getString(body?.notes) || null }).select().single();
+      const retry = await supabaseAdmin!.from('approved_vendors').insert({ name, organization_id: vendorOrganizationId, company: getString(body?.company) || null, email: getString(body?.email) || null, phone, service_type: getString(body?.service_type) || null, website: website || null, notes: getString(body?.notes) || null }).select().single();
       data = retry.data;
       error = retry.error;
     }
