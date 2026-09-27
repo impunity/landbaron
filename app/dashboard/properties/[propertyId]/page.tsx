@@ -422,6 +422,10 @@ export default function PropertyDetailPage() {
         latitude: String(result.latitude),
         longitude: String(result.longitude),
       }));
+
+      if (result.approximate) {
+        setError(`Exact address not found. Used "${result.matchedAddress}" — adjust the coordinates if needed.`);
+      }
     } catch (lookupError) {
       setError(lookupError instanceof Error ? lookupError.message : 'Address could not be looked up.');
     } finally {
