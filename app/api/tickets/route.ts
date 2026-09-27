@@ -49,9 +49,19 @@ export async function GET(request: NextRequest) {
     const { data: tenants } = await supabaseAdmin
       .from('tenants')
       .select('name,email,unit_id');
+    const { data: staffMembers } = await supabaseAdmin
+      .from('staff_members')
+      .select('name,email');
 
     const tenantByEmail = new Map<string, string>();
     const tenantsByUnit = new Map<string, Array<{ name: string }>>();
+    (staffMembers ?? []).forEach((member) => {
+      const name = typeof member.name === 'string' ? member.name.trim() : '';
+      const email = typeof member.email === 'string' ? member.email.trim().toLowerCase() : '';
+      if (name && email) {
+        tenantByEmail.set(email, name);
+      }
+    });
     (tenants ?? []).forEach((tenant) => {
       const name = typeof tenant.name === 'string' ? tenant.name.trim() : '';
       const email = typeof tenant.email === 'string' ? tenant.email.trim().toLowerCase() : '';
@@ -73,7 +83,7 @@ export async function GET(request: NextRequest) {
         ? tenantByEmail.get(reporterEmail) ?? 'Unknown'
         : unitTenants.length === 1
           ? unitTenants[0].name
-          : 'Unknown';
+          : 'Common area';
 
       return { ...ticket, opened_by_label: openedByLabel };
     });

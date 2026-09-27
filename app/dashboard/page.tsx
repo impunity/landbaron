@@ -483,9 +483,11 @@ export default function DashboardPage() {
       }
 
       try {
+        const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
         const response = await fetch('/api/staff', {
           headers: {
             'x-user-role': session.role,
+            Authorization: `Bearer ${authData.session?.access_token ?? ''}`,
           },
         });
 
@@ -873,8 +875,8 @@ export default function DashboardPage() {
     const assignedTo = formState.assigned_to.trim();
     const numericSeverity = Number(formState.severity);
 
-    if (!trimmedEmail || !trimmedAddress || !trimmedDescription || !formState.severity) {
-      setFormError('Please complete the severity, email, address, and description fields.');
+    if (!trimmedAddress || !trimmedDescription || !formState.severity) {
+      setFormError('Please complete the severity, address, and description fields.');
       return;
     }
 
@@ -884,7 +886,7 @@ export default function DashboardPage() {
     }
 
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(trimmedEmail)) {
+    if (trimmedEmail && !emailPattern.test(trimmedEmail)) {
       setFormError('Please enter a valid email address.');
       return;
     }
@@ -904,7 +906,7 @@ export default function DashboardPage() {
     const status = 'Open';
     const title = trimmedDescription.length > 50 ? `${trimmedDescription.slice(0, 47)}...` : trimmedDescription;
     const descriptionParts = [
-      `Email: ${trimmedEmail}`,
+      ...(trimmedEmail ? [`Email: ${trimmedEmail}`] : []),
       `Address: ${trimmedAddress}`,
     ];
 
@@ -1083,17 +1085,24 @@ export default function DashboardPage() {
                 </>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Tenant Email</label>
-                  <select name="email" value={formState.email} onChange={handleInputChange} required disabled={!formState.property_id} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100">
-                      <option value="">{formState.property_id ? 'Select tenant email' : 'Select a property first'}</option>
-                      {propertyOptions
-                        .find((property) => property.id === formState.property_id)
-                        ?.units?.filter((unit) => !formState.unit_id || unit.id === formState.unit_id)
-                        .flatMap((unit) => unit.tenants ?? [])
-                        .filter((tenant) => tenant.email)
-                        .map((tenant) => (
-                        <option key={tenant.id} value={tenant.email ?? ''}>{tenant.name} — {tenant.email}</option>
-                      ))}
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Tenant or Staff Email</label>
+                  <select name="email" value={formState.email} onChange={handleInputChange} disabled={!formState.property_id} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 disabled:bg-slate-100">
+                      <option value="">{formState.property_id ? 'No specific person (common area)' : 'Select a property first'}</option>
+                      <optgroup label="Tenants">
+                        {propertyOptions
+                          .find((property) => property.id === formState.property_id)
+                          ?.units?.filter((unit) => !formState.unit_id || unit.id === formState.unit_id)
+                          .flatMap((unit) => unit.tenants ?? [])
+                          .filter((tenant) => tenant.email)
+                          .map((tenant) => (
+                          <option key={tenant.id} value={tenant.email ?? ''}>{tenant.name} — {tenant.email}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Staff">
+                        {staffMembers.filter((member) => member.email).map((member) => (
+                          <option key={member.id} value={member.email}>{member.name} — {member.email}</option>
+                        ))}
+                      </optgroup>
                   </select>
                 </div>
               </div>

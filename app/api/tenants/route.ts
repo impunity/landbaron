@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Get property_id for this unit
     const { data: unitData } = await supabaseAdmin
       .from('units')
-      .select('property_id')
+      .select('property_id, organization_id')
       .eq('id', unitId)
       .maybeSingle();
 
@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
         {
           unit_id: unitId,
           property_id: unitData?.property_id ?? null,
+          organization_id: unitData?.organization_id ?? null,
           name,
           email,
           phone,

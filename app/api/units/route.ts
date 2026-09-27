@@ -50,11 +50,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const { data: parentProperty } = await supabaseAdmin
+      .from('properties')
+      .select('organization_id')
+      .eq('id', propertyId)
+      .maybeSingle();
+
     const { data, error } = await supabaseAdmin
       .from('units')
       .insert([
         {
           property_id: propertyId,
+          organization_id: parentProperty?.organization_id ?? null,
           unit_number: unitNumber,
           rent_amount: rentAmount,
           bedrooms,
