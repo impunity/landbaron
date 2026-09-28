@@ -50,6 +50,7 @@ type PropertyOption = {
     id: string;
     unit_number: string;
     tenants?: Array<{ id: string; name: string; email?: string | null }>;
+    unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null }>;
   }>;
 };
 
@@ -178,6 +179,28 @@ const getTicketLocationLabel = (
   const unitLabel = unit?.unit_number ? `Unit ${unit.unit_number}` : '';
 
   return [unitLabel, property?.name].filter(Boolean).join(' / ');
+};
+
+const getTicketUnitSummary = (
+  ticket: Pick<TicketRow, 'description' | 'unit_id'>,
+  properties: PropertyOption[],
+) => {
+  const unit = ticket.unit_id
+    ? properties.flatMap((property) => property.units ?? []).find((item) => item.id === ticket.unit_id)
+    : undefined;
+  if (!unit) {
+    return { heading: '', thumbnailUrl: '' };
+  }
+
+  const reporterEmail = parseReporterEmailFromDescription(ticket.description);
+  const tenants = unit.tenants ?? [];
+  const tenant = tenants.find((candidate) => reporterEmail && candidate.email?.trim().toLowerCase() === reporterEmail) ?? tenants[0];
+  const firstName = tenant?.name?.trim().split(/\s+/)[0] ?? '';
+
+  return {
+    heading: [unit.unit_number, firstName].filter(Boolean).join(' - '),
+    thumbnailUrl: unit.unit_photos?.[0]?.photo_url ?? '',
+  };
 };
 
 const parseAssignmentFromDescription = (description?: string | null) => {
@@ -1312,6 +1335,7 @@ export default function DashboardPage() {
                 const assignmentLabel = getTicketAssignmentLabel(ticket);
                 const locationLabel = getTicketLocationLabel(ticket, propertyOptions);
                 const attachmentEntries = parsePhotoUrls(ticket.description);
+                const unitSummary = getTicketUnitSummary(ticket, propertyOptions);
 
                 return (
                   <article
@@ -1321,6 +1345,9 @@ export default function DashboardPage() {
                   >
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div className="space-y-2">
+                        {unitSummary.heading && (
+                          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{unitSummary.heading}</p>
+                        )}
                         <div className="flex items-center gap-3">
                           <h3 className="text-lg font-semibold text-slate-900">{ticket.title}</h3>
                           <span
@@ -1334,8 +1361,13 @@ export default function DashboardPage() {
                           {sanitizeTicketDescription(ticket.description) || 'No description provided.'}
                         </p>
 
-                        {attachmentEntries.length > 0 && (
+                        {(attachmentEntries.length > 0 || unitSummary.thumbnailUrl) && (
                           <div className="flex max-w-2xl flex-wrap gap-2">
+                            {unitSummary.thumbnailUrl && (
+                              <div className="w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100" title="Unit photo">
+                                <img src={unitSummary.thumbnailUrl} alt="Unit" className="h-16 w-16 object-cover" />
+                              </div>
+                            )}
                             {attachmentEntries.slice(0, 8).map((attachment) => (
                               <div key={attachment.url} className="w-24 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
                                 <div className="h-16 w-full">
