@@ -756,6 +756,13 @@ export default function UnitDetailPage() {
             <DashboardNavButtons current="properties" role={session.role} />
             <button
               type="button"
+              onClick={() => router.push(`/dashboard/properties/${unit.property_id}/announcements`)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Announcements
+            </button>
+            <button
+              type="button"
               onClick={() => router.push(`/dashboard?propertyId=${unit.property_id}&unitId=${unit.id}`)}
               className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
             >

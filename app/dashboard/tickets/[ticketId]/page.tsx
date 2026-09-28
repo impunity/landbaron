@@ -657,6 +657,15 @@ export default function TicketDetailPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             <DashboardNavButtons current="dashboard" role={session.role} />
+            {ticket.property_id && (
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/properties/${ticket.property_id}/announcements`)}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Announcements
+              </button>
+            )}
           </div>
         </div>
 
