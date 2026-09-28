@@ -46,7 +46,7 @@ export async function POST(
       }, 'reply');
     } catch (emailError) {
       console.error('Reply was saved but email notifications failed:', emailError);
-      notifications = { attempted: 0, sent: 0, failed: -1 };
+      notifications = { error: true };
     }
     return NextResponse.json({ ok: true, reply, notifications });
   } catch (error) {

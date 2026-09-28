@@ -36,6 +36,30 @@ const formatDate = (value: string) => new Date(value).toLocaleString(undefined, 
   timeStyle: 'short',
 });
 
+const getEmailNotice = (label: 'Announcement' | 'Reply', notifications?: {
+  attempted?: number;
+  accepted?: number;
+  failed?: number;
+  ownerAttempted?: boolean;
+  ownerAccepted?: boolean;
+  error?: boolean;
+}) => {
+  if (notifications?.error) {
+    return `${label} posted, but the email result could not be confirmed. Check the deployment logs.`;
+  }
+  if (!notifications || notifications.attempted === 0) {
+    return `${label} posted, but no tenant or staff email recipients were found.`;
+  }
+
+  const ownerStatus = notifications.ownerAttempted
+    ? notifications.ownerAccepted ? 'Owner email accepted by Resend' : 'Owner email was not accepted by Resend'
+    : 'No owner email address is configured for this organization';
+  const summary = `${notifications.accepted ?? 0} of ${notifications.attempted} emails accepted by Resend. ${ownerStatus}.`;
+  return notifications.failed
+    ? `${label} posted. ${summary} Check Resend → Emails for the rejection or delivery details.`
+    : `${label} posted. ${summary} Check Resend → Emails to confirm delivery.`;
+};
+
 export default function PropertyAnnouncementsPage() {
   const router = useRouter();
   const params = useParams<{ propertyId: string }>();
@@ -138,13 +162,7 @@ export default function PropertyAnnouncementsPage() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || 'Announcement could not be submitted.');
-      if (result.notifications?.failed === -1 || result.notifications?.failed > 0) {
-        setNotice('Announcement posted, but one or more email notifications could not be sent.');
-      } else if (result.notifications?.attempted === 0) {
-        setNotice('Announcement posted, but no tenant or staff email recipients were found.');
-      } else {
-        setNotice('Announcement posted and emailed to the property group.');
-      }
+      setNotice(getEmailNotice('Announcement', result.notifications));
       setPostBody('');
       setFiles([]);
       await loadAnnouncements();
@@ -173,13 +191,7 @@ export default function PropertyAnnouncementsPage() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || 'Reply could not be submitted.');
       setReplyDrafts((current) => ({ ...current, [announcementId]: '' }));
-      if (result.notifications?.failed === -1 || result.notifications?.failed > 0) {
-        setNotice('Reply posted, but one or more email notifications could not be sent.');
-      } else if (result.notifications?.attempted === 0) {
-        setNotice('Reply posted, but no tenant or staff email recipients were found.');
-      } else {
-        setNotice('Reply posted and emailed to the property group.');
-      }
+      setNotice(getEmailNotice('Reply', result.notifications));
       await loadAnnouncements();
     } catch (replyError) {
       setError(replyError instanceof Error ? replyError.message : 'Reply could not be submitted.');

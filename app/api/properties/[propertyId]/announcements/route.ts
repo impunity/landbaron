@@ -102,7 +102,7 @@ export async function POST(
       notifications = await emailAnnouncement(property, { ...announcement, body, author_name: authorName, image_urls: imageUrls }, 'post');
     } catch (emailError) {
       console.error('Announcement was saved but email notifications failed:', emailError);
-      notifications = { attempted: 0, sent: 0, failed: -1 };
+      notifications = { error: true };
     }
     return NextResponse.json({ ok: true, announcement: { ...announcement, body, author_name: authorName, image_urls: imageUrls }, notifications });
   } catch (error) {

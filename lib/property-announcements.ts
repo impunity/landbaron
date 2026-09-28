@@ -94,7 +94,17 @@ export async function emailAnnouncement(
   if (unitsError) throw unitsError;
 
   const unitIds = (units ?? []).map((unit) => unit.id);
-  const tenantEmails: string[] = [];
+  const recipientKinds = new Map<string, Set<'tenant' | 'maintenance' | 'owner'>>();
+  const addRecipients = (emails: string[], kind: 'tenant' | 'maintenance' | 'owner') => {
+    for (const email of emails) {
+      const normalized = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) continue;
+      const kinds = recipientKinds.get(normalized) ?? new Set<'tenant' | 'maintenance' | 'owner'>();
+      kinds.add(kind);
+      recipientKinds.set(normalized, kinds);
+    }
+  };
+
   if (unitIds.length > 0) {
     const { data: tenants, error: tenantsError } = await supabaseAdmin
       .from('tenants')
@@ -102,10 +112,9 @@ export async function emailAnnouncement(
       .in('unit_id', unitIds)
       .eq('status', 'active');
     if (tenantsError) throw tenantsError;
-    tenantEmails.push(...(tenants ?? []).map((tenant) => String(tenant.email ?? '')));
+    addRecipients((tenants ?? []).map((tenant) => String(tenant.email ?? '')), 'tenant');
   }
 
-  const staffEmails: string[] = [];
   if (property.organization_id) {
     const { data: assignments, error: assignmentsError } = await supabaseAdmin
       .from('property_staff_assignments')
@@ -115,7 +124,7 @@ export async function emailAnnouncement(
     for (const assignment of assignments ?? []) {
       const assignedStaff = Array.isArray(assignment.staff_members) ? assignment.staff_members[0] : assignment.staff_members;
       if (assignedStaff?.email && String(assignedStaff.role).toLowerCase() === 'maintenance') {
-        staffEmails.push(String(assignedStaff.email));
+        addRecipients([String(assignedStaff.email)], 'maintenance');
       }
     }
 
@@ -125,7 +134,7 @@ export async function emailAnnouncement(
       .eq('organization_id', property.organization_id)
       .ilike('role', 'owner');
     if (ownersError) throw ownersError;
-    staffEmails.push(...(owners ?? []).map((member) => String(member.email ?? '')));
+    addRecipients((owners ?? []).map((member) => String(member.email ?? '')), 'owner');
 
     const { data: organization, error: organizationError } = await supabaseAdmin
       .from('organizations')
@@ -133,13 +142,12 @@ export async function emailAnnouncement(
       .eq('id', property.organization_id)
       .maybeSingle();
     if (organizationError) throw organizationError;
-    if (organization?.owner_email) staffEmails.push(String(organization.owner_email));
+    if (organization?.owner_email) addRecipients([String(organization.owner_email)], 'owner');
   }
 
-  const recipients = [...new Set([...tenantEmails, ...staffEmails]
-    .map((email) => email.trim().toLowerCase())
-    .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))];
-  if (recipients.length === 0) return { attempted: 0, sent: 0, failed: 0 };
+  const recipients = [...recipientKinds.keys()];
+  const ownerAttempted = recipients.some((email) => recipientKinds.get(email)?.has('owner'));
+  if (recipients.length === 0) return { attempted: 0, accepted: 0, failed: 0, ownerAttempted, ownerAccepted: false };
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://landbaron.app').replace(/\/$/, '');
   const announcementUrl = `${siteUrl}/dashboard/properties/${property.id}/announcements`;
@@ -151,15 +159,53 @@ export async function emailAnnouncement(
   const imageText = imageUrls.map((url) => `\nImage: ${url}`).join('');
   const imageHtml = imageUrls.map((url) => `<p><a href="${escapeHtml(url)}">View attached image</a></p>`).join('');
   const resend = new Resend(apiKey);
-  const results = await Promise.allSettled(recipients.map((recipient) => resend.emails.send({
+  const emailContent = `${announcement.author_name} ${kind === 'post' ? 'posted an announcement' : 'replied to an announcement'} for ${property.name}.\n\n${announcement.body}${imageText}\n\nView announcements: ${announcementUrl}`;
+  const emailHtml = `<p><strong>${escapeHtml(announcement.author_name)}</strong> ${kind === 'post' ? 'posted an announcement' : 'replied to an announcement'} for <strong>${escapeHtml(property.name)}</strong>.</p><p>${escapeHtml(announcement.body).replace(/\n/g, '<br />')}</p>${imageHtml}<p><a href="${announcementUrl}">View announcements</a></p>`;
+  const messages = recipients.map((recipient) => ({
     from,
     to: recipient,
     replyTo: process.env.RESEND_REPLY_TO_EMAIL || undefined,
     subject,
-    text: `${announcement.author_name} ${kind === 'post' ? 'posted an announcement' : 'replied to an announcement'} for ${property.name}.\n\n${announcement.body}${imageText}\n\nView announcements: ${announcementUrl}`,
-    html: `<p><strong>${escapeHtml(announcement.author_name)}</strong> ${kind === 'post' ? 'posted an announcement' : 'replied to an announcement'} for <strong>${escapeHtml(property.name)}</strong>.</p><p>${escapeHtml(announcement.body).replace(/\n/g, '<br />')}</p>${imageHtml}<p><a href="${announcementUrl}">View announcements</a></p>`,
-  })));
+    text: emailContent,
+    html: emailHtml,
+  }));
 
-  const failed = results.filter((result) => result.status === 'rejected' || (result.status === 'fulfilled' && Boolean(result.value.error))).length;
-  return { attempted: recipients.length, sent: recipients.length - failed, failed };
+  let accepted = 0;
+  let failed = 0;
+  let ownerAccepted = false;
+  for (let offset = 0; offset < messages.length; offset += 100) {
+    const batch = messages.slice(offset, offset + 100);
+    const batchRecipients = recipients.slice(offset, offset + 100);
+    let response;
+    try {
+      response = await resend.batch.send(batch, { batchValidation: 'permissive' });
+    } catch (sendError) {
+      failed += batch.length;
+      console.error('Announcement email batch request failed:', sendError instanceof Error ? sendError.message : 'Unknown provider error');
+      continue;
+    }
+    const { data, error } = response;
+    if (error) {
+      failed += batch.length;
+      console.error('Announcement email batch rejected:', { name: error.name, message: error.message });
+      continue;
+    }
+
+    const invalidIndexes = new Set((data?.errors ?? []).map((item) => item.index));
+    for (const [index, recipient] of batchRecipients.entries()) {
+      const wasAccepted = !invalidIndexes.has(index) && Boolean(data?.data?.[index]?.id);
+      if (wasAccepted) accepted += 1;
+      else failed += 1;
+      if (recipientKinds.get(recipient)?.has('owner')) ownerAccepted = wasAccepted;
+    }
+
+    if (data?.errors?.length) {
+      console.error('Some announcement emails were rejected:', data.errors.map(({ index, message }) => ({
+        kind: [...(recipientKinds.get(batchRecipients[index]) ?? [])],
+        message,
+      })));
+    }
+  }
+
+  return { attempted: recipients.length, accepted, failed, ownerAttempted, ownerAccepted };
 }
