@@ -60,8 +60,45 @@ export async function PATCH(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
     if (user.role !== 'tenant') return NextResponse.json({ error: 'Tenant access only.' }, { status: 403 });
     const body = await request.json();
-    const avatarUrl = typeof body.avatar_url === 'string' ? body.avatar_url.trim() : null;
-    const { data, error } = await supabaseAdmin.from('tenants').update({ avatar_url: avatarUrl || null }).ilike('email', user.email).select().limit(1).maybeSingle();
+    const updates: Record<string, unknown> = {};
+
+    if (typeof body.avatar_url === 'string') {
+      updates.avatar_url = body.avatar_url.trim() || null;
+    }
+    if (typeof body.phone === 'string') {
+      const phone = body.phone.trim();
+      if (phone.length > 30) return NextResponse.json({ error: 'Phone number is too long.' }, { status: 400 });
+      updates.phone = phone || null;
+    }
+    if (typeof body.instagram_handle === 'string') {
+      const handle = body.instagram_handle.trim()
+        .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+        .replace(/^@/, '')
+        .replace(/\/+$/, '');
+      if (handle && !/^[A-Za-z0-9._]{1,30}$/.test(handle)) {
+        return NextResponse.json({ error: 'Instagram handle can only contain letters, numbers, periods, and underscores.' }, { status: 400 });
+      }
+      updates.instagram_handle = handle || null;
+    }
+    if (typeof body.share_contact_info === 'boolean') {
+      updates.share_contact_info = body.share_contact_info;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No changes were provided.' }, { status: 400 });
+    }
+
+    const { data: tenant, error: tenantError } = await supabaseAdmin
+      .from('tenants')
+      .select('id')
+      .ilike('email', user.email)
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle();
+    if (tenantError) throw tenantError;
+    if (!tenant) return NextResponse.json({ error: 'No active tenant record was found for this account.' }, { status: 404 });
+
+    const { data, error } = await supabaseAdmin.from('tenants').update(updates).eq('id', tenant.id).select().maybeSingle();
     if (error) throw error;
     return NextResponse.json({ ok: true, tenant: data });
   } catch (error) {

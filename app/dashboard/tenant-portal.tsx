@@ -9,7 +9,7 @@ import { Breadcrumbs } from './breadcrumbs';
 
 
 type PortalData = {
-  tenant: { id: string; unit_id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null };
+  tenant: { id: string; unit_id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null; instagram_handle?: string | null; share_contact_info?: boolean | null };
   unit: { unit_number: string; unit_photos?: Array<{ photo_url: string; caption?: string | null }> };
   property: { id: string; name: string; address: string; city?: string | null; state?: string | null; postal_code?: string | null };
   unitPhotos: Array<{ photo_url: string; caption?: string | null }>;
@@ -92,6 +92,9 @@ export function TenantPortal({ session }: { session: SessionUser }) {
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [tickets, setTickets] = useState<TenantTicket[]>([]);
   const [showArchivedTickets, setShowArchivedTickets] = useState(false);
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactDraft, setContactDraft] = useState({ phone: '', instagram_handle: '' });
+  const [savingContact, setSavingContact] = useState(false);
 
   const loadPortal = async () => {
     const auth = await supabase?.auth.getSession();
@@ -153,6 +156,28 @@ export function TenantPortal({ session }: { session: SessionUser }) {
     } finally {
       setAvatarUploading(false);
       event.target.value = '';
+    }
+  };
+
+  const updateContact = async (updates: { phone?: string; instagram_handle?: string; share_contact_info?: boolean }) => {
+    setSavingContact(true);
+    setError(null);
+    try {
+      const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+      const response = await fetch('/api/tenant-portal', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(updates),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Contact info could not be updated.');
+      setData((current) => (current && result.tenant ? { ...current, tenant: { ...current.tenant, ...result.tenant } } : current));
+      return true;
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Contact info could not be updated.');
+      return false;
+    } finally {
+      setSavingContact(false);
     }
   };
 
@@ -244,7 +269,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
             <h1 className="mt-2 text-3xl font-semibold">Welcome to the {data.property.name} Maintenance Portal</h1>
             <p className="mt-2 text-sm text-slate-600">File maintenance requests, share improvements, and stay connected with your maintenance team.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3"><button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button><button type="button" onClick={() => router.push(`/dashboard/properties/${data.property.id}/announcements`)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Announcements</button><button type="button" onClick={() => router.push('/dashboard/vendors')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/emergency-contacts')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</button></div>
+          <div className="flex flex-wrap items-center gap-3"><button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button><button type="button" onClick={() => router.push(`/dashboard/properties/${data.property.id}/announcements`)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Announcements</button><button type="button" onClick={() => router.push('/dashboard/vendors')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/emergency-contacts')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/directory')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Tenant Directory</button></div>
         </header>
 
         {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
@@ -256,7 +281,26 @@ export function TenantPortal({ session }: { session: SessionUser }) {
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-4"><div className="relative"><img src={avatar} alt={`${data.tenant.name} avatar`} className="h-32 w-32 rounded-full object-cover ring-4 ring-slate-100" /><label className="absolute bottom-0 right-0 cursor-pointer rounded-full bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">{avatarUploading ? '...' : 'Replace'}<input type="file" accept="image/*" onChange={uploadAvatar} className="hidden" /></label></div><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Your info</p><h2 className="mt-1 text-xl font-semibold">{data.tenant.name}</h2></div></div>
-            <dl className="mt-6 space-y-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-slate-500">Email</dt><dd>{data.tenant.email || session.email}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Phone</dt><dd>{data.tenant.phone || 'Not provided'}</dd></div></dl>
+            {editingContact ? (
+              <form
+                className="mt-6 space-y-3 text-sm"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (await updateContact(contactDraft)) setEditingContact(false);
+                }}
+              >
+                <div className="flex justify-between gap-4"><span className="text-slate-500">Email</span><span>{data.tenant.email || session.email}</span></div>
+                <label className="block"><span className="text-slate-500">Phone</span><input type="tel" maxLength={30} value={contactDraft.phone} onChange={(event) => setContactDraft({ ...contactDraft, phone: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" /></label>
+                <label className="block"><span className="text-slate-500">Instagram</span><div className="mt-1 flex items-center rounded-xl border border-slate-300 px-3"><span className="text-slate-400">@</span><input type="text" maxLength={30} value={contactDraft.instagram_handle} onChange={(event) => setContactDraft({ ...contactDraft, instagram_handle: event.target.value })} className="w-full py-2 pl-1 outline-none" /></div></label>
+                <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingContact(false)} className="rounded-xl border border-slate-300 px-3 py-1.5 font-medium">Cancel</button><button type="submit" disabled={savingContact} className="rounded-xl bg-slate-900 px-3 py-1.5 font-medium text-white disabled:opacity-60">{savingContact ? 'Saving...' : 'Save'}</button></div>
+              </form>
+            ) : (
+              <>
+                <dl className="mt-6 space-y-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-slate-500">Email</dt><dd>{data.tenant.email || session.email}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Phone</dt><dd>{data.tenant.phone || 'Not provided'}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Instagram</dt><dd>{data.tenant.instagram_handle ? <a href={`https://instagram.com/${encodeURIComponent(data.tenant.instagram_handle)}`} target="_blank" rel="noopener noreferrer" className="underline">@{data.tenant.instagram_handle}</a> : 'Not provided'}</dd></div></dl>
+                <div className="mt-3 flex justify-end"><button type="button" onClick={() => { setContactDraft({ phone: data.tenant.phone ?? '', instagram_handle: data.tenant.instagram_handle ?? '' }); setEditingContact(true); }} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm font-medium">Edit contact info</button></div>
+              </>
+            )}
+            <label className="mt-4 flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={data.tenant.share_contact_info === false} disabled={savingContact} onChange={(event) => void updateContact({ share_contact_info: !event.target.checked })} className="h-4 w-4" />Don&apos;t share my contact info with other tenants</label>
             {maintenanceContacts.length > 0 && <div className="mt-6 border-t border-slate-100 pt-5"><h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Maintenance Contacts</h2><div className="mt-4 space-y-4">{maintenanceContacts.map((person, index) => <div key={`${person.email}-${index}`} className="flex items-center gap-3"><img src={person.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(person.name)}&background=0f766e&color=fff`} alt="" className="h-12 w-12 rounded-full object-cover"/><div><p className="text-xs uppercase tracking-wider text-slate-500">{person.label}</p><p className="font-semibold">{person.name}</p>{person.phone_number && <p className="text-sm text-slate-600">{person.phone_number}</p>}{person.email && <a href={`mailto:${person.email}`} className="text-sm text-slate-600 underline">{person.email}</a>}</div></div>)}</div></div>}
           </div>
         </section>
