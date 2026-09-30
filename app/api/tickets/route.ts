@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketCreatedEmails } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getRequestOrganizationId } from '@/lib/organization-context';
+import { getTicketCreatorLabels } from '@/lib/ticket-creators';
 
 const parseReporterEmailFromDescription = (description?: string | null) => {
   if (!description) {
@@ -76,7 +77,15 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    const creatorLabels = await getTicketCreatorLabels(tickets.map((ticket) => ticket.created_by));
+
     const ticketsWithReporterNames = tickets.map((ticket) => {
+      const creatorLabel = ticket.created_by ? creatorLabels.get(ticket.created_by) : undefined;
+      if (creatorLabel) {
+        return { ...ticket, opened_by_label: creatorLabel };
+      }
+
+      // Legacy tickets without created_by fall back to the Email: line.
       const reporterEmail = parseReporterEmailFromDescription(ticket.description);
       const unitTenants = ticket.unit_id ? tenantsByUnit.get(ticket.unit_id) ?? [] : [];
       const openedByLabel = reporterEmail

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import type { SessionUser } from '@/lib/auth';
@@ -263,13 +264,21 @@ export function TenantPortal({ session }: { session: SessionUser }) {
   return (
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-6">
+        <header className="mb-8 border-b border-slate-200 pb-6">
           <div>
             <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }]} />
             <h1 className="mt-2 text-3xl font-semibold">Welcome to the {data.property.name} Maintenance Portal</h1>
             <p className="mt-2 text-sm text-slate-600">File maintenance requests, share improvements, and stay connected with your maintenance team.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3"><button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button><button type="button" onClick={() => router.push(`/dashboard/properties/${data.property.id}/announcements`)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Announcements</button><button type="button" onClick={() => router.push('/dashboard/vendors')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/emergency-contacts')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</button><button type="button" onClick={() => router.push('/dashboard/tenant-portal/directory')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Tenant Directory</button></div>
+          <nav aria-label="Tenant portal" className="mt-5 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button>
+            <Link href={`/dashboard/properties/${data.property.id}/announcements`} className="rounded-xl border border-slate-900 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Announcements</Link>
+            <div className="flex w-full flex-wrap gap-3">
+              <Link href="/dashboard/vendors" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</Link>
+              <Link href="/dashboard/tenant-portal/emergency-contacts" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</Link>
+              <Link href="/dashboard/tenant-portal/directory" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Tenant Directory</Link>
+            </div>
+          </nav>
         </header>
 
         {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketAssignmentEmail, sendTicketStatusChangeEmail } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getTicketCreatorLabels } from '@/lib/ticket-creators';
 
 const getDescriptionParts = (description?: string | null) => {
   if (!description) {
@@ -158,6 +159,10 @@ export async function GET(
 
         openedByLabel = tenant?.name ?? reporterEmail;
       }
+    }
+
+    if (data.created_by) {
+      openedByLabel = (await getTicketCreatorLabels([data.created_by])).get(data.created_by) ?? openedByLabel;
     }
 
     if (!openedByLabel && reporterEmail) {
