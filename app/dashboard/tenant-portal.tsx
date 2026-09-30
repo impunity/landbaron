@@ -272,7 +272,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
           </div>
           <nav aria-label="Tenant portal" className="mt-5 flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button>
-            <Link href={`/dashboard/properties/${data.property.id}/announcements`} className="rounded-xl border border-slate-900 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Announcements</Link>
+            <Link href={`/dashboard/properties/${data.property.id}/announcements`} className="rounded-xl border border-slate-900 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Announcements/Discussions</Link>
             <div className="flex w-full flex-wrap gap-3">
               <Link href="/dashboard/vendors" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</Link>
               <Link href="/dashboard/tenant-portal/emergency-contacts" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</Link>

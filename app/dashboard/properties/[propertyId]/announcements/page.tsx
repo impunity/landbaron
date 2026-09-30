@@ -234,9 +234,9 @@ export default function PropertyAnnouncementsPage() {
             <Breadcrumbs items={[
               { label: 'Dashboard', href: '/dashboard' },
               { label: data?.property.name || 'Property', href: `/dashboard/properties/${propertyId}` },
-              { label: 'Announcements', href: `/dashboard/properties/${propertyId}/announcements` },
+              { label: 'Announcements/Discussions', href: `/dashboard/properties/${propertyId}/announcements` },
             ]} />
-            <h1 className="mt-2 text-2xl font-semibold">Property announcements</h1>
+            <h1 className="mt-2 text-2xl font-semibold">Announcements/Discussions</h1>
             <p className="mt-1 text-sm text-slate-600">{data?.property.name}{data?.property.address ? ` · ${data.property.address}` : ''}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

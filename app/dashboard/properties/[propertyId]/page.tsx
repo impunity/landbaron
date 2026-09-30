@@ -521,7 +521,7 @@ export default function PropertyDetailPage() {
               onClick={() => router.push(`/dashboard/properties/${propertyId}/announcements`)}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Announcements
+              Announcements/Discussions
             </button>
             <button
               type="button"
