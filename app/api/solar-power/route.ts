@@ -157,7 +157,7 @@ async function getSolarJson(siteId: string, accessToken: string, from: LocalTime
   return await response.json() as Record<string, unknown>;
 }
 
-function pointsToChart(points: EnergyPoint[], from: LocalTime, to: LocalTime, previousFrom: LocalTime, previousTo: LocalTime, range: string, intervalHours: number) {
+function pointsToChart(points: EnergyPoint[], from: LocalTime, to: LocalTime, previousFrom: LocalTime, previousTo: LocalTime, range: string, intervalHours: number | ((point: EnergyPoint) => number)) {
   const rows = new Map<number, { slot: number; currentKw: number | null; previousKw: number | null }>();
   const currentStart = localOrdinal(from);
   const previousStart = localOrdinal(previousFrom);
@@ -185,7 +185,8 @@ function pointsToChart(points: EnergyPoint[], from: LocalTime, to: LocalTime, pr
     if (slot < 0 || (range === 'day' && slot > 24) || (range === 'week' && slot > 168) || (range === 'month' && slot > 32) || (range === 'year' && slot > 12)) continue;
     const key = Math.round(slot * 4) / 4;
     const row = rows.get(key) ?? { slot: key, currentKw: null, previousKw: null };
-    const kw = point.kwh / intervalHours;
+    const durationHours = typeof intervalHours === 'function' ? intervalHours(point) : intervalHours;
+    const kw = point.kwh / durationHours;
     if (isPrevious) row.previousKw = (row.previousKw ?? 0) + kw;
     else row.currentKw = (row.currentKw ?? 0) + kw;
     rows.set(key, row);
@@ -264,7 +265,6 @@ export async function GET(request: NextRequest) {
         const now = getLocalTime(new Date());
         const today = { ...now, hour: 0, minute: 0, second: 0 };
         const yesterday = shiftLocalDays(today, -1);
-        const dayBeforeYesterday = shiftLocalDays(today, -2);
         const weekDay = new Date(Date.UTC(now.year, now.month - 1, now.day)).getUTCDay();
         const mondayOffset = (weekDay + 6) % 7;
         const weekStart = shiftLocalDays(today, -mondayOffset);
@@ -278,20 +278,26 @@ export async function GET(request: NextRequest) {
         const monthSameTime = shiftLocalMonths(now, -1);
         const yearSameTime = { ...now, year: now.month === 2 && now.day === 29 ? now.year - 1 : now.year - 1, day: now.month === 2 && now.day === 29 ? 28 : now.day };
 
-        const [dayPayload, weekPayload, historyPayload] = await Promise.all([
-          getSolarJson(integration.site_id, accessToken, dayBeforeYesterday, now, 'QUARTER_HOUR'),
-          getSolarJson(integration.site_id, accessToken, previousWeek, now, 'DAY'),
-          getSolarJson(integration.site_id, accessToken, previousYear, now, 'DAY'),
+        const [dayPayload, monthCurrentPayload, monthPreviousPayload, yearCurrentPayload, yearPreviousPayload] = await Promise.all([
+          getSolarJson(integration.site_id, accessToken, previousWeek, now, 'QUARTER_HOUR'),
+          getSolarJson(integration.site_id, accessToken, monthStart, now, 'DAY'),
+          getSolarJson(integration.site_id, accessToken, previousMonth, monthSameTime, 'DAY'),
+          getSolarJson(integration.site_id, accessToken, yearStart, now, 'MONTH'),
+          getSolarJson(integration.site_id, accessToken, previousYear, yearSameTime, 'MONTH'),
         ]);
 
         const dayPoints = energyPoints(dayPayload);
-        const weekPoints = energyPoints(weekPayload);
-        const historyPoints = energyPoints(historyPayload);
+        const monthCurrentPoints = energyPoints(monthCurrentPayload);
+        const monthPreviousPoints = energyPoints(monthPreviousPayload);
+        const monthPoints = [...monthCurrentPoints, ...monthPreviousPoints];
+        const yearCurrentPoints = energyPoints(yearCurrentPayload);
+        const yearPreviousPoints = energyPoints(yearPreviousPayload);
+        const yearPoints = [...yearCurrentPoints, ...yearPreviousPoints];
         const dayMetric = comparison(dayPoints, today, now, yesterday, yesterdaySameTime, dayPoints);
-        const weekMetric = comparison(weekPoints, weekStart, now, previousWeek, weekSameTime, weekPoints);
-        const monthMetric = comparison(historyPoints, monthStart, now, previousMonth, monthSameTime);
-        const yearMetric = comparison(historyPoints, yearStart, now, previousYear, yearSameTime);
-        const yesterdayMetric = comparison(dayPoints, yesterday, yesterdaySameTime, dayBeforeYesterday, shiftLocalDays(yesterdaySameTime, -1), dayPoints);
+        const weekMetric = comparison(dayPoints, weekStart, now, previousWeek, weekSameTime, dayPoints);
+        const monthMetric = comparison(monthPoints, monthStart, now, previousMonth, monthSameTime);
+        const yearMetric = comparison(yearPoints, yearStart, now, previousYear, yearSameTime);
+        const yesterdayMetric = comparison(dayPoints, yesterday, yesterdaySameTime, shiftLocalDays(yesterday, -1), shiftLocalDays(yesterdaySameTime, -1), dayPoints);
         const periods: Record<string, PeriodComparison> = {
           today: dayMetric,
           yesterday: yesterdayMetric,
@@ -307,9 +313,9 @@ export async function GET(request: NextRequest) {
 
         const charts = {
           day: pointsToChart(dayPoints, today, now, yesterday, yesterdaySameTime, 'day', 0.25),
-          week: pointsToChart(weekPoints, weekStart, now, previousWeek, weekSameTime, 'week', 24),
-          month: pointsToChart(historyPoints, monthStart, now, previousMonth, monthSameTime, 'month', 24),
-          year: pointsToChart(historyPoints, yearStart, now, previousYear, yearSameTime, 'year', 24),
+          week: pointsToChart(dayPoints, weekStart, now, previousWeek, weekSameTime, 'week', 0.25),
+          month: pointsToChart(monthPoints, monthStart, now, previousMonth, monthSameTime, 'month', 24),
+          year: pointsToChart(yearPoints, yearStart, now, previousYear, yearSameTime, 'year', (point) => new Date(Date.UTC(point.time.year, point.time.month, 0)).getUTCDate() * 24),
         };
 
         return {
