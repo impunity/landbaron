@@ -12,10 +12,13 @@ type Unit = { id: string; unit_number: string };
 type Lock = { id: string; unit_id: string | null; door: string; code: string; programming_code: string };
 type Garage = { id: string; unit_id: string | null; garage_id: string; code: string; programming_code: string; garage_rent: number | null };
 type PageData = { properties: Property[]; property: Property | null; units: Unit[]; locks: Lock[]; garages: Garage[]; canManageGarages: boolean };
-type Editor = { kind: 'lock' | 'garage'; id: string | null; unitId: string | null };
-type Draft = { door: string; code: string; programmingCode: string; garageId: string; garageRent: string; unitId: string };
+type LockGroup = 'entrance' | 'other';
+type Editor = { kind: 'lock' | 'garage'; id: string | null; unitId: string | null; lockGroup: LockGroup | null };
+type Draft = { door: string; otherDoor: string; code: string; programmingCode: string; garageId: string; garageRent: string; unitId: string };
 
-const emptyDraft = (unitId: string | null): Draft => ({ door: '', code: '', programmingCode: '', garageId: '', garageRent: '', unitId: unitId ?? '' });
+const entranceDoors = ['Front Door', 'Back Door', 'Side Door', 'Gate'];
+const otherLockTypes = ['Laundry Room', 'Trash Area', 'Utility Closet'];
+const emptyDraft = (unitId: string | null, lockGroup: LockGroup = 'entrance'): Draft => ({ door: lockGroup === 'other' ? otherLockTypes[0] : entranceDoors[0], otherDoor: '', code: '', programmingCode: '', garageId: '', garageRent: '', unitId: unitId ?? '' });
 const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600';
 
 export default function DoorCodesPage() {
@@ -58,15 +61,17 @@ export default function DoorCodesPage() {
     })();
   }, []);
 
-  function startLock(unitId: string | null, lock?: Lock) {
+  function startLock(unitId: string | null, lockGroup: LockGroup, lock?: Lock) {
     setError('');
-    setEditor({ kind: 'lock', id: lock?.id ?? null, unitId });
-    setDraft({ ...emptyDraft(unitId), door: lock?.door ?? '', code: lock?.code ?? '', programmingCode: lock?.programming_code ?? '' });
+    const options = lockGroup === 'other' ? otherLockTypes : entranceDoors;
+    const selectedDoor = options.find((option) => option.toLowerCase() === lock?.door.toLowerCase());
+    setEditor({ kind: 'lock', id: lock?.id ?? null, unitId, lockGroup });
+    setDraft({ ...emptyDraft(unitId, lockGroup), door: selectedDoor ?? 'Other', otherDoor: selectedDoor ? '' : lock?.door ?? '', code: lock?.code ?? '', programmingCode: lock?.programming_code ?? '' });
   }
 
   function startGarage(garage?: Garage) {
     setError('');
-    setEditor({ kind: 'garage', id: garage?.id ?? null, unitId: garage?.unit_id ?? null });
+    setEditor({ kind: 'garage', id: garage?.id ?? null, unitId: garage?.unit_id ?? null, lockGroup: null });
     setDraft({ ...emptyDraft(garage?.unit_id ?? null), garageId: garage?.garage_id ?? '', garageRent: garage?.garage_rent?.toString() ?? '', code: garage?.code ?? '', programmingCode: garage?.programming_code ?? '' });
   }
 
@@ -82,7 +87,7 @@ export default function DoorCodesPage() {
     const response = await fetch(`/api/door-codes${params.size ? `?${params}` : ''}`, {
       method,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      ...(payload ? { body: JSON.stringify({ propertyId, kind, unitId: payload.unitId || null, door: payload.door, code: payload.code, programmingCode: payload.programmingCode, garageId: payload.garageId, garageRent: payload.garageRent }) } : {}),
+      ...(payload ? { body: JSON.stringify({ propertyId, kind, unitId: payload.unitId || null, door: payload.door === 'Other' ? payload.otherDoor : payload.door, code: payload.code, programmingCode: payload.programmingCode, garageId: payload.garageId, garageRent: payload.garageRent }) } : {}),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || 'Changes could not be saved.');
@@ -128,33 +133,35 @@ export default function DoorCodesPage() {
     ))
   );
 
-  const lockForm = (unitId: string | null) => editor?.kind === 'lock' && editor.unitId === unitId ? (
+  const lockForm = (unitId: string | null, lockGroup: LockGroup) => editor?.kind === 'lock' && editor.unitId === unitId && editor.lockGroup === lockGroup ? (
     <form onSubmit={(event) => void save(event)} className="mt-3 grid gap-3 rounded-md border border-teal-200 bg-teal-50/50 p-4 sm:grid-cols-3">
-      <label className="text-xs font-semibold text-slate-600">Door<input className={`mt-1 ${inputClass}`} required maxLength={100} list="door-names" value={draft.door} onChange={(event) => setDraft({ ...draft, door: event.target.value })} placeholder="Front door" /></label>
+      <label className="text-xs font-semibold text-slate-600">{lockGroup === 'other' ? 'Lock type' : 'Door'}<select className={`mt-1 ${inputClass}`} required value={draft.door} onChange={(event) => setDraft({ ...draft, door: event.target.value, otherDoor: event.target.value === 'Other' ? draft.otherDoor : '' })}>{(lockGroup === 'other' ? otherLockTypes : entranceDoors).map((option) => <option key={option} value={option}>{option}</option>)}<option value="Other">Other (fill in blank)</option></select></label>
+      {draft.door === 'Other' && <label className="text-xs font-semibold text-slate-600">{lockGroup === 'other' ? 'Other lock name' : 'Other door name'}<input className={`mt-1 ${inputClass}`} required maxLength={100} value={draft.otherDoor} onChange={(event) => setDraft({ ...draft, otherDoor: event.target.value })} /></label>}
       <label className="text-xs font-semibold text-slate-600">Code<input className={`mt-1 ${inputClass}`} maxLength={100} autoComplete="off" value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} /></label>
       <label className="text-xs font-semibold text-slate-600">Programming Code<input className={`mt-1 ${inputClass}`} maxLength={100} autoComplete="off" value={draft.programmingCode} onChange={(event) => setDraft({ ...draft, programmingCode: event.target.value })} /></label>
-      <datalist id="door-names"><option value="Front door" /><option value="Back door" /></datalist>
       <div className="flex gap-2 sm:col-span-3"><button type="submit" disabled={saving} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save lock'}</button><button type="button" onClick={() => setEditor(null)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm">Cancel</button></div>
     </form>
   ) : null;
 
-  const lockSection = (title: string, unitId: string | null) => {
-    const locks = data?.locks.filter((lock) => lock.unit_id === unitId) ?? [];
+  const lockSection = (title: string, unitId: string | null, lockGroup: LockGroup) => {
+    const isEntrance = (door: string) => entranceDoors.some((option) => option.toLowerCase() === door.toLowerCase());
+    const locks = data?.locks.filter((lock) => lock.unit_id === unitId && (unitId !== null || (lockGroup === 'entrance' ? isEntrance(lock.door) : !isEntrance(lock.door)))) ?? [];
     return (
-      <section key={unitId ?? 'property'} className="border-b border-slate-200 py-5 last:border-0">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900">{title}</h3><button type="button" onClick={() => startLock(unitId)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"><Plus size={15} />Add Lock</button></div>
+      <section key={unitId ?? lockGroup} className="border-b border-slate-200 py-5 last:border-0">
+        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900">{title}</h3><button type="button" onClick={() => startLock(unitId, lockGroup)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"><Plus size={15} />Add Lock</button></div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {['Front door', 'Back door'].map((door) => locks.some((lock) => lock.door.toLowerCase() === door.toLowerCase()) ? null : (
+          {lockGroup === 'entrance' && entranceDoors.map((door) => locks.some((lock) => lock.door.toLowerCase() === door.toLowerCase()) ? null : (
             <div key={door} className="rounded-md border border-dashed border-slate-200 px-3 py-3 text-sm text-slate-500">{door} · No lock added</div>
           ))}
+          {lockGroup === 'other' && locks.length === 0 && <p className="py-2 text-sm text-slate-500">No other locks added.</p>}
           {locks.map((lock) => (
             <div key={lock.id} className="min-w-0 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-              <div className="flex items-center justify-between gap-2"><p className="font-semibold">{lock.door}</p><div className="flex gap-2"><button type="button" onClick={() => startLock(unitId, lock)} className="text-xs font-medium text-teal-800 underline">Edit</button><button type="button" disabled={saving} onClick={() => void remove('lock', lock.id)} title="Remove lock" aria-label={`Remove ${lock.door}`} className="text-rose-700"><Trash2 size={16} /></button></div></div>
+              <div className="flex items-center justify-between gap-2"><p className="font-semibold">{lock.door}</p><div className="flex gap-2"><button type="button" onClick={() => startLock(unitId, lockGroup, lock)} className="text-xs font-medium text-teal-800 underline">Edit</button><button type="button" disabled={saving} onClick={() => void remove('lock', lock.id)} title="Remove lock" aria-label={`Remove ${lock.door}`} className="text-rose-700"><Trash2 size={16} /></button></div></div>
               {codeFields(lock)}
             </div>
           ))}
         </div>
-        {lockForm(unitId)}
+        {lockForm(unitId, lockGroup)}
       </section>
     );
   };
@@ -177,8 +184,9 @@ export default function DoorCodesPage() {
               <>
                 <section className="mt-7 border-t border-slate-300 bg-white px-5 py-2 sm:px-6">
                   <h2 className="pt-4 text-lg font-semibold">Doors & Locks</h2>
-                  {lockSection('Property entrances', null)}
-                  {data.units.map((unit) => lockSection(`Unit ${unit.unit_number}`, unit.id))}
+                  {lockSection('Property entrances', null, 'entrance')}
+                  {lockSection('Other Locks', null, 'other')}
+                  {data.units.map((unit) => lockSection(`Unit ${unit.unit_number}`, unit.id, 'entrance'))}
                 </section>
                 <section className="mt-7 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
                   <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Garage Codes</h2><p className="text-sm text-slate-500">Each garage can be assigned to one unit; units may have multiple garages.</p></div>{data.canManageGarages && <button type="button" onClick={() => startGarage()} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50"><Plus size={16} />Add Garage</button>}</div>
