@@ -265,6 +265,7 @@ export async function GET(request: NextRequest) {
         const now = getLocalTime(new Date());
         const today = { ...now, hour: 0, minute: 0, second: 0 };
         const yesterday = shiftLocalDays(today, -1);
+        const dayBeforeYesterday = shiftLocalDays(today, -2);
         const weekDay = new Date(Date.UTC(now.year, now.month - 1, now.day)).getUTCDay();
         const mondayOffset = (weekDay + 6) % 7;
         const weekStart = shiftLocalDays(today, -mondayOffset);
@@ -278,8 +279,9 @@ export async function GET(request: NextRequest) {
         const monthSameTime = shiftLocalMonths(now, -1);
         const yearSameTime = { ...now, year: now.month === 2 && now.day === 29 ? now.year - 1 : now.year - 1, day: now.month === 2 && now.day === 29 ? 28 : now.day };
 
-        const [dayPayload, monthCurrentPayload, monthPreviousPayload, yearCurrentPayload, yearPreviousPayload] = await Promise.all([
-          getSolarJson(integration.site_id, accessToken, previousWeek, now, 'QUARTER_HOUR'),
+        const [dayPayload, weekPayload, monthCurrentPayload, monthPreviousPayload, yearCurrentPayload, yearPreviousPayload] = await Promise.all([
+          getSolarJson(integration.site_id, accessToken, dayBeforeYesterday, now, 'QUARTER_HOUR'),
+          getSolarJson(integration.site_id, accessToken, previousWeek, now, 'DAY'),
           getSolarJson(integration.site_id, accessToken, monthStart, now, 'DAY'),
           getSolarJson(integration.site_id, accessToken, previousMonth, monthSameTime, 'DAY'),
           getSolarJson(integration.site_id, accessToken, yearStart, now, 'MONTH'),
@@ -287,6 +289,7 @@ export async function GET(request: NextRequest) {
         ]);
 
         const dayPoints = energyPoints(dayPayload);
+        const weekPoints = energyPoints(weekPayload);
         const monthCurrentPoints = energyPoints(monthCurrentPayload);
         const monthPreviousPoints = energyPoints(monthPreviousPayload);
         const monthPoints = [...monthCurrentPoints, ...monthPreviousPoints];
@@ -294,7 +297,7 @@ export async function GET(request: NextRequest) {
         const yearPreviousPoints = energyPoints(yearPreviousPayload);
         const yearPoints = [...yearCurrentPoints, ...yearPreviousPoints];
         const dayMetric = comparison(dayPoints, today, now, yesterday, yesterdaySameTime, dayPoints);
-        const weekMetric = comparison(dayPoints, weekStart, now, previousWeek, weekSameTime, dayPoints);
+        const weekMetric = comparison(weekPoints, weekStart, now, previousWeek, weekSameTime, weekPoints);
         const monthMetric = comparison(monthPoints, monthStart, now, previousMonth, monthSameTime);
         const yearMetric = comparison(yearPoints, yearStart, now, previousYear, yearSameTime);
         const yesterdayMetric = comparison(dayPoints, yesterday, yesterdaySameTime, shiftLocalDays(yesterday, -1), shiftLocalDays(yesterdaySameTime, -1), dayPoints);
@@ -313,7 +316,7 @@ export async function GET(request: NextRequest) {
 
         const charts = {
           day: pointsToChart(dayPoints, today, now, yesterday, yesterdaySameTime, 'day', 0.25),
-          week: pointsToChart(dayPoints, weekStart, now, previousWeek, weekSameTime, 'week', 0.25),
+          week: pointsToChart(weekPoints, weekStart, now, previousWeek, weekSameTime, 'week', 24),
           month: pointsToChart(monthPoints, monthStart, now, previousMonth, monthSameTime, 'month', 24),
           year: pointsToChart(yearPoints, yearStart, now, previousYear, yearSameTime, 'year', (point) => new Date(Date.UTC(point.time.year, point.time.month, 0)).getUTCDate() * 24),
         };
