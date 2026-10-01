@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
 
     const property = Array.isArray(unit.properties) ? unit.properties[0] : unit.properties;
     if (!property) return NextResponse.json({ error: 'No property was found for this tenant.' }, { status: 404 });
+    const { data: solarIntegration, error: solarIntegrationError } = await supabaseAdmin.from('property_solar_integrations')
+      .select('enabled').eq('property_id', property.id).maybeSingle();
+    if (solarIntegrationError) throw solarIntegrationError;
     const assignments = property?.property_staff_assignments ?? [];
     const staff = assignments.map((assignment: Record<string, unknown>) => ({
       ...(Array.isArray(assignment.staff_members) ? assignment.staff_members[0] : assignment.staff_members) as Record<string, unknown>,
@@ -40,7 +43,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       tenant,
       unit,
-      property,
+      property: { ...property, solar_enabled: solarIntegration?.enabled ?? false },
       unitPhotos: unit.unit_photos ?? [],
       improvements: improvements ?? [],
       primaryStaff: staff.filter((member: { assignment_type?: string }) => member.assignment_type === 'primary'),

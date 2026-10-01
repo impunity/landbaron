@@ -242,8 +242,29 @@ export async function GET(request: NextRequest) {
     const organizationId = await getRequestOrganizationId(user);
     if (!organizationId) return NextResponse.json({ properties: [] });
 
-    const { data: properties, error: propertiesError } = await supabaseAdmin.from('properties')
-      .select('id, name').eq('organization_id', organizationId).order('name');
+    const requestedPropertyId = request.nextUrl.searchParams.get('propertyId');
+    let tenantPropertyId: string | null = null;
+    if (user.role === 'tenant') {
+      const { data: tenant, error: tenantError } = await supabaseAdmin.from('tenants')
+        .select('unit_id').ilike('email', user.email).eq('status', 'active').limit(1).maybeSingle();
+      if (tenantError) throw tenantError;
+      if (tenant?.unit_id) {
+        const { data: unit, error: unitError } = await supabaseAdmin.from('units')
+          .select('property_id').eq('id', tenant.unit_id).maybeSingle();
+        if (unitError) throw unitError;
+        tenantPropertyId = unit?.property_id ?? null;
+      }
+      if (!tenantPropertyId) return NextResponse.json({ properties: [] });
+      if (requestedPropertyId && requestedPropertyId !== tenantPropertyId) {
+        return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+      }
+    }
+
+    let propertiesQuery = supabaseAdmin.from('properties').select('id, name')
+      .eq('organization_id', organizationId).order('name');
+    const propertyFilter = tenantPropertyId ?? requestedPropertyId;
+    if (propertyFilter) propertiesQuery = propertiesQuery.eq('id', propertyFilter);
+    const { data: properties, error: propertiesError } = await propertiesQuery;
     if (propertiesError) throw propertiesError;
     const propertyIds = (properties ?? []).map((property) => property.id);
     if (!propertyIds.length) return NextResponse.json({ properties: [] });
@@ -330,7 +351,7 @@ export async function GET(request: NextRequest) {
           periods,
           charts,
           blendedRate: BLENDED_DAYTIME_RATE,
-          rateNote: `Approximate SDG&E avoided-cost estimate using illustrative time-of-use rates ($0.42/kWh daytime, $0.58/kWh 4-9 PM, $0.33/kWh overnight; daily/monthly/yearly summaries use a $${BLENDED_DAYTIME_RATE.toFixed(2)}/kWh daytime blend). Actual tariff and NEM export credits vary; this is not a bill calculation.`,
+          rateNote: 'Approximate SDG&E avoided-cost estimate using illustrative time-of-use rates (42 cents/kWh daytime, 58 cents/kWh 4-9 PM, 33 cents/kWh overnight; longer-period summaries use a 44 cents/kWh blend). Actual tariff and NEM export credits vary; this is not a bill calculation.',
         };
       } catch (error) {
         console.error(`SolarEdge data load failed for property ${property.id}:`, error instanceof Error ? error.message : 'Unknown error', error instanceof SolarEdgeHttpError ? error.providerMessage : '');

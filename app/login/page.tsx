@@ -176,7 +176,7 @@ export default function LoginPage() {
           />
         </div>
         <p className="text-4xl font-bold tracking-[0.12em] text-slate-950 sm:text-5xl">LANDBARON</p>
-        <p className="mt-2 text-sm font-medium text-slate-600">Support Ticketing for Small Landlords</p>
+        <p className="mt-2 text-sm font-medium text-slate-600">Maintenance Tracking for Awesome Tenants and Landlords that don&apos;t suck.</p>
       </div>
 
       {unrecognizedUser && (
@@ -222,7 +222,7 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-semibold text-slate-900">Sign in</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Use your Google or Apple account to access the maintenance workspace.
+            Your email will be recognized if you&apos;re in the system. If not, you&apos;ll be able to create an account super fast.
           </p>
         </div>
 

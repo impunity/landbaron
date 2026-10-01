@@ -6,6 +6,7 @@ import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, X
 import { ArrowDownRight, ArrowUpRight, Minus, RefreshCw } from 'lucide-react';
 
 import { fetchUserRole, type UserRole } from '@/lib/auth';
+import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
@@ -65,7 +66,6 @@ const connectionFailureMessages: Record<string, string> = {
 
 const formatEnergy = (value: number) => `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} kWh`;
 const formatPower = (value: number) => `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)} kW`;
-const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value);
 
 function formatSlot(value: number, range: ChartRange) {
   if (range === 'day') {
@@ -113,8 +113,9 @@ function PeriodCard({ label, period }: { label: string; period: PeriodComparison
   );
 }
 
-async function fetchSolarProperties(accessToken: string): Promise<SolarProperty[]> {
-  const response = await fetch('/api/solar-power', {
+async function fetchSolarProperties(accessToken: string, propertyId?: string): Promise<SolarProperty[]> {
+  const query = propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : '';
+  const response = await fetch(`/api/solar-power${query}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
   });
@@ -126,6 +127,7 @@ async function fetchSolarProperties(accessToken: string): Promise<SolarProperty[
 export default function SolarPowerPage() {
   const router = useRouter();
   const [role, setRole] = useState<UserRole | null>(null);
+  const [propertyId, setPropertyId] = useState('');
   const [properties, setProperties] = useState<SolarProperty[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -143,13 +145,15 @@ export default function SolarPowerPage() {
           return;
         }
         setRole(await fetchUserRole(session.user.email, client));
+        const requestedPropertyId = new URLSearchParams(window.location.search).get('propertyId') ?? '';
+        setPropertyId(requestedPropertyId);
         const connection = new URLSearchParams(window.location.search).get('connection');
         if (connection === 'connected') setNotice('SolarEdge connected successfully.');
         if (connection === 'failed') {
           const reason = new URLSearchParams(window.location.search).get('connectionReason') ?? '';
           setError(`SolarEdge connection failed: ${connectionFailureMessages[reason] ?? 'Check credentials and registered callback URL in Settings.'}`);
         }
-        setProperties(await fetchSolarProperties(session.access_token));
+        setProperties(await fetchSolarProperties(session.access_token, requestedPropertyId || undefined));
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Solar power data could not be loaded.');
       } finally {
@@ -164,7 +168,7 @@ export default function SolarPowerPage() {
     try {
       const accessToken = (await supabase?.auth.getSession())?.data.session?.access_token;
       if (!accessToken) throw new Error('Sign in is required.');
-      setProperties(await fetchSolarProperties(accessToken));
+      setProperties(await fetchSolarProperties(accessToken, propertyId || undefined));
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : 'Solar power data could not be refreshed.');
     } finally {

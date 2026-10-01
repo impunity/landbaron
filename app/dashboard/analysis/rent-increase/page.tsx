@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { getUnitTotalRent } from '@/lib/rent';
+import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
@@ -41,9 +42,6 @@ type Property = {
 // California AB 1482 caps annual increases at 5% + local CPI, up to a 10% ceiling.
 // We default to that statewide ceiling and let the owner/manager dial it down per their local CPI.
 const DEFAULT_MAX_INCREASE_PERCENT = 10;
-
-const formatCurrency = (value: number) =>
-  value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
 const getUnitThumbnail = (unit: UnitSummary) => {
   const sorted = [...(unit.unit_photos ?? [])].sort(

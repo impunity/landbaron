@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { getUnitTotalRent } from '@/lib/rent';
+import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
@@ -581,7 +582,7 @@ export default function PropertyDetailPage() {
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-center">
                   <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Total Rent</p>
                   <p className="mt-1 text-2xl font-bold text-emerald-900">
-                    ${(property.units ?? []).reduce((sum, unit) => sum + getUnitTotalRent(unit), 0).toLocaleString()}
+                    {formatCurrency((property.units ?? []).reduce((sum, unit) => sum + getUnitTotalRent(unit), 0))}
                   </p>
                   <p className="text-[10px] text-emerald-700">per month</p>
                 </div>
@@ -616,7 +617,7 @@ export default function PropertyDetailPage() {
                 <ul className="mt-2 space-y-1">
                   {(property.property_income_sources ?? []).map((income) => (
                     <li key={income.id} className="flex items-center justify-between text-sm text-slate-700">
-                      <span>{income.label}: ${Number(income.amount).toLocaleString()}/mo</span>
+                      <span>{income.label}: {formatCurrency(Number(income.amount))}/mo</span>
                       <button
                         type="button"
                         onClick={() => void handleRemoveIncome(income.id)}
@@ -808,22 +809,22 @@ export default function PropertyDetailPage() {
                                 <p className="text-[11px] font-medium text-slate-500">Actual Rent</p>
                                 <p className="text-sm font-bold text-slate-900">
                                   {unit.rent_amount !== null && unit.rent_amount !== undefined
-                                    ? `$${getUnitTotalRent(unit).toLocaleString()}/mo`
+                                    ? `${formatCurrency(getUnitTotalRent(unit))}/mo`
                                     : 'Not set'}
                                 </p>
                                 {unit.has_garage && unit.garage_rent ? (
                                   <p className="text-[10px] text-slate-500">
-                                    Existing garage rent: ${Number(unit.garage_rent).toLocaleString()}/mo
+                                    Existing garage rent: {formatCurrency(Number(unit.garage_rent))}/mo
                                   </p>
                                 ) : null}
                                 {unit.garages?.filter((garage) => garage.garage_rent != null).map((garage) => (
-                                  <p key={garage.id} className="text-[10px] text-slate-500">{garage.garage_id}: ${Number(garage.garage_rent).toLocaleString()}/mo</p>
+                                  <p key={garage.id} className="text-[10px] text-slate-500">{garage.garage_id}: {formatCurrency(Number(garage.garage_rent))}/mo</p>
                                 ))}
                               </div>
                               <div>
                                 <p className="text-[11px] font-medium text-slate-500">Est. Market Rent</p>
                                 <p className="text-sm font-bold text-indigo-700">
-                                  ~${marketComp.estimatedRent.toLocaleString()}/mo
+                                  ~{formatCurrency(marketComp.estimatedRent)}/mo
                                 </p>
                               </div>
                             </div>

@@ -13,7 +13,7 @@ import { AnnouncementsNavButton } from './announcements-nav-button';
 type PortalData = {
   tenant: { id: string; unit_id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null; instagram_handle?: string | null; share_contact_info?: boolean | null };
   unit: { unit_number: string; unit_photos?: Array<{ photo_url: string; caption?: string | null }> };
-  property: { id: string; name: string; address: string; city?: string | null; state?: string | null; postal_code?: string | null };
+  property: { id: string; name: string; address: string; city?: string | null; state?: string | null; postal_code?: string | null; solar_enabled?: boolean };
   unitPhotos: Array<{ photo_url: string; caption?: string | null }>;
   improvements: Array<{ id: string; photo_url: string; caption?: string | null; created_at: string }>;
   primaryStaff: Array<{ name: string; email?: string | null; phone_number?: string | null; avatar_url?: string | null }>;
@@ -274,10 +274,11 @@ export function TenantPortal({ session }: { session: SessionUser }) {
           <nav aria-label="Tenant portal" className="mt-5 flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button>
             <AnnouncementsNavButton propertyId={data.property.id} />
-            <div className="flex w-full flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3">
               <Link href="/dashboard/vendors" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</Link>
               <Link href="/dashboard/tenant-portal/emergency-contacts" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</Link>
               <Link href="/dashboard/tenant-portal/directory" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Tenant Directory</Link>
+              {data.property.solar_enabled && <Link href={`/dashboard/solar-power?propertyId=${encodeURIComponent(data.property.id)}`} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Solar Power</Link>}
             </div>
           </nav>
         </header>

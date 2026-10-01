@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
+import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
@@ -930,7 +931,7 @@ export default function TicketDetailPage() {
                   </div>
                   <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm">
                     <span className="font-medium text-slate-600">Total</span>
-                    <span className="font-semibold text-slate-900">${(Number(laborCost || 0) + Number(materialsCost || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(Number(laborCost || 0) + Number(materialsCost || 0))}</span>
                   </div>
                   <button type="button" onClick={() => void handleTicketUpdate({ labor_cost: laborCost ? Number(laborCost) : null, materials_cost: materialsCost ? Number(materialsCost) : null })} disabled={detailSaving} className="mt-3 w-full rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Save costs</button>
                 </div>

@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { getUnitTotalRent } from '@/lib/rent';
+import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../../../../breadcrumbs';
 import { DashboardNavButtons } from '../../../../nav-buttons';
@@ -823,16 +824,16 @@ export default function UnitDetailPage() {
                       </p>
                       <p className="mt-1 text-2xl font-bold text-slate-900">
                         {unit.rent_amount !== null && unit.rent_amount !== undefined
-                          ? `$${getUnitTotalRent(unit).toLocaleString()}/mo`
+                          ? `${formatCurrency(getUnitTotalRent(unit))}/mo`
                           : 'Not set'}
                       </p>
                       {unit.has_garage && unit.garage_rent ? (
                         <p className="mt-1 text-xs text-slate-500">
-                          Existing garage rent: ${Number(unit.garage_rent).toLocaleString()}/mo
+                          Existing garage rent: {formatCurrency(Number(unit.garage_rent))}/mo
                         </p>
                       ) : null}
                       {unit.garages?.filter((garage) => garage.garage_rent != null).map((garage) => (
-                        <p key={garage.id} className="mt-1 text-xs text-slate-500">{garage.garage_id}: ${Number(garage.garage_rent).toLocaleString()}/mo</p>
+                        <p key={garage.id} className="mt-1 text-xs text-slate-500">{garage.garage_id}: {formatCurrency(Number(garage.garage_rent))}/mo</p>
                       ))}
                     </div>
 
@@ -841,7 +842,7 @@ export default function UnitDetailPage() {
                         Est. Market Rent
                       </p>
                       <p className="mt-1 text-2xl font-bold text-indigo-700">
-                        ~${marketEstimate.estimatedRent.toLocaleString()}/mo
+                        ~{formatCurrency(marketEstimate.estimatedRent)}/mo
                       </p>
                     </div>
                   </div>
@@ -1223,7 +1224,7 @@ export default function UnitDetailPage() {
                             )}
                             {item.cost !== null && item.cost !== undefined && (
                               <span className="font-semibold text-slate-700">
-                                💵 <strong>Cost:</strong> ${Number(item.cost).toLocaleString()}
+                                💵 <strong>Cost:</strong> {formatCurrency(Number(item.cost))}
                               </span>
                             )}
                           </div>
@@ -1730,7 +1731,7 @@ export default function UnitDetailPage() {
                     <ul className="mt-2 space-y-1">
                       {(unit.unit_fees ?? []).map((fee) => (
                         <li key={fee.id} className="flex items-center justify-between text-sm text-slate-700">
-                          <span>{fee.label}: ${Number(fee.amount).toLocaleString()}</span>
+                          <span>{fee.label}: {formatCurrency(Number(fee.amount))}</span>
                           <button
                             type="button"
                             onClick={() => void handleRemoveFee(fee.id)}
