@@ -673,7 +673,7 @@ export default function StaffPage() {
                           <img src={avatarSource} alt={`${member.name} avatar`} className="h-full w-full object-cover" />
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/*,.heic,.heif"
                             className="hidden"
                             onChange={(event) => {
                               const file = event.target.files?.[0];

@@ -3,13 +3,15 @@
 import { useRouter } from 'next/navigation';
 
 import type { UserRole } from '@/lib/auth';
+import { AnnouncementsNavButton } from './announcements-nav-button';
 
-export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization';
+export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes';
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserRole[] }> = [
   { key: 'dashboard', label: 'Maintenance Tickets', href: '/dashboard' },
   { key: 'vendors', label: 'Approved Vendors', href: '/dashboard/vendors' },
   { key: 'properties', label: 'Properties & Units', href: '/dashboard/properties' },
+  { key: 'door-codes', label: 'Door Codes', href: '/dashboard/door-codes', roles: ['owner', 'manager', 'maintenance'] },
   { key: 'tenants', label: 'Tenants', href: '/dashboard/tenants' },
   { key: 'staff', label: 'Staff roster', href: '/dashboard/staff', roles: ['owner', 'manager'] },
   { key: 'analysis', label: 'Analysis', href: '/dashboard/analysis', roles: ['owner', 'manager'] },
@@ -17,7 +19,7 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserR
 ];
 
 // Same canonical button set on every dashboard page, minus the button for the page you're already on.
-export function DashboardNavButtons({ current, role }: { current?: NavKey; role: UserRole }) {
+export function DashboardNavButtons({ current, role, propertyId }: { current?: NavKey; role: UserRole; propertyId?: string | null }) {
   const router = useRouter();
 
   return (
@@ -32,6 +34,7 @@ export function DashboardNavButtons({ current, role }: { current?: NavKey; role:
           {item.label}
         </button>
       ))}
+      <AnnouncementsNavButton propertyId={propertyId} />
     </>
   );
 }

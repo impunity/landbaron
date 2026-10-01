@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getAssignedGarages } from '@/lib/assigned-garages';
 import { getRequestOrganizationId } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
@@ -104,11 +105,15 @@ export async function GET(
       .filter((ticket) => String(ticket.status ?? '').toLowerCase() !== 'archived')
       .sort((a, b) => new Date(String(b.updated_at)).getTime() - new Date(String(a.updated_at)).getTime());
 
+    const canSeeRent = user.role === 'owner' || user.role === 'manager';
+    const garagesByUnit = canSeeRent ? await getAssignedGarages([unit.property_id]) : new Map();
+
     return NextResponse.json({
       unit: {
         ...unit,
         rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
         garage_rent: user.role === 'owner' || user.role === 'manager' ? unit.garage_rent : null,
+        garages: canSeeRent ? garagesByUnit.get(unitId) ?? [] : [],
         unit_fees: user.role === 'owner' || user.role === 'manager' ? (unit.unit_fees ?? []) : [],
         unit_photos: photos,
         unit_maintenance_notes: notes,

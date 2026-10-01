@@ -308,7 +308,7 @@ export default function OrganizationPage() {
               {isOwner && (
                 <label className="cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
                   {uploadingAvatar ? 'Uploading...' : 'Change avatar'}
-                  <input type="file" accept="image/*" onChange={handleAvatarUpload} disabled={uploadingAvatar} className="hidden" />
+                  <input type="file" accept="image/*,.heic,.heif" onChange={handleAvatarUpload} disabled={uploadingAvatar} className="hidden" />
                 </label>
               )}
             </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No avatar was uploaded.' }, { status: 400 });
     }
 
-    if (!file.type.startsWith('image/')) {
+    if (!isImageUpload(file)) {
       return NextResponse.json({ error: 'Only image files are allowed.' }, { status: 400 });
     }
 
@@ -48,12 +49,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const extension = file.name.includes('.') ? file.name.split('.').pop() || 'png' : 'png';
+    const uploadFile = await prepareImageUpload(file);
+    const extension = uploadFile.name.includes('.') ? uploadFile.name.split('.').pop() || 'png' : 'png';
     const filePath = `staff-avatars/${targetEmail.replace(/[^a-z0-9@._-]/g, '-')}-${Date.now()}.${extension}`;
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('staff-avatars')
-      .upload(filePath, file, {
+      .upload(filePath, uploadFile, {
         cacheControl: '3600',
         upsert: true,
       });

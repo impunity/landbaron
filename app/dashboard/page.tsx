@@ -1189,7 +1189,7 @@ export default function DashboardPage() {
                 </div>
                 <input
                   type="file"
-                  accept="image/*,video/*"
+                  accept="image/*,video/*,.heic,.heif"
                   multiple
                   onChange={handleTicketPhotosChange}
                   className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700"

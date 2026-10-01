@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
+
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
@@ -36,7 +38,7 @@ export async function POST(
       return NextResponse.json({ error: 'No photo was uploaded.' }, { status: 400 });
     }
 
-    if (!file.type.startsWith('image/')) {
+    if (!isImageUpload(file)) {
       return NextResponse.json({ error: 'Only image files are allowed.' }, { status: 400 });
     }
 
@@ -44,14 +46,15 @@ export async function POST(
       return NextResponse.json({ error: 'Photo must be 10MB or smaller.' }, { status: 400 });
     }
 
-    const extension = file.name.includes('.') ? file.name.split('.').pop() || 'jpg' : 'jpg';
+    const uploadFile = await prepareImageUpload(file);
+    const extension = uploadFile.name.includes('.') ? uploadFile.name.split('.').pop() || 'jpg' : 'jpg';
     const filePath = `unit-attachments/${unitId}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
 
     // Upload to unit-photos or ticket-photos bucket
     let bucketName = 'unit-photos';
     let { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from(bucketName)
-      .upload(filePath, file, {
+      .upload(filePath, uploadFile, {
         cacheControl: '3600',
         upsert: false,
       });
@@ -61,7 +64,7 @@ export async function POST(
       bucketName = 'ticket-photos';
       const fallbackUpload = await supabaseAdmin.storage
         .from(bucketName)
-        .upload(`units/${filePath}`, file, {
+        .upload(`units/${filePath}`, uploadFile, {
           cacheControl: '3600',
           upsert: false,
         });

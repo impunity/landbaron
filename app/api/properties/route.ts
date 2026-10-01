@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getAssignedGarages } from '@/lib/assigned-garages';
 import { getRequestOrganizationId } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
@@ -44,6 +45,9 @@ export async function GET(request: NextRequest) {
       throw propError;
     }
 
+    const canSeeRent = user.role === 'owner' || user.role === 'manager';
+    const garagesByUnit = canSeeRent ? await getAssignedGarages((properties ?? []).map((property) => property.id)) : new Map();
+
     // Mask rent_amount for non-owner staff
     const sanitizedProperties = (properties ?? []).map((prop) => {
       const units = Array.isArray(prop.units)
@@ -51,6 +55,7 @@ export async function GET(request: NextRequest) {
             ...unit,
             rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
             garage_rent: user.role === 'owner' || user.role === 'manager' ? unit.garage_rent : null,
+            garages: canSeeRent ? garagesByUnit.get(String(unit.id)) ?? [] : [],
             unit_fees: user.role === 'owner' || user.role === 'manager' ? (unit.unit_fees ?? []) : [],
             unit_photos: Array.isArray(unit.unit_photos)
               ? [...unit.unit_photos].sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())

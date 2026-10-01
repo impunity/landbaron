@@ -656,16 +656,7 @@ export default function TicketDetailPage() {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <DashboardNavButtons current="dashboard" role={session.role} />
-            {ticket.property_id && (
-              <button
-                type="button"
-                onClick={() => router.push(`/dashboard/properties/${ticket.property_id}/announcements`)}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Announcements/Discussions
-              </button>
-            )}
+            <DashboardNavButtons current="dashboard" role={session.role} propertyId={ticket.property_id} />
           </div>
         </div>
 
@@ -770,7 +761,7 @@ export default function TicketDetailPage() {
                 </div>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/*,.heic,.heif"
                   onChange={handlePhotoUpload}
                   disabled={uploadingPhoto}
                   className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { formatTimestamp, useTimeFormat } from '@/lib/time-format';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
 
@@ -33,6 +34,7 @@ const getInitials = (name: string) => {
 
 export default function UsageLogPage() {
   const router = useRouter();
+  const timeFormat = useTimeFormat();
   const [session, setSession] = useState<SessionUser | null>(null);
   const [events, setEvents] = useState<LoginEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,7 +201,7 @@ export default function UsageLogPage() {
                     </div>
                     <div className="text-right text-xs text-slate-500">
                       <p className="font-medium uppercase tracking-wider text-slate-600">{event.role ?? 'Unknown'}</p>
-                      <p className="mt-0.5">{new Date(event.created_at).toLocaleString()}</p>
+                      <p className="mt-0.5">{formatTimestamp(event.created_at, timeFormat)}</p>
                     </div>
                   </li>
                 );

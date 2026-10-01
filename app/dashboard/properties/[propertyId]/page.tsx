@@ -27,6 +27,7 @@ type UnitDetail = {
   rent_amount?: number | null;
   has_garage?: boolean | null;
   garage_rent?: number | null;
+  garages?: Array<{ id: string; garage_id: string; garage_rent: number | null }>;
   bedrooms: number;
   bathrooms: number;
   square_feet?: number | null;
@@ -518,13 +519,6 @@ export default function PropertyDetailPage() {
             <DashboardNavButtons current="properties" role={session.role} />
             <button
               type="button"
-              onClick={() => router.push(`/dashboard/properties/${propertyId}/announcements`)}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Announcements/Discussions
-            </button>
-            <button
-              type="button"
               onClick={() => setShowEditPropertyModal(true)}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -819,9 +813,12 @@ export default function PropertyDetailPage() {
                                 </p>
                                 {unit.has_garage && unit.garage_rent ? (
                                   <p className="text-[10px] text-slate-500">
-                                    Includes garage rent of ${Number(unit.garage_rent).toLocaleString()}
+                                    Existing garage rent: ${Number(unit.garage_rent).toLocaleString()}/mo
                                   </p>
                                 ) : null}
+                                {unit.garages?.filter((garage) => garage.garage_rent != null).map((garage) => (
+                                  <p key={garage.id} className="text-[10px] text-slate-500">{garage.garage_id}: ${Number(garage.garage_rent).toLocaleString()}/mo</p>
+                                ))}
                               </div>
                               <div>
                                 <p className="text-[11px] font-medium text-slate-500">Est. Market Rent</p>

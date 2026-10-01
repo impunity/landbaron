@@ -56,16 +56,16 @@ export default function TenantDirectoryPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {tenants.map((tenant) => (
-              <div key={tenant.id} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <img src={tenant.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(tenant.name)}&background=0f766e&color=fff&size=160`} alt={`${tenant.name} avatar`} className="h-20 w-20 rounded-full object-cover" />
-                <div className="min-w-0">
+              <div key={tenant.id} className="flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <img src={tenant.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(tenant.name)}&background=0f766e&color=fff&size=160`} alt={`${tenant.name} avatar`} className="h-20 w-20 shrink-0 rounded-full object-cover" />
+                <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
                   <p className="font-semibold">{tenant.name}</p>
                   {tenant.unit_number && <p className="text-xs uppercase tracking-wider text-slate-500">Unit {tenant.unit_number}</p>}
                   {tenant.shared ? (
                     <>
-                      {tenant.email && <a className="mt-2 block truncate text-sm text-slate-700 underline" href={`mailto:${tenant.email}`}>{tenant.email}</a>}
-                      {tenant.phone && <a className="block text-sm text-slate-700 underline" href={`tel:${tenant.phone}`}>{tenant.phone}</a>}
-                      {tenant.instagram_handle && <a className="block text-sm text-slate-700 underline" href={`https://instagram.com/${encodeURIComponent(tenant.instagram_handle)}`} target="_blank" rel="noopener noreferrer">@{tenant.instagram_handle}</a>}
+                      {tenant.email && <a className="mt-2 block w-max text-sm text-slate-700 underline" href={`mailto:${tenant.email}`}>{tenant.email}</a>}
+                      {tenant.phone && <a className="block w-max text-sm text-slate-700 underline" href={`tel:${tenant.phone}`}>{tenant.phone}</a>}
+                      {tenant.instagram_handle && <a className="block w-max text-sm text-slate-700 underline" href={`https://instagram.com/${encodeURIComponent(tenant.instagram_handle)}`} target="_blank" rel="noopener noreferrer">@{tenant.instagram_handle}</a>}
                     </>
                   ) : (
                     <p className="mt-2 text-sm italic text-slate-500">Contact info not shared</p>

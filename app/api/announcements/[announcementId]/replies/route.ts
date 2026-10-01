@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { getAnnouncementMentionCandidates } from '@/lib/announcement-mentions';
 import { emailAnnouncement, getAccessibleAnnouncementProperty, getAnnouncementAuthor } from '@/lib/property-announcements';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
@@ -14,7 +15,8 @@ export async function POST(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
 
-    const body = String((await request.json().catch(() => ({})))?.body ?? '').trim();
+    const payload = await request.json().catch(() => ({}));
+    const body = String(payload?.body ?? '').trim();
     if (!body) return NextResponse.json({ error: 'Write a reply before submitting.' }, { status: 400 });
     if (body.length > 5000) return NextResponse.json({ error: 'Replies must be 5,000 characters or fewer.' }, { status: 400 });
 
@@ -28,10 +30,21 @@ export async function POST(
 
     const property = await getAccessibleAnnouncementProperty(announcement.property_id, user);
     if (!property) return NextResponse.json({ error: 'Announcement not found.' }, { status: 404 });
+    const requestedIds = payload?.mentionIds;
+    if (requestedIds !== undefined && (!Array.isArray(requestedIds) || requestedIds.length > 20 || requestedIds.some((id) => typeof id !== 'string'))) {
+      return NextResponse.json({ error: 'Invalid mentions.' }, { status: 400 });
+    }
+    const candidates = requestedIds?.length
+      ? await getAnnouncementMentionCandidates(property.id, property.organization_id)
+      : [];
+    const mentions = [...new Set((requestedIds ?? []) as string[])].map((id) => candidates.find((person) => person.id === id));
+    if (mentions.some((person) => !person || !body.includes(`@${person.name}`))) {
+      return NextResponse.json({ error: 'Mentioned people must be associated with this property.' }, { status: 400 });
+    }
     const authorName = await getAnnouncementAuthor(user);
     const { data: reply, error: replyError } = await supabaseAdmin
       .from('property_announcement_replies')
-      .insert({ announcement_id: announcementId, author_user_id: user.id, author_name: authorName, author_email: user.email, body })
+      .insert({ announcement_id: announcementId, author_user_id: user.id, author_name: authorName, author_email: user.email, body, mentions })
       .select()
       .single();
     if (replyError) throw replyError;

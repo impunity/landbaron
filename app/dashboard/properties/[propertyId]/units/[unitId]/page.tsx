@@ -70,6 +70,7 @@ type UnitFullDetail = {
   rent_amount?: number | null;
   has_garage?: boolean | null;
   garage_rent?: number | null;
+  garages?: Array<{ id: string; garage_id: string; garage_rent: number | null }>;
   unit_fees?: UnitFee[];
   bedrooms: number;
   bathrooms: number;
@@ -756,13 +757,6 @@ export default function UnitDetailPage() {
             <DashboardNavButtons current="properties" role={session.role} />
             <button
               type="button"
-              onClick={() => router.push(`/dashboard/properties/${unit.property_id}/announcements`)}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Announcements/Discussions
-            </button>
-            <button
-              type="button"
               onClick={() => router.push(`/dashboard?propertyId=${unit.property_id}&unitId=${unit.id}`)}
               className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
             >
@@ -834,9 +828,12 @@ export default function UnitDetailPage() {
                       </p>
                       {unit.has_garage && unit.garage_rent ? (
                         <p className="mt-1 text-xs text-slate-500">
-                          Includes garage rent of ${Number(unit.garage_rent).toLocaleString()}
+                          Existing garage rent: ${Number(unit.garage_rent).toLocaleString()}/mo
                         </p>
                       ) : null}
+                      {unit.garages?.filter((garage) => garage.garage_rent != null).map((garage) => (
+                        <p key={garage.id} className="mt-1 text-xs text-slate-500">{garage.garage_id}: ${Number(garage.garage_rent).toLocaleString()}/mo</p>
+                      ))}
                     </div>
 
                     <div>
@@ -1058,7 +1055,7 @@ export default function UnitDetailPage() {
                   {uploadingPhoto ? 'Uploading...' : '+ Upload photo'}
                   <input
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/*,.heic,.heif"
                     disabled={uploadingPhoto}
                     onChange={handlePhotoUpload}
                     className="hidden"

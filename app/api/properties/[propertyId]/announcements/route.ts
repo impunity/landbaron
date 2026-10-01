@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isHeicImage, prepareImageUpload } from '@/lib/image-upload';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { emailAnnouncement, getAccessibleAnnouncementProperty, getAnnouncementAuthor } from '@/lib/property-announcements';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -33,8 +34,20 @@ export async function GET(
       .order('created_at', { ascending: false });
     if (error) throw error;
 
+    const announcementIds = (announcements ?? []).map((item) => item.id);
+    const { data: reactions, error: reactionsError } = announcementIds.length
+      ? await supabaseAdmin.from('property_announcement_reactions')
+        .select('announcement_id, user_id, reaction').in('announcement_id', announcementIds)
+      : { data: [], error: null };
+    if (reactionsError) throw reactionsError;
+
     const ordered = (announcements ?? []).map((announcement) => ({
       ...announcement,
+      reactions: (reactions ?? []).filter((item) => item.announcement_id === announcement.id).reduce((counts: Record<string, number>, item) => {
+        counts[item.reaction] = (counts[item.reaction] ?? 0) + 1;
+        return counts;
+      }, {}),
+      my_reaction: (reactions ?? []).find((item) => item.announcement_id === announcement.id && item.user_id === user.id)?.reaction ?? null,
       property_announcement_replies: [...(announcement.property_announcement_replies ?? [])]
         .sort((first, second) => new Date(first.created_at).getTime() - new Date(second.created_at).getTime()),
     }));
@@ -67,8 +80,12 @@ export async function POST(
     if (!body) return NextResponse.json({ error: 'Write a message before submitting.' }, { status: 400 });
     if (body.length > 10000) return NextResponse.json({ error: 'Announcements must be 10,000 characters or fewer.' }, { status: 400 });
     if (files.length > MAX_FILES) return NextResponse.json({ error: `Attach up to ${MAX_FILES} images.` }, { status: 400 });
-    if (files.some((file) => !ALLOWED_IMAGE_TYPES.has(file.type))) return NextResponse.json({ error: 'Use JPG, PNG, WEBP, or GIF images.' }, { status: 400 });
-    if (files.some((file) => file.size > MAX_FILE_SIZE) || files.reduce((total, file) => total + file.size, 0) > MAX_TOTAL_SIZE) {
+    if (files.some((file) => !ALLOWED_IMAGE_TYPES.has(file.type) && !isHeicImage(file))) return NextResponse.json({ error: 'Use JPG, PNG, WEBP, GIF, or HEIC images.' }, { status: 400 });
+    if (files.some((file) => file.size > (isHeicImage(file) ? 20 * 1024 * 1024 : MAX_FILE_SIZE))) {
+      return NextResponse.json({ error: 'Images must be 4 MB or less (20 MB for HEIC).' }, { status: 400 });
+    }
+    const images = await Promise.all(files.map(async (file) => prepareImageUpload(file)));
+    if (images.some((image) => image.size > MAX_FILE_SIZE) || images.reduce((total, image) => total + image.size, 0) > MAX_TOTAL_SIZE) {
       return NextResponse.json({ error: 'Attached images must total 4 MB or less.' }, { status: 400 });
     }
 
@@ -84,10 +101,9 @@ export async function POST(
     const imageUrls: string[] = [];
     if (files.length > 0) {
       bucket = 'property-announcements';
-      for (const file of files) {
-        const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-        const path = `${propertyId}/${announcementId}/${crypto.randomUUID()}.${extension}`;
-        const { data: upload, error: uploadError } = await supabaseAdmin.storage.from(bucket).upload(path, file, { cacheControl: '3600', upsert: false });
+      for (const image of images) {
+        const path = `${propertyId}/${announcementId}/${crypto.randomUUID()}.${image.name.split('.').pop()?.toLowerCase() || 'jpg'}`;
+        const { data: upload, error: uploadError } = await supabaseAdmin.storage.from(bucket).upload(path, image, { cacheControl: '3600', upsert: false, contentType: image.type });
         if (uploadError) throw uploadError;
         uploadedPaths.push(upload.path);
         const { data: publicUrl } = supabaseAdmin.storage.from(bucket).getPublicUrl(upload.path);

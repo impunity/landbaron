@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
@@ -20,12 +21,13 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file');
     const caption = typeof formData.get('caption') === 'string' ? String(formData.get('caption')).trim() : null;
     if (!(file instanceof File)) return NextResponse.json({ error: 'No improvement photo was uploaded.' }, { status: 400 });
-    if (!file.type.startsWith('image/')) return NextResponse.json({ error: 'Only image files are allowed.' }, { status: 400 });
+    if (!isImageUpload(file)) return NextResponse.json({ error: 'Only image files are allowed.' }, { status: 400 });
     if (file.size > MAX_FILE_SIZE) return NextResponse.json({ error: 'Photo must be 10MB or smaller.' }, { status: 400 });
 
-    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const uploadFile = await prepareImageUpload(file);
+    const extension = uploadFile.name.split('.').pop()?.toLowerCase() || 'jpg';
     const path = `tenant-improvements/${tenant.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
-    const { data: upload, error: uploadError } = await supabaseAdmin.storage.from('tenant-improvements').upload(path, file, { cacheControl: '3600', upsert: false });
+    const { data: upload, error: uploadError } = await supabaseAdmin.storage.from('tenant-improvements').upload(path, uploadFile, { cacheControl: '3600', upsert: false });
     if (uploadError) throw uploadError;
     const { data: publicUrl } = supabaseAdmin.storage.from('tenant-improvements').getPublicUrl(upload.path);
     const { data: photo, error } = await supabaseAdmin.from('tenant_improvement_photos').insert({ tenant_id: tenant.id, unit_id: tenant.unit_id, photo_url: publicUrl.publicUrl, caption: caption || file.name }).select().single();

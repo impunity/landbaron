@@ -22,6 +22,7 @@ type UnitSummary = {
   rent_amount?: number | null;
   has_garage?: boolean | null;
   garage_rent?: number | null;
+  garages?: Array<{ id: string; garage_id: string; garage_rent: number | null }>;
   status?: string | null;
   tenants?: UnitTenant[];
   unit_photos?: Array<{ id: string; photo_url: string; is_primary?: boolean | null }>;
@@ -42,7 +43,7 @@ type Property = {
 const DEFAULT_MAX_INCREASE_PERCENT = 10;
 
 const formatCurrency = (value: number) =>
-  value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
 const getUnitThumbnail = (unit: UnitSummary) => {
   const sorted = [...(unit.unit_photos ?? [])].sort(
@@ -348,9 +349,12 @@ export default function RentIncreaseAnalysisPage() {
                               <p className="mt-1 text-xs text-slate-500">Current rent: {hasRent ? formatCurrency(currentRent) : 'Not set'}</p>
                               {unit.has_garage && unit.garage_rent ? (
                                 <p className="text-[11px] text-slate-400">
-                                  Includes garage rent of {formatCurrency(Number(unit.garage_rent))}
+                                  Existing garage rent: {formatCurrency(Number(unit.garage_rent))}
                                 </p>
                               ) : null}
+                              {unit.garages?.filter((garage) => garage.garage_rent != null).map((garage) => (
+                                <p key={garage.id} className="text-[11px] text-slate-400">{garage.garage_id}: {formatCurrency(Number(garage.garage_rent))}/mo</p>
+                              ))}
                             </div>
 
                             <div className="flex flex-1 items-center gap-3">

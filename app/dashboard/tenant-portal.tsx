@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import type { SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from './breadcrumbs';
+import { AnnouncementsNavButton } from './announcements-nav-button';
 
 
 type PortalData = {
@@ -272,7 +273,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
           </div>
           <nav aria-label="Tenant portal" className="mt-5 flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button>
-            <Link href={`/dashboard/properties/${data.property.id}/announcements`} className="rounded-xl border border-slate-900 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">Announcements/Discussions</Link>
+            <AnnouncementsNavButton propertyId={data.property.id} />
             <div className="flex w-full flex-wrap gap-3">
               <Link href="/dashboard/vendors" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</Link>
               <Link href="/dashboard/tenant-portal/emergency-contacts" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</Link>
@@ -298,14 +299,14 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                   if (await updateContact(contactDraft)) setEditingContact(false);
                 }}
               >
-                <div className="flex justify-between gap-4"><span className="text-slate-500">Email</span><span>{data.tenant.email || session.email}</span></div>
+                <div className="flex min-w-0 justify-between gap-4"><span className="text-slate-500">Email</span><span className="min-w-0 overflow-x-auto whitespace-nowrap">{data.tenant.email || session.email}</span></div>
                 <label className="block"><span className="text-slate-500">Phone</span><input type="tel" maxLength={30} value={contactDraft.phone} onChange={(event) => setContactDraft({ ...contactDraft, phone: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" /></label>
                 <label className="block"><span className="text-slate-500">Instagram</span><div className="mt-1 flex items-center rounded-xl border border-slate-300 px-3"><span className="text-slate-400">@</span><input type="text" maxLength={30} value={contactDraft.instagram_handle} onChange={(event) => setContactDraft({ ...contactDraft, instagram_handle: event.target.value })} className="w-full py-2 pl-1 outline-none" /></div></label>
                 <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingContact(false)} className="rounded-xl border border-slate-300 px-3 py-1.5 font-medium">Cancel</button><button type="submit" disabled={savingContact} className="rounded-xl bg-slate-900 px-3 py-1.5 font-medium text-white disabled:opacity-60">{savingContact ? 'Saving...' : 'Save'}</button></div>
               </form>
             ) : (
               <>
-                <dl className="mt-6 space-y-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-slate-500">Email</dt><dd>{data.tenant.email || session.email}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Phone</dt><dd>{data.tenant.phone || 'Not provided'}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Instagram</dt><dd>{data.tenant.instagram_handle ? <a href={`https://instagram.com/${encodeURIComponent(data.tenant.instagram_handle)}`} target="_blank" rel="noopener noreferrer" className="underline">@{data.tenant.instagram_handle}</a> : 'Not provided'}</dd></div></dl>
+                <dl className="mt-6 min-w-0 space-y-3 text-sm"><div className="flex min-w-0 justify-between gap-4"><dt className="text-slate-500">Email</dt><dd className="min-w-0 overflow-x-auto whitespace-nowrap">{data.tenant.email || session.email}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Phone</dt><dd>{data.tenant.phone || 'Not provided'}</dd></div><div className="flex min-w-0 justify-between gap-4"><dt className="text-slate-500">Instagram</dt><dd className="min-w-0 overflow-x-auto whitespace-nowrap">{data.tenant.instagram_handle ? <a href={`https://instagram.com/${encodeURIComponent(data.tenant.instagram_handle)}`} target="_blank" rel="noopener noreferrer" className="underline">@{data.tenant.instagram_handle}</a> : 'Not provided'}</dd></div></dl>
                 <div className="mt-3 flex justify-end"><button type="button" onClick={() => { setContactDraft({ phone: data.tenant.phone ?? '', instagram_handle: data.tenant.instagram_handle ?? '' }); setEditingContact(true); }} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm font-medium">Edit contact info</button></div>
               </>
             )}

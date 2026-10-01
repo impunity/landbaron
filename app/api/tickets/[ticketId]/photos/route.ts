@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
+
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
@@ -84,7 +86,7 @@ export async function POST(
       return NextResponse.json({ error: 'No photo was uploaded.' }, { status: 400 });
     }
 
-    const isImage = file.type.startsWith('image/');
+    const isImage = isImageUpload(file);
     const isVideo = file.type.startsWith('video/');
     if (!isImage && !isVideo) {
       return NextResponse.json({ error: 'Only image or video files are allowed.' }, { status: 400 });
@@ -94,12 +96,13 @@ export async function POST(
       return NextResponse.json({ error: 'File must be 25MB or smaller.' }, { status: 400 });
     }
 
-    const extension = file.name.includes('.') ? file.name.split('.').pop() : 'png';
+    const uploadFile = isImage ? await prepareImageUpload(file) : file;
+    const extension = uploadFile.name.includes('.') ? uploadFile.name.split('.').pop() : 'png';
     const fileName = `ticket-attachments/${ticketId}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('ticket-photos')
-      .upload(fileName, file, {
+      .upload(fileName, uploadFile, {
         cacheControl: '3600',
         upsert: false,
       });

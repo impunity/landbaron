@@ -22,6 +22,7 @@ type UnitSummary = {
   rent_amount?: number | null;
   has_garage?: boolean | null;
   garage_rent?: number | null;
+  garages?: Array<{ id: string; garage_id: string; garage_rent: number | null }>;
   unit_fees?: UnitFee[];
   tenants?: Array<{ id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null }>;
   unit_photos?: Array<{ id: string; photo_url: string; caption?: string | null; is_primary?: boolean | null }>;
@@ -58,7 +59,7 @@ const emptyPropertyDraft: PropertyDraft = {
 };
 
 const formatCurrency = (value: number) =>
-  value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
 const getUnitThumbnail = (unit: UnitSummary) => {
   const sorted = [...(unit.unit_photos ?? [])].sort(
@@ -437,9 +438,14 @@ export default function PropertiesPage() {
                                     </p>
                                     {unit.has_garage && unit.garage_rent ? (
                                       <p className="text-xs text-slate-500">
-                                        Garage rent: {formatCurrency(Number(unit.garage_rent))}
+                                        Existing garage rent: {formatCurrency(Number(unit.garage_rent))}
                                       </p>
                                     ) : null}
+                                    {unit.garages?.filter((garage) => garage.garage_rent != null).map((garage) => (
+                                      <p key={garage.id} className="text-xs text-slate-500">
+                                        {garage.garage_id}: {formatCurrency(Number(garage.garage_rent))}/mo
+                                      </p>
+                                    ))}
                                     {fees.length > 0 && (
                                       <p className="text-xs text-slate-500">
                                         {fees.map((fee) => `${fee.label}: ${formatCurrency(Number(fee.amount))}`).join(' \u00b7 ')}
