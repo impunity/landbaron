@@ -280,7 +280,7 @@ export async function GET(request: NextRequest) {
 
         const [dayPayload, weekPayload, historyPayload] = await Promise.all([
           getSolarJson(integration.site_id, accessToken, dayBeforeYesterday, now, 'QUARTER_HOUR'),
-          getSolarJson(integration.site_id, accessToken, previousWeek, now, 'HOUR'),
+          getSolarJson(integration.site_id, accessToken, previousWeek, now, 'DAY'),
           getSolarJson(integration.site_id, accessToken, previousYear, now, 'DAY'),
         ]);
 
@@ -307,7 +307,7 @@ export async function GET(request: NextRequest) {
 
         const charts = {
           day: pointsToChart(dayPoints, today, now, yesterday, yesterdaySameTime, 'day', 0.25),
-          week: pointsToChart(weekPoints, weekStart, now, previousWeek, weekSameTime, 'week', 1),
+          week: pointsToChart(weekPoints, weekStart, now, previousWeek, weekSameTime, 'week', 24),
           month: pointsToChart(historyPoints, monthStart, now, previousMonth, monthSameTime, 'month', 24),
           year: pointsToChart(historyPoints, yearStart, now, previousYear, yearSameTime, 'year', 24),
         };

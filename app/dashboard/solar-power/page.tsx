@@ -197,7 +197,7 @@ export default function SolarPowerPage() {
               </section>
               <section className="mt-6 border-t border-slate-200 pt-5" aria-label={`${property.name} power history chart`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div><h3 className="font-semibold">Production over time</h3><p className="mt-1 text-xs text-slate-500">Average power per interval, current period vs previous matching period</p></div>
+                  <div><h3 className="font-semibold">Production over time</h3><p className="mt-1 text-xs text-slate-500">{chartRange === 'day' ? '15-minute samples' : 'Daily average'} · current period vs previous matching period</p></div>
                   <div className="inline-flex border border-slate-300" role="group" aria-label="Chart time range">
                     {rangeOptions.map((option) => <button key={option.key} type="button" aria-pressed={chartRange === option.key} onClick={() => setChartRange(option.key)} className={`px-3 py-1.5 text-sm font-medium ${chartRange === option.key ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>{option.label}</button>)}
                   </div>
