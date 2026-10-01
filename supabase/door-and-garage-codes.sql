@@ -29,4 +29,5 @@ create table if not exists public.property_garages (
 
 create unique index if not exists property_garages_identifier_key on public.property_garages (property_id, lower(garage_id));
 create index if not exists property_garages_unit_idx on public.property_garages (unit_id);
+alter table public.property_garages add column if not exists owner_assigned boolean not null default false;
 alter table public.property_garages enable row level security;

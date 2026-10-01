@@ -1,32 +1,38 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 
+import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../breadcrumbs';
+import { DashboardNavButtons } from '../nav-buttons';
 
 type Property = { id: string; name: string; address: string };
-type Unit = { id: string; unit_number: string; unit_photos?: Array<{ photo_url: string; is_primary?: boolean | null; created_at?: string }> };
+type Unit = { id: string; unit_number: string; tenants?: Array<{ name: string }>; unit_photos?: Array<{ photo_url: string; is_primary?: boolean | null; created_at?: string }> };
 type Lock = { id: string; unit_id: string | null; door: string; code: string; programming_code: string; photo_url: string | null };
-type Garage = { id: string; unit_id: string | null; garage_id: string; code: string; programming_code: string; garage_rent: number | null };
+type Garage = { id: string; unit_id: string | null; owner_assigned: boolean; garage_id: string; code: string; programming_code: string; garage_rent: number | null };
 type PageData = { properties: Property[]; property: Property | null; units: Unit[]; locks: Lock[]; garages: Garage[]; canManageGarages: boolean };
 type LockGroup = 'entrance' | 'other' | 'gate';
 type Editor = { kind: 'lock' | 'garage'; id: string | null; unitId: string | null; lockGroup: LockGroup | null };
-type Draft = { door: string; otherDoor: string; code: string; programmingCode: string; garageId: string; garageRent: string; unitId: string };
+type Draft = { door: string; otherDoor: string; code: string; programmingCode: string; garageId: string; garageRent: string; unitId: string; ownerAssigned: boolean };
 
 const entranceDoors = ['Front Door', 'Back Door', 'Side Door'];
 const otherLockTypes = ['Laundry Room', 'Trash Area', 'Utility Closet'];
-const emptyDraft = (unitId: string | null, lockGroup: LockGroup = 'entrance'): Draft => ({ door: lockGroup === 'other' ? otherLockTypes[0] : entranceDoors[0], otherDoor: '', code: '', programmingCode: '', garageId: '', garageRent: '', unitId: unitId ?? '' });
+const emptyDraft = (unitId: string | null, lockGroup: LockGroup = 'entrance'): Draft => ({ door: lockGroup === 'other' ? otherLockTypes[0] : entranceDoors[0], otherDoor: '', code: '', programmingCode: '', garageId: '', garageRent: '', unitId: unitId ?? '', ownerAssigned: false });
 const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600';
-const isGateLock = (door: string) => /^gate(?:\s|$)/i.test(door);
+const isGateLock = (door: string) => /^gates?(?:\s|$)/i.test(door.trim());
+const isEntranceLock = (door: string) => entranceDoors.some((option) => option.toLowerCase() === door.toLowerCase()) || /^property entrances?$/i.test(door.trim());
+const getUnitLabel = (unit: Unit) => {
+  const tenantNames = unit.tenants?.map((tenant) => tenant.name.trim()).filter(Boolean) ?? [];
+  return `Unit ${unit.unit_number}${tenantNames.length ? ` · ${tenantNames.join(', ')}` : ''}`;
+};
 
 export default function DoorCodesPage() {
-  const router = useRouter();
   const [data, setData] = useState<PageData | null>(null);
   const [propertyId, setPropertyId] = useState('');
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editor, setEditor] = useState<Editor | null>(null);
@@ -50,6 +56,8 @@ export default function DoorCodesPage() {
   useEffect(() => {
     void (async () => {
       try {
+        const sessionUser = (await supabase?.auth.getSession())?.data.session?.user;
+        if (sessionUser) setUserRole(await fetchUserRole(sessionUser.email, supabase));
         const overview = await load('');
         if (overview.properties.length) {
           setPropertyId(overview.properties[0].id);
@@ -70,13 +78,13 @@ export default function DoorCodesPage() {
     const gateName = lock?.door ?? `Gate ${(data?.locks.filter((entry) => isGateLock(entry.door)).length ?? 0) + 1}`;
     const recordUnitId = lockGroup === 'gate' ? null : unitId;
     setEditor({ kind: 'lock', id: lock?.id ?? null, unitId: recordUnitId, lockGroup });
-    setDraft({ ...emptyDraft(recordUnitId, lockGroup), door: lockGroup === 'gate' ? gateName : selectedDoor ?? 'Other', otherDoor: lockGroup === 'gate' || selectedDoor ? '' : lock?.door ?? '', code: lock?.code ?? '', programmingCode: lock?.programming_code ?? '' });
+    setDraft({ ...emptyDraft(recordUnitId, lockGroup), door: lockGroup === 'gate' ? gateName : lock ? selectedDoor ?? 'Other' : lockGroup === 'other' ? otherLockTypes[0] : entranceDoors[0], otherDoor: lockGroup === 'gate' || selectedDoor || !lock ? '' : lock.door, code: lock?.code ?? '', programmingCode: lock?.programming_code ?? '' });
   }
 
   function startGarage(garage?: Garage) {
     setError('');
     setEditor({ kind: 'garage', id: garage?.id ?? null, unitId: garage?.unit_id ?? null, lockGroup: null });
-    setDraft({ ...emptyDraft(garage?.unit_id ?? null), garageId: garage?.garage_id ?? '', garageRent: garage?.garage_rent?.toString() ?? '', code: garage?.code ?? '', programmingCode: garage?.programming_code ?? '' });
+    setDraft({ ...emptyDraft(garage?.unit_id ?? null), ownerAssigned: garage?.owner_assigned ?? false, garageId: garage?.garage_id ?? '', garageRent: garage?.garage_rent?.toString() ?? '', code: garage?.code ?? '', programmingCode: garage?.programming_code ?? '' });
   }
 
   async function send(method: 'POST' | 'PATCH' | 'DELETE', kind: 'lock' | 'garage', id: string | null, payload?: Draft) {
@@ -91,7 +99,7 @@ export default function DoorCodesPage() {
     const response = await fetch(`/api/door-codes${params.size ? `?${params}` : ''}`, {
       method,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      ...(payload ? { body: JSON.stringify({ propertyId, kind, unitId: payload.unitId || null, door: payload.door === 'Other' ? payload.otherDoor : payload.door, code: payload.code, programmingCode: payload.programmingCode, garageId: payload.garageId, garageRent: payload.garageRent }) } : {}),
+      ...(payload ? { body: JSON.stringify({ propertyId, kind, unitId: payload.unitId || null, ownerAssigned: payload.ownerAssigned, door: payload.door === 'Other' ? payload.otherDoor : payload.door, code: payload.code, programmingCode: payload.programmingCode, garageId: payload.garageId, garageRent: payload.garageRent }) } : {}),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || 'Changes could not be saved.');
@@ -172,12 +180,11 @@ export default function DoorCodesPage() {
   ) : null;
 
   const lockSection = (title: string, unitId: string | null, lockGroup: LockGroup, unitPhotoUrl: string | null = null) => {
-    const isEntrance = (door: string) => entranceDoors.some((option) => option.toLowerCase() === door.toLowerCase());
     const locks = data?.locks.filter((lock) => {
       if (lockGroup === 'gate') return isGateLock(lock.door);
       if (lock.unit_id !== unitId || isGateLock(lock.door)) return false;
       if (unitId !== null) return true;
-      return lockGroup === 'entrance' ? isEntrance(lock.door) : !isEntrance(lock.door);
+      return lockGroup === 'entrance' ? isEntranceLock(lock.door) : !isEntranceLock(lock.door);
     }) ?? [];
     return (
       <section key={unitId ?? lockGroup} className="border-b border-slate-200 py-5 last:border-0">
@@ -198,7 +205,8 @@ export default function DoorCodesPage() {
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Door Codes', href: '/dashboard/door-codes' }]} />
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold">Door Codes</h1><p className="mt-1 text-sm text-slate-600">Locks and garage assignments by property</p></div><button type="button" onClick={() => router.push('/dashboard')} className="text-sm font-medium text-slate-600 underline">Maintenance Tickets</button></div>
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold">Door Codes</h1><p className="mt-1 text-sm text-slate-600">Locks and garage assignments by property</p></div></div>
+        {userRole && <div className="mt-4 flex flex-wrap gap-2"><DashboardNavButtons current="door-codes" role={userRole} /></div>}
         {error && <p role="alert" className="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
         {loading ? <p className="mt-6 text-sm text-slate-500">Loading...</p> : data && (
           <>
@@ -215,17 +223,17 @@ export default function DoorCodesPage() {
                   {lockSection('Property entrances', null, 'entrance')}
                   {lockSection('Other Locks', null, 'other')}
                   {lockSection('Gates', null, 'gate')}
-                  {data.units.map((unit) => lockSection(`Unit ${unit.unit_number}`, unit.id, 'entrance', unit.unit_photos?.[0]?.photo_url ?? null))}
+                  {data.units.map((unit) => lockSection(getUnitLabel(unit), unit.id, 'entrance', unit.unit_photos?.[0]?.photo_url ?? null))}
                 </section>
                 <section className="mt-7 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
                   <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Garage Codes</h2><p className="text-sm text-slate-500">Each garage can be assigned to one unit; units may have multiple garages.</p></div>{data.canManageGarages && <button type="button" onClick={() => startGarage()} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50"><Plus size={16} />Add Garage</button>}</div>
                   <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
                     {data.garages.length === 0 && <p className="py-6 text-sm text-slate-500">No garages yet.</p>}
-                    {data.garages.map((garage) => <div key={garage.id} className="flex min-w-0 flex-wrap items-start justify-between gap-3 py-3 text-sm"><div className="min-w-0 flex-1"><p className="font-semibold">{garage.garage_id}</p><p className="text-slate-600">{data.units.find((unit) => unit.id === garage.unit_id)?.unit_number ? `Unit ${data.units.find((unit) => unit.id === garage.unit_id)?.unit_number}` : 'Unassigned'}{data.canManageGarages && garage.garage_rent !== null ? ` · $${Number(garage.garage_rent).toFixed(2)}/mo` : ''}</p>{codeFields(garage)}</div>{data.canManageGarages && <div className="flex gap-3"><button type="button" onClick={() => startGarage(garage)} className="font-medium text-teal-800 underline">Edit</button><button type="button" disabled={saving} onClick={() => void remove('garage', garage.id)} aria-label={`Remove ${garage.garage_id}`} className="text-rose-700"><Trash2 size={16} /></button></div>}</div>)}
+                    {data.garages.map((garage) => { const assignedUnit = data.units.find((unit) => unit.id === garage.unit_id); const assignmentLabel = assignedUnit ? getUnitLabel(assignedUnit) : garage.owner_assigned ? 'Owner' : 'Unassigned'; return <div key={garage.id} className="flex min-w-0 flex-wrap items-start justify-between gap-3 py-3 text-sm"><div className="min-w-0 flex-1"><p className="font-semibold">{garage.garage_id}</p><p className="text-slate-600">{assignmentLabel}{data.canManageGarages && garage.garage_rent !== null ? ` · $${Number(garage.garage_rent).toFixed(2)}/mo` : ''}</p>{codeFields(garage)}</div>{data.canManageGarages && <div className="flex gap-3"><button type="button" onClick={() => startGarage(garage)} className="font-medium text-teal-800 underline">Edit</button><button type="button" disabled={saving} onClick={() => void remove('garage', garage.id)} aria-label={`Remove ${garage.garage_id}`} className="text-rose-700"><Trash2 size={16} /></button></div>}</div>; })}
                   </div>
                   {editor?.kind === 'garage' && <form onSubmit={(event) => void save(event)} className="mt-4 grid gap-3 rounded-md border border-teal-200 bg-teal-50/50 p-4 sm:grid-cols-3">
                     <label className="text-xs font-semibold text-slate-600">Garage ID<input required maxLength={100} className={`mt-1 ${inputClass}`} value={draft.garageId} onChange={(event) => setDraft({ ...draft, garageId: event.target.value })} placeholder="Trash Garage" /></label>
-                    <label className="text-xs font-semibold text-slate-600">Assigned unit<select className={`mt-1 ${inputClass}`} value={draft.unitId} onChange={(event) => setDraft({ ...draft, unitId: event.target.value })}><option value="">Unassigned</option>{data.units.map((unit) => <option key={unit.id} value={unit.id}>Unit {unit.unit_number}</option>)}</select></label>
+                    <label className="text-xs font-semibold text-slate-600">Assigned to<select className={`mt-1 ${inputClass}`} value={draft.ownerAssigned ? 'owner' : draft.unitId} onChange={(event) => setDraft({ ...draft, ownerAssigned: event.target.value === 'owner', unitId: event.target.value === 'owner' ? '' : event.target.value })}><option value="">Unassigned</option><option value="owner">Owner</option>{data.units.map((unit) => <option key={unit.id} value={unit.id}>{getUnitLabel(unit)}</option>)}</select></label>
                     <label className="text-xs font-semibold text-slate-600">Garage rent ($/month)<input type="number" min="0" step="0.01" className={`mt-1 ${inputClass}`} value={draft.garageRent} onChange={(event) => setDraft({ ...draft, garageRent: event.target.value })} placeholder="Optional" /></label>
                     <label className="text-xs font-semibold text-slate-600">Access code<input className={`mt-1 ${inputClass}`} maxLength={100} autoComplete="off" value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} /></label>
                     <label className="text-xs font-semibold text-slate-600">Programming Code<input className={`mt-1 ${inputClass}`} maxLength={100} autoComplete="off" value={draft.programmingCode} onChange={(event) => setDraft({ ...draft, programmingCode: event.target.value })} /></label>

@@ -49,6 +49,10 @@ async function parseEntry(request: NextRequest, user: AuthenticatedRequestUser) 
     return { kind, propertyId, values: { property_id: propertyId, unit_id: unitId, door, code, programming_code: programmingCode } } as const;
   }
 
+  const ownerAssigned = body.ownerAssigned === true;
+  if (ownerAssigned && unitId !== null) {
+    return { error: 'A garage cannot be assigned to both the owner and a unit.', status: 400 } as const;
+  }
   const garageId = typeof body.garageId === 'string' ? body.garageId.trim() : '';
   const code = typeof body.code === 'string' ? body.code.trim() : '';
   const programmingCode = typeof body.programmingCode === 'string' ? body.programmingCode.trim() : '';
@@ -57,7 +61,7 @@ async function parseEntry(request: NextRequest, user: AuthenticatedRequestUser) 
   if (!garageId || garageId.length > 100 || code.length > 100 || programmingCode.length > 100 || (garageRent !== null && (typeof rentInput !== 'string' || !/^\d+(?:\.\d{1,2})?$/.test(rentInput) || !Number.isFinite(garageRent)))) {
     return { error: 'Enter a garage ID and a valid nonnegative rent amount.', status: 400 } as const;
   }
-  return { kind, propertyId, values: { property_id: propertyId, unit_id: unitId, garage_id: garageId, code, programming_code: programmingCode, garage_rent: garageRent } } as const;
+  return { kind, propertyId, values: { property_id: propertyId, unit_id: unitId, owner_assigned: ownerAssigned, garage_id: garageId, code, programming_code: programmingCode, garage_rent: garageRent } } as const;
 }
 
 export async function GET(request: NextRequest) {
@@ -77,9 +81,9 @@ export async function GET(request: NextRequest) {
     const property = properties?.find((item) => item.id === propertyId);
     if (!property) return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     const [unitsResult, locksResult, garagesResult] = await Promise.all([
-      supabaseAdmin.from('units').select('id, unit_number, unit_photos(photo_url, is_primary, created_at)').eq('property_id', propertyId).order('unit_number'),
+      supabaseAdmin.from('units').select('id, unit_number, tenants(name), unit_photos(photo_url, is_primary, created_at)').eq('property_id', propertyId).order('unit_number'),
       supabaseAdmin.from('property_door_locks').select('id, unit_id, door, code, programming_code, photo_url').eq('property_id', propertyId).order('door'),
-      supabaseAdmin.from('property_garages').select('id, unit_id, garage_id, code, programming_code, garage_rent').eq('property_id', propertyId).order('garage_id'),
+      supabaseAdmin.from('property_garages').select('id, unit_id, owner_assigned, garage_id, code, programming_code, garage_rent').eq('property_id', propertyId).order('garage_id'),
     ]);
     if (unitsResult.error) throw unitsResult.error;
     if (locksResult.error) throw locksResult.error;
