@@ -18,7 +18,9 @@ type SolarProperty = {
   id: string;
   name: string;
   siteId: string | null;
-  status: 'connected' | 'not_connected' | 'error';
+  status: 'connected' | 'not_connected' | 'error' | 'rate_limited' | 'reauthorize' | 'api_error';
+  retryAfter?: string | null;
+  providerStatus?: number;
   currentKw?: number;
   periods?: Record<'today' | 'yesterday' | 'week' | 'month' | 'year', PeriodComparison>;
   charts?: Record<ChartRange, ChartPoint[]>;
@@ -181,7 +183,7 @@ export default function SolarPowerPage() {
           <p className="mt-6 border-t border-slate-300 bg-white px-5 py-6 text-sm text-slate-600">No properties are currently enabled for solar power.</p>
         ) : <div className="mt-6 divide-y divide-slate-300 border-y border-slate-300 bg-white px-5 sm:px-6">
           {properties.map((property) => <article key={property.id} className="py-5">
-            <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{property.name}</h2>{property.siteId && <p className="text-xs text-slate-500">SolarEdge site {property.siteId}</p>}</div>{property.status === 'connected' ? <p className="text-xs font-medium text-emerald-700">Connected</p> : <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">{property.status === 'not_connected' ? 'Complete setup in Settings' : 'Reconnect in Settings'}</a>}</div>
+            <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{property.name}</h2>{property.siteId && <p className="text-xs text-slate-500">SolarEdge site {property.siteId}</p>}</div>{property.status === 'connected' ? <p className="text-xs font-medium text-emerald-700">Connected</p> : property.status === 'rate_limited' ? <p role="status" className="text-sm font-medium text-amber-800">SolarEdge is rate-limiting requests; wait briefly, then refresh.</p> : property.status === 'reauthorize' ? <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">Authorization expired or missing scopes · Reconnect in Settings</a> : property.status === 'api_error' ? <p role="alert" className="text-sm text-rose-700">SolarEdge data request failed (HTTP {property.providerStatus}). Check API access and retry.</p> : <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">{property.status === 'not_connected' ? 'Complete setup in Settings' : 'Check SolarEdge setup in Settings'}</a>}</div>
             {property.status === 'connected' && property.periods && property.charts && <>
               <section className="mt-5 border-t border-slate-200 pt-4" aria-label={`${property.name} production summary`}>
                 <p className="text-xs font-semibold uppercase text-slate-500">Latest reported production · 15-minute sample</p>

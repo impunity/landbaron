@@ -13,6 +13,12 @@ type EnergyPoint = { time: LocalTime; kwh: number };
 type PeriodTotal = { kwh: number; value: number };
 type PeriodComparison = PeriodTotal & { previousKwh: number; previousValue: number };
 
+class SolarEdgeHttpError extends Error {
+  constructor(readonly status: number, readonly retryAfter: string | null) {
+    super(`SolarEdge returned HTTP ${status}.`);
+  }
+}
+
 function getLocalTime(date: Date): LocalTime {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: SITE_TIME_ZONE,
@@ -25,11 +31,6 @@ function getLocalTime(date: Date): LocalTime {
 
 function localOrdinal(time: LocalTime) {
   return Date.UTC(time.year, time.month - 1, time.day, time.hour, time.minute, time.second);
-}
-
-function fromLocalOrdinal(ordinal: number): LocalTime {
-  const date = new Date(ordinal);
-  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour: date.getUTCHours(), minute: date.getUTCMinutes(), second: date.getUTCSeconds() };
 }
 
 function shiftLocalDays(time: LocalTime, days: number): LocalTime {
@@ -51,8 +52,11 @@ function shiftLocalMonths(time: LocalTime, months: number): LocalTime {
 }
 
 function localIso(time: LocalTime) {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${time.year}-${pad(time.month)}-${pad(time.day)}T${pad(time.hour)}:${pad(time.minute)}:${pad(time.second)}`;
+  let utc = Date.UTC(time.year, time.month - 1, time.day, time.hour, time.minute, time.second);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    utc += localOrdinal(time) - localOrdinal(getLocalTime(new Date(utc)));
+  }
+  return new Date(utc).toISOString();
 }
 
 function parsePointTime(value: unknown): LocalTime | null {
@@ -71,14 +75,6 @@ function toKilowattHours(value: unknown, unit: string) {
   const normalizedUnit = unit.toLowerCase().replace(/\s/g, '');
   if (normalizedUnit.includes('mwh')) return numeric * 1000;
   if (normalizedUnit.includes('kwh')) return numeric;
-  return numeric / 1000;
-}
-
-function toKilowatts(value: unknown, unit: string) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return null;
-  const normalizedUnit = unit.toLowerCase().replace(/\s/g, '');
-  if (normalizedUnit === 'kw' || normalizedUnit.includes('kilowatt')) return numeric;
   return numeric / 1000;
 }
 
@@ -144,11 +140,11 @@ function comparison(points: EnergyPoint[], currentFrom: LocalTime, currentTo: Lo
   return { kwh, previousKwh, value: estimateValue(kwh, currentRates), previousValue: estimateValue(previousKwh, previousRates) };
 }
 
-async function getSolarJson(siteId: string, accessToken: string, from: LocalTime, to: LocalTime, resolution: string, endpoint: 'energy' | 'power' = 'energy') {
-  const url = new URL(`${SOLAREDGE_API_BASE_URL}/sites/${encodeURIComponent(siteId)}/${endpoint}`);
-  url.search = new URLSearchParams({ from: localIso(from), to: localIso(to), resolution, unit: endpoint === 'power' ? 'KW' : 'KWH' }).toString();
+async function getSolarJson(siteId: string, accessToken: string, from: LocalTime, to: LocalTime, resolution: string) {
+  const url = new URL(`${SOLAREDGE_API_BASE_URL}/sites/${encodeURIComponent(siteId)}/energy`);
+  url.search = new URLSearchParams({ from: localIso(from), to: localIso(to), resolution }).toString();
   const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
-  if (!response.ok) throw new Error(`SolarEdge ${endpoint} request failed (${response.status}).`);
+  if (!response.ok) throw new SolarEdgeHttpError(response.status, response.headers.get('retry-after'));
   return await response.json() as Record<string, unknown>;
 }
 
@@ -273,22 +269,19 @@ export async function GET(request: NextRequest) {
         const monthSameTime = shiftLocalMonths(now, -1);
         const yearSameTime = { ...now, year: now.month === 2 && now.day === 29 ? now.year - 1 : now.year - 1, day: now.month === 2 && now.day === 29 ? 28 : now.day };
 
-        const [powerPayload, dayPayload, weekPayload, monthPayload, yearPayload] = await Promise.all([
-          getSolarJson(integration.site_id, accessToken, fromLocalOrdinal(localOrdinal(now) - 30 * 60 * 1000), now, 'QUARTER_HOUR', 'power'),
+        const [dayPayload, weekPayload, historyPayload] = await Promise.all([
           getSolarJson(integration.site_id, accessToken, dayBeforeYesterday, now, 'QUARTER_HOUR'),
           getSolarJson(integration.site_id, accessToken, previousWeek, now, 'HOUR'),
-          getSolarJson(integration.site_id, accessToken, previousMonth, now, 'DAY'),
           getSolarJson(integration.site_id, accessToken, previousYear, now, 'DAY'),
         ]);
 
         const dayPoints = energyPoints(dayPayload);
         const weekPoints = energyPoints(weekPayload);
-        const monthPoints = energyPoints(monthPayload);
-        const yearPoints = energyPoints(yearPayload);
+        const historyPoints = energyPoints(historyPayload);
         const dayMetric = comparison(dayPoints, today, now, yesterday, yesterdaySameTime, dayPoints);
         const weekMetric = comparison(weekPoints, weekStart, now, previousWeek, weekSameTime, weekPoints);
-        const monthMetric = comparison(monthPoints, monthStart, now, previousMonth, monthSameTime);
-        const yearMetric = comparison(yearPoints, yearStart, now, previousYear, yearSameTime);
+        const monthMetric = comparison(historyPoints, monthStart, now, previousMonth, monthSameTime);
+        const yearMetric = comparison(historyPoints, yearStart, now, previousYear, yearSameTime);
         const yesterdayMetric = comparison(dayPoints, yesterday, yesterdaySameTime, dayBeforeYesterday, shiftLocalDays(yesterdaySameTime, -1), dayPoints);
         const periods: Record<string, PeriodComparison> = {
           today: dayMetric,
@@ -298,20 +291,16 @@ export async function GET(request: NextRequest) {
           year: yearMetric,
         };
 
-        const powerPayloadRecord = powerPayload as Record<string, unknown>;
-        const powerUnit = measurementUnit(powerPayloadRecord, 'W');
-        const livePowerReadings = valuesFrom(powerPayloadRecord).flatMap((point) => {
-          const kw = toKilowatts(point.value, powerUnit);
-          const time = parsePointTime(point.date ?? point.timestamp);
-          return kw !== null && time ? [{ kw, time }] : [];
+        const livePowerReadings = dayPoints.flatMap((point) => {
+          return [{ kw: point.kwh / 0.25, time: point.time }];
         });
         const currentKw = livePowerReadings.length ? livePowerReadings[livePowerReadings.length - 1].kw : 0;
 
         const charts = {
           day: pointsToChart(dayPoints, today, now, yesterday, yesterdaySameTime, 'day', 0.25),
           week: pointsToChart(weekPoints, weekStart, now, previousWeek, weekSameTime, 'week', 1),
-          month: pointsToChart(monthPoints, monthStart, now, previousMonth, monthSameTime, 'month', 24),
-          year: pointsToChart(yearPoints, yearStart, now, previousYear, yearSameTime, 'year', 24),
+          month: pointsToChart(historyPoints, monthStart, now, previousMonth, monthSameTime, 'month', 24),
+          year: pointsToChart(historyPoints, yearStart, now, previousYear, yearSameTime, 'year', 24),
         };
 
         return {
@@ -327,6 +316,15 @@ export async function GET(request: NextRequest) {
         };
       } catch (error) {
         console.error(`SolarEdge data load failed for property ${property.id}:`, error instanceof Error ? error.message : 'Unknown error');
+        if (error instanceof SolarEdgeHttpError && error.status === 429) {
+          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'rate_limited', retryAfter: error.retryAfter };
+        }
+        if (error instanceof SolarEdgeHttpError && (error.status === 401 || error.status === 403)) {
+          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'reauthorize', providerStatus: error.status };
+        }
+        if (error instanceof SolarEdgeHttpError) {
+          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'api_error', providerStatus: error.status };
+        }
         return { id: property.id, name: property.name, siteId: integration.site_id, status: 'error' };
       }
     }));
