@@ -22,6 +22,24 @@ type SolarProperty = {
   overview?: SolarOverview;
 };
 
+const connectionFailureMessages: Record<string, string> = {
+  'server-not-configured': 'SolarEdge server configuration is incomplete.',
+  'state-missing': 'The authorization response did not include OAuth state. Restart the connection from Settings.',
+  'state-lookup-failed': 'The authorization state could not be checked. Try connecting again.',
+  'state-expired-or-unknown': 'The authorization request expired or was already used. Restart the connection from Settings.',
+  'authorization-denied': 'SolarEdge authorization was denied or canceled.',
+  'authorization-code-missing': 'SolarEdge did not return an authorization code. Check the registered redirect URL.',
+  'credentials-lookup-failed': 'Saved SolarEdge credentials could not be loaded.',
+  'credentials-not-saved': 'Save the SolarEdge Client ID and Client Secret in Settings before connecting.',
+  'credential-decryption-failed': 'The saved Client Secret could not be decrypted. Verify SOLAREDGE_ENCRYPTION_KEY matches the key used when it was saved.',
+  'token-exchange-failed': 'The app could not reach SolarEdge to exchange the authorization code.',
+  'token-exchange-rejected': 'SolarEdge rejected the Client ID, Client Secret, or registered redirect URL. Verify them in SolarEdge and Settings.',
+  'token-response-incomplete': 'SolarEdge returned an incomplete authorization response. Reconnect or check the app scopes.',
+  'site-id-missing': 'SolarEdge did not return a Site ID. Confirm the authorized account has access to a site.',
+  'token-storage-failed': 'SolarEdge connected, but tokens could not be saved. Check server encryption and database setup.',
+  'callback-error': 'The callback encountered a server error. Try connecting again or check server logs.',
+};
+
 const formatMeasurement = (measurement?: Measurement) => {
   if (typeof measurement?.total !== 'number') return 'Unavailable';
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(measurement.total)} ${measurement.units ?? ''}`.trim();
@@ -47,7 +65,10 @@ export default function SolarPowerPage() {
         setRole(await fetchUserRole(session.user.email, client));
         const connection = new URLSearchParams(window.location.search).get('connection');
         if (connection === 'connected') setNotice('SolarEdge connected successfully.');
-        if (connection === 'failed') setError('SolarEdge connection failed. Check the credentials and registered callback URL in Settings.');
+        if (connection === 'failed') {
+          const reason = new URLSearchParams(window.location.search).get('connectionReason') ?? '';
+          setError(`SolarEdge connection failed: ${connectionFailureMessages[reason] ?? 'Check credentials and registered callback URL in Settings.'}`);
+        }
         const response = await fetch('/api/solar-power', {
           headers: { Authorization: `Bearer ${session.access_token}` },
           cache: 'no-store',
