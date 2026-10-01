@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import type { UserRole } from '@/lib/auth';
 import { AnnouncementsNavButton } from './announcements-nav-button';
 
-export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes';
+export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes' | 'solar-power';
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserRole[] }> = [
   { key: 'dashboard', label: 'Maintenance Tickets', href: '/dashboard' },
   { key: 'vendors', label: 'Approved Vendors', href: '/dashboard/vendors' },
   { key: 'properties', label: 'Properties & Units', href: '/dashboard/properties' },
   { key: 'door-codes', label: 'Door Codes', href: '/dashboard/door-codes', roles: ['owner', 'manager', 'maintenance'] },
+  { key: 'solar-power', label: 'Solar Power', href: '/dashboard/solar-power' },
   { key: 'tenants', label: 'Tenants', href: '/dashboard/tenants' },
   { key: 'staff', label: 'Staff roster', href: '/dashboard/staff', roles: ['owner', 'manager'] },
   { key: 'analysis', label: 'Analysis', href: '/dashboard/analysis', roles: ['owner', 'manager'] },
