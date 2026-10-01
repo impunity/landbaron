@@ -157,6 +157,46 @@ async function getSolarJson(siteId: string, accessToken: string, from: LocalTime
   return await response.json() as Record<string, unknown>;
 }
 
+function getDeviceList(payload: Record<string, unknown>) {
+  if (Array.isArray(payload)) return payload as Array<Record<string, unknown>>;
+  for (const key of ['devices', 'device', 'inverters']) {
+    const value = payload[key];
+    if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+    if (value && typeof value === 'object') {
+      const nested = value as Record<string, unknown>;
+      if (Array.isArray(nested.device)) return nested.device as Array<Record<string, unknown>>;
+      if (Array.isArray(nested.devices)) return nested.devices as Array<Record<string, unknown>>;
+    }
+  }
+  return null;
+}
+
+async function getReportingInverterCount(siteId: string, accessToken: string) {
+  const url = new URL(`${SOLAREDGE_API_BASE_URL}/sites/${encodeURIComponent(siteId)}/devices`);
+  url.searchParams.set('types', 'INVERTER');
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
+  if (!response.ok) throw new SolarEdgeHttpError(response.status, response.headers.get('retry-after'), null);
+  const payload = await response.json() as Record<string, unknown>;
+  const devices = getDeviceList(payload);
+  if (!devices) return null;
+  let reportingCount = 0;
+  for (const device of devices) {
+    const type = String(device.type ?? device.deviceType ?? 'INVERTER').toUpperCase();
+    if (type !== 'INVERTER') continue;
+    if (typeof device.active === 'boolean') {
+      if (device.active) reportingCount += 1;
+      continue;
+    }
+    const status = String(device.status ?? device.communicationStatus ?? '').toUpperCase();
+    if (['ACTIVE', 'ONLINE', 'REPORTING', 'CONNECTED'].includes(status)) {
+      reportingCount += 1;
+    } else if (!['INACTIVE', 'OFFLINE', 'NOT_REPORTING', 'DISCONNECTED'].includes(status)) {
+      return null;
+    }
+  }
+  return reportingCount;
+}
+
 function pointsToChart(points: EnergyPoint[], from: LocalTime, to: LocalTime, previousFrom: LocalTime, previousTo: LocalTime, range: string, intervalHours: number | ((point: EnergyPoint) => number)) {
   const rows = new Map<number, { slot: number; currentKw: number | null; previousKw: number | null }>();
   const currentStart = localOrdinal(from);
@@ -300,13 +340,14 @@ export async function GET(request: NextRequest) {
         const monthSameTime = shiftLocalMonths(now, -1);
         const yearSameTime = { ...now, year: now.month === 2 && now.day === 29 ? now.year - 1 : now.year - 1, day: now.month === 2 && now.day === 29 ? 28 : now.day };
 
-        const [dayPayload, weekPayload, monthCurrentPayload, monthPreviousPayload, yearCurrentPayload, yearPreviousPayload] = await Promise.all([
+        const [dayPayload, weekPayload, monthCurrentPayload, monthPreviousPayload, yearCurrentPayload, yearPreviousPayload, reportingInverterCount] = await Promise.all([
           getSolarJson(integration.site_id, accessToken, dayBeforeYesterday, now, 'QUARTER_HOUR'),
           getSolarJson(integration.site_id, accessToken, previousWeek, now, 'DAY'),
           getSolarJson(integration.site_id, accessToken, monthStart, now, 'DAY'),
           getSolarJson(integration.site_id, accessToken, previousMonth, monthSameTime, 'DAY'),
           getSolarJson(integration.site_id, accessToken, yearStart, now, 'MONTH'),
           getSolarJson(integration.site_id, accessToken, previousYear, yearSameTime, 'MONTH'),
+          getReportingInverterCount(integration.site_id, accessToken).catch(() => null),
         ]);
 
         const dayPoints = energyPoints(dayPayload);
@@ -333,7 +374,9 @@ export async function GET(request: NextRequest) {
         const livePowerReadings = dayPoints.flatMap((point) => {
           return [{ kw: point.kwh / 0.25, time: point.time }];
         });
+        const todayPowerReadings = livePowerReadings.filter((reading) => localOrdinal(reading.time) >= localOrdinal(today) && localOrdinal(reading.time) < localOrdinal(now));
         const currentKw = livePowerReadings.length ? livePowerReadings[livePowerReadings.length - 1].kw : 0;
+        const maxKwToday = todayPowerReadings.reduce((maximum, reading) => Math.max(maximum, reading.kw), 0);
 
         const charts = {
           day: pointsToChart(dayPoints, today, now, yesterday, yesterdaySameTime, 'day', 0.25),
@@ -348,10 +391,12 @@ export async function GET(request: NextRequest) {
           siteId: integration.site_id,
           status: 'connected',
           currentKw,
+          maxKwToday,
+          reportingInverterCount,
           periods,
           charts,
           blendedRate: BLENDED_DAYTIME_RATE,
-          rateNote: 'Approximate SDG&E avoided-cost estimate using illustrative time-of-use rates (42 cents/kWh daytime, 58 cents/kWh 4-9 PM, 33 cents/kWh overnight; longer-period summaries use a 44 cents/kWh blend). Actual tariff and NEM export credits vary; this is not a bill calculation.',
+          rateNote: 'Approximate SDG&E avoided-cost estimate using illustrative time-of-use rates (42¢/kWh daytime, 58¢/kWh 4-9 PM, 33¢/kWh overnight; longer-period summaries use a 44¢/kWh blend). Actual tariff and NEM export credits vary; this is not a bill calculation.',
         };
       } catch (error) {
         console.error(`SolarEdge data load failed for property ${property.id}:`, error instanceof Error ? error.message : 'Unknown error', error instanceof SolarEdgeHttpError ? error.providerMessage : '');

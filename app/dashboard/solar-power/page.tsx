@@ -24,6 +24,8 @@ type SolarProperty = {
   providerStatus?: number;
   providerMessage?: string | null;
   currentKw?: number;
+  maxKwToday?: number;
+  reportingInverterCount?: number | null;
   periods?: Record<'today' | 'yesterday' | 'week' | 'month' | 'year', PeriodComparison>;
   charts?: Record<ChartRange, ChartPoint[]>;
   blendedRate?: number;
@@ -64,7 +66,9 @@ const connectionFailureMessages: Record<string, string> = {
   'callback-error': 'The callback encountered a server error. Try connecting again or check server logs.',
 };
 
-const formatEnergy = (value: number) => `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} kWh`;
+const formatEnergy = (value: number) => value > 1000
+  ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value / 1000)} MWh`
+  : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} kWh`;
 const formatPower = (value: number) => `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)} kW`;
 
 function formatSlot(value: number, range: ChartRange) {
@@ -190,9 +194,10 @@ export default function SolarPowerPage() {
           {properties.map((property) => <article key={property.id} className="py-5">
             <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{property.name}</h2>{property.siteId && <p className="text-xs text-slate-500">SolarEdge site {property.siteId}</p>}</div>{property.status === 'connected' ? <p className="text-xs font-medium text-emerald-700">Connected</p> : property.status === 'rate_limited' ? <p role="status" className="text-sm font-medium text-amber-800">SolarEdge is rate-limiting requests; wait briefly, then refresh.</p> : property.status === 'reauthorize' ? <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">Authorization expired or missing scopes · Reconnect in Settings</a> : property.status === 'api_error' ? <div role="alert" className="max-w-2xl text-sm text-rose-700"><p>SolarEdge data request failed (HTTP {property.providerStatus}).</p>{property.providerMessage && <p className="mt-1 text-xs text-rose-800">{property.providerMessage}</p>}</div> : <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">{property.status === 'not_connected' ? 'Complete setup in Settings' : 'Check SolarEdge setup in Settings'}</a>}</div>
             {property.status === 'connected' && property.periods && property.charts && <>
-              <section className="mt-5 border-t border-slate-200 pt-4" aria-label={`${property.name} production summary`}>
-                <p className="text-xs font-semibold uppercase text-slate-500">Latest reported production · 15-minute sample</p>
-                <p className="mt-1 text-3xl font-semibold tabular-nums text-emerald-800">{formatPower(property.currentKw ?? 0)}</p>
+              <section className="mt-5 grid gap-5 border-t border-slate-200 pt-4 sm:grid-cols-3" aria-label={`${property.name} production summary`}>
+                <div><p className="text-xs font-semibold uppercase text-slate-500">Latest reported production · 15-minute sample</p><p className="mt-1 text-3xl font-semibold tabular-nums text-emerald-800">{formatPower(property.currentKw ?? 0)}</p></div>
+                <div><p className="text-xs font-semibold uppercase text-slate-500">Maximum production today · 15-minute average</p><p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{formatPower(property.maxKwToday ?? 0)}</p></div>
+                <div><p className="text-xs font-semibold uppercase text-slate-500">Inverters reporting</p><p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{property.reportingInverterCount ?? 'Unavailable'}</p></div>
               </section>
               <section className="mt-5" aria-label={`${property.name} energy production comparisons`}>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
