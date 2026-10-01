@@ -12,6 +12,7 @@ create table if not exists public.property_door_locks (
 );
 
 create index if not exists property_door_locks_property_idx on public.property_door_locks (property_id, unit_id);
+alter table public.property_door_locks add column if not exists photo_url text;
 alter table public.property_door_locks enable row level security;
 
 create table if not exists public.property_garages (

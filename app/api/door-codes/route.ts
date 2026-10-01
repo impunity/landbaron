@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
     const property = properties?.find((item) => item.id === propertyId);
     if (!property) return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     const [unitsResult, locksResult, garagesResult] = await Promise.all([
-      supabaseAdmin.from('units').select('id, unit_number').eq('property_id', propertyId).order('unit_number'),
-      supabaseAdmin.from('property_door_locks').select('id, unit_id, door, code, programming_code').eq('property_id', propertyId).order('door'),
+      supabaseAdmin.from('units').select('id, unit_number, unit_photos(photo_url, is_primary, created_at)').eq('property_id', propertyId).order('unit_number'),
+      supabaseAdmin.from('property_door_locks').select('id, unit_id, door, code, programming_code, photo_url').eq('property_id', propertyId).order('door'),
       supabaseAdmin.from('property_garages').select('id, unit_id, garage_id, code, programming_code, garage_rent').eq('property_id', propertyId).order('garage_id'),
     ]);
     if (unitsResult.error) throw unitsResult.error;
@@ -88,7 +88,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       properties,
       property,
-      units: unitsResult.data ?? [],
+      units: (unitsResult.data ?? []).map((unit) => ({
+        ...unit,
+        unit_photos: [...(unit.unit_photos ?? [])].sort((left, right) => Number(Boolean(right.is_primary)) - Number(Boolean(left.is_primary)) || new Date(right.created_at).getTime() - new Date(left.created_at).getTime()),
+      })),
       locks: locksResult.data ?? [],
       garages: (garagesResult.data ?? []).map((garage) => ({ ...garage, garage_rent: canManageGarages(user.role) ? garage.garage_rent : null })),
       canManageGarages: canManageGarages(user.role),
