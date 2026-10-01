@@ -14,7 +14,7 @@ type PeriodTotal = { kwh: number; value: number };
 type PeriodComparison = PeriodTotal & { previousKwh: number; previousValue: number };
 
 class SolarEdgeHttpError extends Error {
-  constructor(readonly status: number, readonly retryAfter: string | null) {
+  constructor(readonly status: number, readonly retryAfter: string | null, readonly providerMessage: string | null) {
     super(`SolarEdge returned HTTP ${status}.`);
   }
 }
@@ -144,7 +144,16 @@ async function getSolarJson(siteId: string, accessToken: string, from: LocalTime
   const url = new URL(`${SOLAREDGE_API_BASE_URL}/sites/${encodeURIComponent(siteId)}/energy`);
   url.search = new URLSearchParams({ from: localIso(from), to: localIso(to), resolution }).toString();
   const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
-  if (!response.ok) throw new SolarEdgeHttpError(response.status, response.headers.get('retry-after'));
+  if (!response.ok) {
+    const problem = await response.json().catch(() => ({})) as Record<string, unknown>;
+    const providerMessage = [problem.title, problem.detail]
+      .filter((value): value is string => typeof value === 'string')
+      .join(': ')
+      .replace(/[\u0000-\u001f]+/g, ' ')
+      .replace(/https?:\/\/\S+/g, '[URL]')
+      .slice(0, 240);
+    throw new SolarEdgeHttpError(response.status, response.headers.get('retry-after'), providerMessage || null);
+  }
   return await response.json() as Record<string, unknown>;
 }
 
@@ -315,7 +324,7 @@ export async function GET(request: NextRequest) {
           rateNote: `Approximate SDG&E avoided-cost estimate using illustrative time-of-use rates ($0.42/kWh daytime, $0.58/kWh 4-9 PM, $0.33/kWh overnight; daily/monthly/yearly summaries use a $${BLENDED_DAYTIME_RATE.toFixed(2)}/kWh daytime blend). Actual tariff and NEM export credits vary; this is not a bill calculation.`,
         };
       } catch (error) {
-        console.error(`SolarEdge data load failed for property ${property.id}:`, error instanceof Error ? error.message : 'Unknown error');
+        console.error(`SolarEdge data load failed for property ${property.id}:`, error instanceof Error ? error.message : 'Unknown error', error instanceof SolarEdgeHttpError ? error.providerMessage : '');
         if (error instanceof SolarEdgeHttpError && error.status === 429) {
           return { id: property.id, name: property.name, siteId: integration.site_id, status: 'rate_limited', retryAfter: error.retryAfter };
         }
@@ -323,7 +332,7 @@ export async function GET(request: NextRequest) {
           return { id: property.id, name: property.name, siteId: integration.site_id, status: 'reauthorize', providerStatus: error.status };
         }
         if (error instanceof SolarEdgeHttpError) {
-          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'api_error', providerStatus: error.status };
+          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'api_error', providerStatus: error.status, providerMessage: error.providerMessage };
         }
         return { id: property.id, name: property.name, siteId: integration.site_id, status: 'error' };
       }
