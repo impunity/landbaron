@@ -5,6 +5,189 @@ import { decryptSolarSecret, encryptSolarSecret, SOLAREDGE_API_BASE_URL, SOLARED
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+const SITE_TIME_ZONE = 'America/Los_Angeles';
+const BLENDED_DAYTIME_RATE = 0.44;
+
+type LocalTime = { year: number; month: number; day: number; hour: number; minute: number; second: number };
+type EnergyPoint = { time: LocalTime; kwh: number };
+type PeriodTotal = { kwh: number; value: number };
+type PeriodComparison = PeriodTotal & { previousKwh: number; previousValue: number };
+
+function getLocalTime(date: Date): LocalTime {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: SITE_TIME_ZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return { year: value('year'), month: value('month'), day: value('day'), hour: value('hour'), minute: value('minute'), second: value('second') };
+}
+
+function localOrdinal(time: LocalTime) {
+  return Date.UTC(time.year, time.month - 1, time.day, time.hour, time.minute, time.second);
+}
+
+function fromLocalOrdinal(ordinal: number): LocalTime {
+  const date = new Date(ordinal);
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour: date.getUTCHours(), minute: date.getUTCMinutes(), second: date.getUTCSeconds() };
+}
+
+function shiftLocalDays(time: LocalTime, days: number): LocalTime {
+  const date = new Date(Date.UTC(time.year, time.month - 1, time.day + days, time.hour, time.minute, time.second));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour: date.getUTCHours(), minute: date.getUTCMinutes(), second: date.getUTCSeconds() };
+}
+
+function shiftLocalMonths(time: LocalTime, months: number): LocalTime {
+  const firstOfTarget = new Date(Date.UTC(time.year, time.month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth() + 1, 0)).getUTCDate();
+  return {
+    year: firstOfTarget.getUTCFullYear(),
+    month: firstOfTarget.getUTCMonth() + 1,
+    day: Math.min(time.day, lastDay),
+    hour: time.hour,
+    minute: time.minute,
+    second: time.second,
+  };
+}
+
+function localIso(time: LocalTime) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${time.year}-${pad(time.month)}-${pad(time.day)}T${pad(time.hour)}:${pad(time.minute)}:${pad(time.second)}`;
+}
+
+function parsePointTime(value: unknown): LocalTime | null {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:?\d{2})?)?$/);
+  if (!match) return null;
+  const [, year, month, day, hour = '0', minute = '0', second = '0', zone] = match;
+  const parsed: LocalTime = { year: Number(year), month: Number(month), day: Number(day), hour: Number(hour), minute: Number(minute), second: Number(second) };
+  if (!zone || zone === 'Z') return parsed;
+  return getLocalTime(new Date(value));
+}
+
+function toKilowattHours(value: unknown, unit: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const normalizedUnit = unit.toLowerCase().replace(/\s/g, '');
+  if (normalizedUnit.includes('mwh')) return numeric * 1000;
+  if (normalizedUnit.includes('kwh')) return numeric;
+  return numeric / 1000;
+}
+
+function toKilowatts(value: unknown, unit: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const normalizedUnit = unit.toLowerCase().replace(/\s/g, '');
+  if (normalizedUnit === 'kw' || normalizedUnit.includes('kilowatt')) return numeric;
+  return numeric / 1000;
+}
+
+function valuesFrom(payload: Record<string, unknown>) {
+  if (Array.isArray(payload.values)) return payload.values as Array<Record<string, unknown>>;
+  for (const key of ['energy', 'power', 'siteEnergy', 'sitePower']) {
+    const nested = payload[key];
+    if (nested && typeof nested === 'object' && Array.isArray((nested as Record<string, unknown>).values)) {
+      return (nested as Record<string, unknown>).values as Array<Record<string, unknown>>;
+    }
+  }
+  return [];
+}
+
+function measurementUnit(payload: Record<string, unknown>, fallback: string) {
+  if (typeof payload.unit === 'string') return payload.unit;
+  if (typeof payload.units === 'string') return payload.units;
+  for (const key of ['energy', 'power', 'siteEnergy', 'sitePower']) {
+    const nested = payload[key];
+    if (nested && typeof nested === 'object') {
+      const nestedPayload = nested as Record<string, unknown>;
+      if (typeof nestedPayload.unit === 'string') return nestedPayload.unit;
+      if (typeof nestedPayload.units === 'string') return nestedPayload.units;
+    }
+  }
+  return fallback;
+}
+
+function energyPoints(payload: Record<string, unknown>): EnergyPoint[] {
+  const unit = measurementUnit(payload, 'Wh');
+  return valuesFrom(payload).flatMap((point) => {
+    const time = parsePointTime(point.date ?? point.timestamp);
+    const kwh = toKilowattHours(point.value, unit);
+    return time && kwh !== null ? [{ time, kwh }] : [];
+  });
+}
+
+function sumRange(points: EnergyPoint[], from: LocalTime, to: LocalTime) {
+  const start = localOrdinal(from);
+  const end = localOrdinal(to);
+  return points.reduce((total, point) => {
+    const at = localOrdinal(point.time);
+    return at >= start && at < end ? total + point.kwh : total;
+  }, 0);
+}
+
+function estimateValue(kwh: number, hourlyPoints?: EnergyPoint[]) {
+  if (!hourlyPoints?.length) return kwh * BLENDED_DAYTIME_RATE;
+  const weightedValue = hourlyPoints.reduce((total, point) => {
+    const hour = point.time.hour;
+    const rate = hour >= 16 && hour < 21 ? 0.58 : hour >= 6 && hour < 16 ? 0.42 : 0.33;
+    return total + point.kwh * rate;
+  }, 0);
+  const measuredKwh = hourlyPoints.reduce((total, point) => total + point.kwh, 0);
+  return weightedValue + Math.max(0, kwh - measuredKwh) * BLENDED_DAYTIME_RATE;
+}
+
+function comparison(points: EnergyPoint[], currentFrom: LocalTime, currentTo: LocalTime, previousFrom: LocalTime, previousTo: LocalTime, rates?: EnergyPoint[]): PeriodComparison {
+  const kwh = sumRange(points, currentFrom, currentTo);
+  const previousKwh = sumRange(points, previousFrom, previousTo);
+  const currentRates = rates?.filter((point) => localOrdinal(point.time) >= localOrdinal(currentFrom) && localOrdinal(point.time) < localOrdinal(currentTo));
+  const previousRates = rates?.filter((point) => localOrdinal(point.time) >= localOrdinal(previousFrom) && localOrdinal(point.time) < localOrdinal(previousTo));
+  return { kwh, previousKwh, value: estimateValue(kwh, currentRates), previousValue: estimateValue(previousKwh, previousRates) };
+}
+
+async function getSolarJson(siteId: string, accessToken: string, from: LocalTime, to: LocalTime, resolution: string, endpoint: 'energy' | 'power' = 'energy') {
+  const url = new URL(`${SOLAREDGE_API_BASE_URL}/sites/${encodeURIComponent(siteId)}/${endpoint}`);
+  url.search = new URLSearchParams({ from: localIso(from), to: localIso(to), resolution, unit: endpoint === 'power' ? 'KW' : 'KWH' }).toString();
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
+  if (!response.ok) throw new Error(`SolarEdge ${endpoint} request failed (${response.status}).`);
+  return await response.json() as Record<string, unknown>;
+}
+
+function pointsToChart(points: EnergyPoint[], from: LocalTime, to: LocalTime, previousFrom: LocalTime, previousTo: LocalTime, range: string, intervalHours: number) {
+  const rows = new Map<number, { slot: number; currentKw: number | null; previousKw: number | null }>();
+  const currentStart = localOrdinal(from);
+  const previousStart = localOrdinal(previousFrom);
+  const currentEnd = localOrdinal(to);
+  const previousEnd = localOrdinal(previousTo);
+  for (const point of points) {
+    const at = localOrdinal(point.time);
+    const isCurrent = at >= currentStart && at < currentEnd;
+    const isPrevious = at >= previousStart && at < previousEnd;
+    if (!isCurrent && !isPrevious) continue;
+    const base = isPrevious ? previousStart : currentStart;
+    let slot = (at - base) / 3_600_000;
+    if (range === 'day') slot = point.time.hour + point.time.minute / 60;
+    if (range === 'month') slot = point.time.day - 1 + point.time.hour / 24;
+    if (range === 'year') {
+      const daysInMonth = new Date(Date.UTC(point.time.year, point.time.month, 0)).getUTCDate();
+      slot = (point.time.month - 1) + (point.time.day - 1) / daysInMonth;
+    }
+    if (isPrevious && range === 'day') slot = point.time.hour + point.time.minute / 60;
+    if (isPrevious && range === 'month') slot = point.time.day - 1 + point.time.hour / 24;
+    if (isPrevious && range === 'year') {
+      const daysInMonth = new Date(Date.UTC(point.time.year, point.time.month, 0)).getUTCDate();
+      slot = (point.time.month - 1) + (point.time.day - 1) / daysInMonth;
+    }
+    if (slot < 0 || (range === 'day' && slot > 24) || (range === 'week' && slot > 168) || (range === 'month' && slot > 32) || (range === 'year' && slot > 12)) continue;
+    const key = Math.round(slot * 4) / 4;
+    const row = rows.get(key) ?? { slot: key, currentKw: null, previousKw: null };
+    const kw = point.kwh / intervalHours;
+    if (isPrevious) row.previousKw = (row.previousKw ?? 0) + kw;
+    else row.currentKw = (row.currentKw ?? 0) + kw;
+    rows.set(key, row);
+  }
+  return [...rows.values()].sort((left, right) => left.slot - right.slot);
+}
+
 async function getAccessToken(integration: Record<string, unknown>) {
   const expiresAt = typeof integration.token_expires_at === 'string' ? Date.parse(integration.token_expires_at) : 0;
   if (typeof integration.access_token_encrypted === 'string' && expiresAt > Date.now() + 60_000) {
@@ -73,15 +256,77 @@ export async function GET(request: NextRequest) {
       }
       try {
         const accessToken = await getAccessToken(integration as unknown as Record<string, unknown>);
-        const response = await fetch(`${SOLAREDGE_API_BASE_URL}/sites/${encodeURIComponent(integration.site_id)}/overview`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          cache: 'no-store',
+        const now = getLocalTime(new Date());
+        const today = { ...now, hour: 0, minute: 0, second: 0 };
+        const yesterday = shiftLocalDays(today, -1);
+        const dayBeforeYesterday = shiftLocalDays(today, -2);
+        const weekDay = new Date(Date.UTC(now.year, now.month - 1, now.day)).getUTCDay();
+        const mondayOffset = (weekDay + 6) % 7;
+        const weekStart = shiftLocalDays(today, -mondayOffset);
+        const previousWeek = shiftLocalDays(weekStart, -7);
+        const monthStart = { ...now, day: 1, hour: 0, minute: 0, second: 0 };
+        const previousMonth = shiftLocalMonths(monthStart, -1);
+        const yearStart = { ...now, month: 1, day: 1, hour: 0, minute: 0, second: 0 };
+        const previousYear = { ...yearStart, year: yearStart.year - 1 };
+        const yesterdaySameTime = shiftLocalDays(now, -1);
+        const weekSameTime = shiftLocalDays(now, -7);
+        const monthSameTime = shiftLocalMonths(now, -1);
+        const yearSameTime = { ...now, year: now.month === 2 && now.day === 29 ? now.year - 1 : now.year - 1, day: now.month === 2 && now.day === 29 ? 28 : now.day };
+
+        const [powerPayload, dayPayload, weekPayload, monthPayload, yearPayload] = await Promise.all([
+          getSolarJson(integration.site_id, accessToken, fromLocalOrdinal(localOrdinal(now) - 30 * 60 * 1000), now, 'QUARTER_HOUR', 'power'),
+          getSolarJson(integration.site_id, accessToken, dayBeforeYesterday, now, 'QUARTER_HOUR'),
+          getSolarJson(integration.site_id, accessToken, previousWeek, now, 'HOUR'),
+          getSolarJson(integration.site_id, accessToken, previousMonth, now, 'DAY'),
+          getSolarJson(integration.site_id, accessToken, previousYear, now, 'DAY'),
+        ]);
+
+        const dayPoints = energyPoints(dayPayload);
+        const weekPoints = energyPoints(weekPayload);
+        const monthPoints = energyPoints(monthPayload);
+        const yearPoints = energyPoints(yearPayload);
+        const dayMetric = comparison(dayPoints, today, now, yesterday, yesterdaySameTime, dayPoints);
+        const weekMetric = comparison(weekPoints, weekStart, now, previousWeek, weekSameTime, weekPoints);
+        const monthMetric = comparison(monthPoints, monthStart, now, previousMonth, monthSameTime);
+        const yearMetric = comparison(yearPoints, yearStart, now, previousYear, yearSameTime);
+        const yesterdayMetric = comparison(dayPoints, yesterday, yesterdaySameTime, dayBeforeYesterday, shiftLocalDays(yesterdaySameTime, -1), dayPoints);
+        const periods: Record<string, PeriodComparison> = {
+          today: dayMetric,
+          yesterday: yesterdayMetric,
+          week: weekMetric,
+          month: monthMetric,
+          year: yearMetric,
+        };
+
+        const powerPayloadRecord = powerPayload as Record<string, unknown>;
+        const powerUnit = measurementUnit(powerPayloadRecord, 'W');
+        const livePowerReadings = valuesFrom(powerPayloadRecord).flatMap((point) => {
+          const kw = toKilowatts(point.value, powerUnit);
+          const time = parsePointTime(point.date ?? point.timestamp);
+          return kw !== null && time ? [{ kw, time }] : [];
         });
-        if (!response.ok) throw new Error('SolarEdge overview request failed.');
-        const overview = await response.json();
-        return { id: property.id, name: property.name, siteId: integration.site_id, status: 'connected', overview };
+        const currentKw = livePowerReadings.length ? livePowerReadings[livePowerReadings.length - 1].kw : 0;
+
+        const charts = {
+          day: pointsToChart(dayPoints, today, now, yesterday, yesterdaySameTime, 'day', 0.25),
+          week: pointsToChart(weekPoints, weekStart, now, previousWeek, weekSameTime, 'week', 1),
+          month: pointsToChart(monthPoints, monthStart, now, previousMonth, monthSameTime, 'month', 24),
+          year: pointsToChart(yearPoints, yearStart, now, previousYear, yearSameTime, 'year', 24),
+        };
+
+        return {
+          id: property.id,
+          name: property.name,
+          siteId: integration.site_id,
+          status: 'connected',
+          currentKw,
+          periods,
+          charts,
+          blendedRate: BLENDED_DAYTIME_RATE,
+          rateNote: `Approximate SDG&E avoided-cost estimate using illustrative time-of-use rates ($0.42/kWh daytime, $0.58/kWh 4-9 PM, $0.33/kWh overnight; daily/monthly/yearly summaries use a $${BLENDED_DAYTIME_RATE.toFixed(2)}/kWh daytime blend). Actual tariff and NEM export credits vary; this is not a bill calculation.`,
+        };
       } catch (error) {
-        console.error(`SolarEdge data load failed for property ${property.id}:`, error);
+        console.error(`SolarEdge data load failed for property ${property.id}:`, error instanceof Error ? error.message : 'Unknown error');
         return { id: property.id, name: property.name, siteId: integration.site_id, status: 'error' };
       }
     }));
