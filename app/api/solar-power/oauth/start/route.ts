@@ -49,7 +49,15 @@ export async function POST(request: NextRequest) {
       state,
       access_duration: '24',
     }).toString();
-    return NextResponse.json({ authorizeUrl: authorizeUrl.toString() });
+    const response = NextResponse.json({ authorizeUrl: authorizeUrl.toString() });
+    response.cookies.set('solar_oauth_state', state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/api/solar-power/oauth/callback',
+      maxAge: 10 * 60,
+    });
+    return response;
   } catch (error) {
     console.error('Start SolarEdge OAuth failed:', error);
     return NextResponse.json({ error: 'SolarEdge authorization could not be started.' }, { status: 500 });

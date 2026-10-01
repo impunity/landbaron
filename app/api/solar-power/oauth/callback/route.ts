@@ -8,17 +8,30 @@ function finish(request: NextRequest, result: 'connected' | 'failed', propertyId
   destination.searchParams.set('connection', result);
   if (propertyId) destination.searchParams.set('propertyId', propertyId);
   if (reason) destination.searchParams.set('connectionReason', reason);
-  return NextResponse.redirect(destination);
+  const response = NextResponse.redirect(destination);
+  response.cookies.set('solar_oauth_state', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/api/solar-power/oauth/callback',
+    maxAge: 0,
+  });
+  return response;
 }
 
 export async function GET(request: NextRequest) {
   let failureReason = 'callback-error';
   try {
     if (!supabaseAdmin) return finish(request, 'failed', undefined, 'server-not-configured');
-    const state = request.nextUrl.searchParams.get('state');
+    const returnedState = request.nextUrl.searchParams.get('state');
+    const cookieState = request.cookies.get('solar_oauth_state')?.value;
+    const state = returnedState || cookieState;
     const code = request.nextUrl.searchParams.get('code');
     const providerError = request.nextUrl.searchParams.get('error');
     if (!state) return finish(request, 'failed', undefined, 'state-missing');
+    if (returnedState && cookieState && returnedState !== cookieState) {
+      return finish(request, 'failed', undefined, 'state-mismatch');
+    }
 
     failureReason = 'state-lookup-failed';
     const { data: oauthState, error: stateError } = await supabaseAdmin.from('solar_oauth_states')

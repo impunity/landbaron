@@ -25,6 +25,7 @@ type SolarProperty = {
 const connectionFailureMessages: Record<string, string> = {
   'server-not-configured': 'SolarEdge server configuration is incomplete.',
   'state-missing': 'The authorization response did not include OAuth state. Restart the connection from Settings.',
+  'state-mismatch': 'The authorization state did not match this browser session. Restart the connection from Settings.',
   'state-lookup-failed': 'The authorization state could not be checked. Try connecting again.',
   'state-expired-or-unknown': 'The authorization request expired or was already used. Restart the connection from Settings.',
   'authorization-denied': 'SolarEdge authorization was denied or canceled.',
