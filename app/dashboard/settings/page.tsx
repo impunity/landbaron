@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
 import { setTimeFormat, useTimeFormat, type TimeFormat } from '@/lib/time-format';
+import { getTemperatureUnit, type TemperatureUnit } from '@/lib/temperature';
 
 type SolarProperty = {
   id: string;
@@ -31,6 +32,23 @@ type SolarDraft = { clientId: string; clientSecret: string; siteId: string };
 
 const inputClass = 'mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600';
 
+function getZodiacSign(birthdate: string) {
+  const [year, month, day] = birthdate.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius';
+  if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return 'Pisces';
+  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries';
+  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus';
+  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini';
+  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer';
+  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo';
+  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo';
+  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra';
+  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio';
+  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius';
+  return 'Capricorn';
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const timeFormat = useTimeFormat();
@@ -43,6 +61,11 @@ export default function SettingsPage() {
   const [connectingPropertyId, setConnectingPropertyId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>('fahrenheit');
+  const [birthdate, setBirthdate] = useState('');
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [preferencesError, setPreferencesError] = useState('');
+  const [preferencesNotice, setPreferencesNotice] = useState('');
 
   useEffect(() => {
     void (async () => {
@@ -51,6 +74,18 @@ export default function SettingsPage() {
       if (!sessionUser) {
         router.replace('/login');
         return;
+      }
+      const accessToken = (await client?.auth.getSession())?.data.session?.access_token;
+      if (accessToken) {
+        try {
+          const response = await fetch('/api/account-preferences', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
+          const preferences = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(preferences.error || 'Account preferences could not be loaded.');
+          setTemperatureUnit(getTemperatureUnit(preferences.temperature_unit));
+          setBirthdate(typeof preferences.birthdate === 'string' ? preferences.birthdate : '');
+        } catch (preferenceError) {
+          setPreferencesError(preferenceError instanceof Error ? preferenceError.message : 'Account preferences could not be loaded.');
+        }
       }
       const role = await fetchUserRole(sessionUser.email, client);
       setSession({
@@ -90,6 +125,32 @@ export default function SettingsPage() {
       }
     })();
   }, [router]);
+
+  async function savePreferences() {
+    setSavingPreferences(true);
+    setPreferencesError('');
+    setPreferencesNotice('');
+    try {
+      if (birthdate && birthdate > new Date().toISOString().slice(0, 10)) {
+        throw new Error('Birthday cannot be in the future.');
+      }
+      if (!supabase) throw new Error('Account settings are unavailable.');
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Sign in is required.');
+      const response = await fetch('/api/account-preferences', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temperature_unit: temperatureUnit, birthdate }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Preferences could not be saved.');
+      setPreferencesNotice('Preferences saved.');
+    } catch (saveError) {
+      setPreferencesError(saveError instanceof Error ? saveError.message : 'Preferences could not be saved.');
+    } finally {
+      setSavingPreferences(false);
+    }
+  }
 
   async function saveProperty(propertyId: string, enabled: boolean) {
     const draft = drafts[propertyId];
@@ -160,6 +221,30 @@ export default function SettingsPage() {
               </button>
             ))}
           </fieldset>
+        </section>
+
+        <section className="mt-7 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
+          <h2 className="text-base font-semibold">Your preferences</h2>
+          <div className="mt-4 grid gap-6 sm:grid-cols-2">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Temperature</p>
+              <fieldset className="mt-2 inline-flex overflow-hidden rounded-md border border-slate-300" aria-label="Temperature unit">
+                {([{ value: 'fahrenheit', label: '°F Fahrenheit' }, { value: 'celsius', label: '°C Celsius' }] as const).map((option) => (
+                  <button key={option.value} type="button" aria-pressed={temperatureUnit === option.value} onClick={() => setTemperatureUnit(option.value)} className={`px-3 py-2 text-sm font-medium ${temperatureUnit === option.value ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    {option.label}
+                  </button>
+                ))}
+              </fieldset>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700" htmlFor="birthdate">What&apos;s your birthday?</label>
+              <input id="birthdate" className={inputClass} type="date" max={new Date().toISOString().slice(0, 10)} value={birthdate} onChange={(event) => setBirthdate(event.target.value)} />
+              <p className="mt-2 text-sm text-slate-600">Zodiac sign: <span className="font-medium text-slate-900">{birthdate ? getZodiacSign(birthdate) ?? 'Unavailable' : 'Not set'}</span></p>
+            </div>
+          </div>
+          {preferencesError && <p role="alert" className="mt-4 text-sm text-rose-700">{preferencesError}</p>}
+          {preferencesNotice && <p role="status" className="mt-4 text-sm text-emerald-700">{preferencesNotice}</p>}
+          <button type="button" onClick={() => void savePreferences()} disabled={savingPreferences} className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{savingPreferences ? 'Saving...' : 'Save preferences'}</button>
         </section>
 
         <section className="mt-7 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">

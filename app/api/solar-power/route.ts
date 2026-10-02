@@ -300,7 +300,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    let propertiesQuery = supabaseAdmin.from('properties').select('id, name')
+    let propertiesQuery = supabaseAdmin.from('properties').select('id, name, latitude, longitude')
       .eq('organization_id', organizationId).order('name');
     const propertyFilter = tenantPropertyId ?? requestedPropertyId;
     if (propertyFilter) propertiesQuery = propertiesQuery.eq('id', propertyFilter);
@@ -319,7 +319,7 @@ export async function GET(request: NextRequest) {
       const property = propertyMap.get(integration.property_id);
       if (!property) return null;
       if (!integration.site_id || !integration.access_token_encrypted) {
-        return { id: property.id, name: property.name, siteId: integration.site_id, status: 'not_connected' };
+        return { id: property.id, name: property.name, latitude: property.latitude, longitude: property.longitude, siteId: integration.site_id, status: 'not_connected' };
       }
       try {
         const accessToken = await getAccessToken(integration as unknown as Record<string, unknown>);
@@ -388,6 +388,8 @@ export async function GET(request: NextRequest) {
         return {
           id: property.id,
           name: property.name,
+          latitude: property.latitude,
+          longitude: property.longitude,
           siteId: integration.site_id,
           status: 'connected',
           currentKw,
@@ -401,13 +403,13 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         console.error(`SolarEdge data load failed for property ${property.id}:`, error instanceof Error ? error.message : 'Unknown error', error instanceof SolarEdgeHttpError ? error.providerMessage : '');
         if (error instanceof SolarEdgeHttpError && error.status === 429) {
-          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'rate_limited', retryAfter: error.retryAfter };
+          return { id: property.id, name: property.name, latitude: property.latitude, longitude: property.longitude, siteId: integration.site_id, status: 'rate_limited', retryAfter: error.retryAfter };
         }
         if (error instanceof SolarEdgeHttpError && (error.status === 401 || error.status === 403)) {
-          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'reauthorize', providerStatus: error.status };
+          return { id: property.id, name: property.name, latitude: property.latitude, longitude: property.longitude, siteId: integration.site_id, status: 'reauthorize', providerStatus: error.status };
         }
         if (error instanceof SolarEdgeHttpError) {
-          return { id: property.id, name: property.name, siteId: integration.site_id, status: 'api_error', providerStatus: error.status, providerMessage: error.providerMessage };
+          return { id: property.id, name: property.name, latitude: property.latitude, longitude: property.longitude, siteId: integration.site_id, status: 'api_error', providerStatus: error.status, providerMessage: error.providerMessage };
         }
         return { id: property.id, name: property.name, siteId: integration.site_id, status: 'error' };
       }

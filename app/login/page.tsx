@@ -23,7 +23,8 @@ export default function LoginPage() {
   const router = useRouter();
   const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(() => Boolean(supabase));
+  const [odometer, setOdometer] = useState(4914);
   const [unrecognizedUser, setUnrecognizedUser] = useState<{ email: string; name: string } | null>(null);
   const [dialogMode, setDialogMode] = useState<'setup' | 'request' | null>(null);
   const [savingDialog, setSavingDialog] = useState(false);
@@ -32,11 +33,26 @@ export default function LoginPage() {
   const [requestDraft, setRequestDraft] = useState({ invite_code: '', requested_role: 'tenant', name: '', phone: '', address: '' });
 
   useEffect(() => {
+    let timeout = 0;
+    let active = true;
+    const scheduleIncrement = () => {
+      timeout = window.setTimeout(() => {
+        setOdometer((current) => Math.min(999999, current + 1 + Math.floor(Math.random() * 23)));
+        if (active) scheduleIncrement();
+      }, 1000 + Math.floor(Math.random() * 9001));
+    };
+    scheduleIncrement();
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     const client = supabase;
 
     if (!client) {
-      setCheckingSession(false);
       return;
     }
 
@@ -218,9 +234,17 @@ export default function LoginPage() {
           </div>
         </div>
       )}
+      <section className="mb-5 w-full max-w-xl border-y border-slate-300 bg-white px-5 py-4" aria-label="Unit count">
+        <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+          <div className="flex gap-1" aria-label={`${odometer.toLocaleString()} units`}>
+            {String(odometer).padStart(6, '0').split('').map((digit, index) => <span key={index} className="grid h-11 w-8 place-items-center border border-slate-700 bg-slate-950 font-mono text-2xl font-semibold tabular-nums text-emerald-300 sm:h-12 sm:w-9">{digit}</span>)}
+          </div>
+          <p className="text-lg font-semibold text-slate-900">Units Can&apos;t Be Wrong!</p>
+        </div>
+      </section>
       <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-semibold text-slate-900">Sign in</h1>
+          <h1 className="text-3xl font-semibold text-slate-900">Sign in / Sign up</h1>
           <p className="mt-2 text-sm text-slate-600">
             Your email will be recognized if you&apos;re in the system. If not, you&apos;ll be able to create an account super fast.
           </p>

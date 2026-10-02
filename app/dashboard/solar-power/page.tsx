@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowDownRight, ArrowUpRight, Minus, RefreshCw } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Clock3, CloudSun, Minus, RefreshCw } from 'lucide-react';
 
 import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { formatCurrency } from '@/lib/format-currency';
+import { formatTemperature, getTemperatureUnit, type TemperatureUnit } from '@/lib/temperature';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
@@ -15,9 +16,18 @@ type ChartRange = 'day' | 'week' | 'month' | 'year';
 type ChartPoint = { slot: number; currentKw: number | null; previousKw: number | null };
 type PeriodTotal = { kwh: number; value: number };
 type PeriodComparison = PeriodTotal & { previousKwh: number; previousValue: number };
+type WeatherObservation = {
+  timezone: string;
+  temperatureF: number;
+  precipitationIn: number;
+  weatherCode: number;
+  isDay: boolean;
+};
 type SolarProperty = {
   id: string;
   name: string;
+  latitude: number | null;
+  longitude: number | null;
   siteId: string | null;
   status: 'connected' | 'not_connected' | 'error' | 'rate_limited' | 'reauthorize' | 'api_error';
   retryAfter?: string | null;
@@ -117,6 +127,45 @@ function PeriodCard({ label, period }: { label: string; period: PeriodComparison
   );
 }
 
+function describeWeather(code: number, isDay: boolean) {
+  if (code === 0) return isDay ? 'Sunny' : 'Clear';
+  if (code === 1) return isDay ? 'Mostly sunny' : 'Mostly clear';
+  if (code === 2) return 'Partly cloudy';
+  if (code === 3) return 'Cloudy';
+  if ([45, 48].includes(code)) return 'Foggy';
+  if ([51, 53, 55, 56, 57].includes(code)) return 'Drizzle';
+  if ([61, 63, 65, 66, 67].includes(code)) return 'Rain';
+  if ([71, 73, 75, 77].includes(code)) return 'Snow';
+  if ([80, 81, 82, 85, 86].includes(code)) return 'Showers';
+  if ([95, 96, 99].includes(code)) return 'Thunderstorms';
+  return 'Conditions unavailable';
+}
+
+function PropertyWeather({ property, observation, now, temperatureUnit }: {
+  property: SolarProperty;
+  observation: WeatherObservation | null | undefined;
+  now: number;
+  temperatureUnit: TemperatureUnit;
+}) {
+  const hasCoordinates = typeof property.latitude === 'number' && typeof property.longitude === 'number';
+  const unavailable = !hasCoordinates || observation === null;
+  const localTime = observation
+    ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone: observation.timezone }).format(now)
+    : unavailable ? 'Unavailable' : 'Loading';
+  const condition = observation ? `${describeWeather(observation.weatherCode, observation.isDay)} · ${formatTemperature(observation.temperatureF, temperatureUnit)}` : unavailable ? 'Unavailable' : 'Loading';
+  const precipitation = observation
+    ? observation.precipitationIn > 0 ? `${observation.precipitationIn.toFixed(2)} in` : 'None'
+    : unavailable ? 'Unavailable' : 'Loading';
+
+  return (
+    <div className="mt-2 grid gap-x-4 gap-y-1 text-xs text-slate-600 sm:text-right">
+      <p className="inline-flex items-center gap-1.5 sm:justify-end"><Clock3 size={13} aria-hidden="true" /><span className="font-medium text-slate-500">Local time</span><time>{localTime}</time></p>
+      <p className="inline-flex items-center gap-1.5 sm:justify-end"><CloudSun size={14} aria-hidden="true" /><span className="font-medium text-slate-500">Weather</span><span>{condition}</span></p>
+      <p className="sm:col-span-2"><span className="font-medium text-slate-500">Precipitation</span> {precipitation}</p>
+    </div>
+  );
+}
+
 async function fetchSolarProperties(accessToken: string, propertyId?: string): Promise<SolarProperty[]> {
   const query = propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : '';
   const response = await fetch(`/api/solar-power${query}`, {
@@ -133,11 +182,64 @@ export default function SolarPowerPage() {
   const [role, setRole] = useState<UserRole | null>(null);
   const [propertyId, setPropertyId] = useState('');
   const [properties, setProperties] = useState<SolarProperty[]>([]);
+  const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>('fahrenheit');
+  const [weatherByProperty, setWeatherByProperty] = useState<Record<string, WeatherObservation | null>>({});
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [chartRange, setChartRange] = useState<ChartRange>('day');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const locatedProperties = properties.filter((property) => typeof property.latitude === 'number' && typeof property.longitude === 'number');
+    if (!locatedProperties.length) return;
+
+    const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+    void Promise.all(locatedProperties.map(async (property) => {
+      try {
+        const query = new URLSearchParams({
+          latitude: String(property.latitude),
+          longitude: String(property.longitude),
+          current: 'temperature_2m,precipitation,weather_code,is_day',
+          temperature_unit: 'fahrenheit',
+          precipitation_unit: 'inch',
+          timezone: 'auto',
+        });
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?${query}`, { signal: controller.signal, cache: 'no-store' });
+        if (!response.ok) throw new Error('Weather unavailable');
+        const result = await response.json();
+        const current = result.current;
+        if (typeof result.timezone !== 'string' || typeof current?.temperature_2m !== 'number' || typeof current?.precipitation !== 'number' || typeof current?.weather_code !== 'number' || typeof current?.is_day !== 'number') {
+          throw new Error('Weather response is incomplete');
+        }
+        return [property.id, {
+          timezone: result.timezone,
+          temperatureF: current.temperature_2m,
+          precipitationIn: current.precipitation,
+          weatherCode: current.weather_code,
+          isDay: current.is_day === 1,
+        }] as const;
+      } catch {
+        return [property.id, null] as const;
+      }
+    })).then((results) => {
+      if (active) setWeatherByProperty((current) => ({ ...current, ...Object.fromEntries(results) }));
+    });
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [properties]);
 
   useEffect(() => {
     void (async () => {
@@ -148,6 +250,14 @@ export default function SolarPowerPage() {
           router.replace('/login');
           return;
         }
+        void fetch('/api/account-preferences', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: 'no-store',
+        }).then(async (response) => {
+          if (!response.ok) return;
+          const preferences = await response.json();
+          setTemperatureUnit(getTemperatureUnit(preferences.temperature_unit));
+        }).catch(() => {});
         setRole(await fetchUserRole(session.user.email, client));
         const requestedPropertyId = new URLSearchParams(window.location.search).get('propertyId') ?? '';
         setPropertyId(requestedPropertyId);
@@ -192,7 +302,7 @@ export default function SolarPowerPage() {
           <p className="mt-6 border-t border-slate-300 bg-white px-5 py-6 text-sm text-slate-600">No properties are currently enabled for solar power.</p>
         ) : <div className="mt-6 divide-y divide-slate-300 border-y border-slate-300 bg-white px-5 sm:px-6">
           {properties.map((property) => <article key={property.id} className="py-5">
-            <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{property.name}</h2>{property.siteId && <p className="text-xs text-slate-500">SolarEdge site {property.siteId}</p>}</div>{property.status === 'connected' ? <p className="text-xs font-medium text-emerald-700">Connected</p> : property.status === 'rate_limited' ? <p role="status" className="text-sm font-medium text-amber-800">SolarEdge is rate-limiting requests; wait briefly, then refresh.</p> : property.status === 'reauthorize' ? <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">Authorization expired or missing scopes · Reconnect in Settings</a> : property.status === 'api_error' ? <div role="alert" className="max-w-2xl text-sm text-rose-700"><p>SolarEdge data request failed (HTTP {property.providerStatus}).</p>{property.providerMessage && <p className="mt-1 text-xs text-rose-800">{property.providerMessage}</p>}</div> : <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">{property.status === 'not_connected' ? 'Complete setup in Settings' : 'Check SolarEdge setup in Settings'}</a>}</div>
+            <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{property.name}</h2>{property.siteId && <p className="text-xs text-slate-500">SolarEdge site {property.siteId}</p>}</div><div className="min-w-0"><div className="text-left sm:text-right">{property.status === 'connected' ? <p className="text-xs font-medium text-emerald-700">Connected</p> : property.status === 'rate_limited' ? <p role="status" className="text-sm font-medium text-amber-800">SolarEdge is rate-limiting requests; wait briefly, then refresh.</p> : property.status === 'reauthorize' ? <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">Authorization expired or missing scopes · Reconnect in Settings</a> : property.status === 'api_error' ? <div role="alert" className="max-w-2xl text-sm text-rose-700"><p>SolarEdge data request failed (HTTP {property.providerStatus}).</p>{property.providerMessage && <p className="mt-1 text-xs text-rose-800">{property.providerMessage}</p>}</div> : <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">{property.status === 'not_connected' ? 'Complete setup in Settings' : 'Check SolarEdge setup in Settings'}</a>}</div><PropertyWeather property={property} observation={weatherByProperty[property.id]} now={clockNow} temperatureUnit={temperatureUnit} /></div></div>
             {property.status === 'connected' && property.periods && property.charts && <>
               <section className="mt-5 grid gap-5 border-t border-slate-200 pt-4 sm:grid-cols-3" aria-label={`${property.name} production summary`}>
                 <div><p className="text-xs font-semibold uppercase text-slate-500">Latest reported production · 15-minute sample</p><p className="mt-1 text-3xl font-semibold tabular-nums text-emerald-800">{formatPower(property.currentKw ?? 0)}</p></div>
