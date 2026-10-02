@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { LanguageProvider } from "./language-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -26,10 +27,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-slate-100 text-slate-900">
-        <div className="flex-1">{children}</div>
-        <footer className="border-t border-slate-200 bg-white/60 py-4 text-center text-xs text-slate-500">
-          &copy;{currentYear} Landbaron Technologies
-        </footer>
+        <LanguageProvider>
+          <div className="flex-1">{children}</div>
+          <footer className="border-t border-slate-200 bg-white/60 py-4 text-center text-xs text-slate-500">
+            &copy;{currentYear} Landbaron Technologies
+          </footer>
+        </LanguageProvider>
       </body>
     </html>
   );

@@ -17,6 +17,10 @@ export function getLanguagePreference(value: unknown): LanguagePreference {
   return value === 'es' || value === 'fr' || value === 'de' || value === 'pt' ? value : 'en';
 }
 
+export function setSavedLanguagePreference(language: LanguagePreference) {
+  window.dispatchEvent(new CustomEvent('landbaron-language-changed', { detail: language }));
+}
+
 export function formatTemperature(fahrenheit: number, unit: TemperatureUnit) {
   const value = unit === 'celsius' ? (fahrenheit - 32) * 5 / 9 : fahrenheit;
   return `${Math.round(value)}°${unit === 'celsius' ? 'C' : 'F'}`;

@@ -8,7 +8,8 @@ import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
 import { setTimeFormat, useTimeFormat, type TimeFormat } from '@/lib/time-format';
-import { getLanguagePreference, getTemperatureUnit, languageOptions, type LanguagePreference, type TemperatureUnit } from '@/lib/temperature';
+import { getLanguagePreference, getTemperatureUnit, languageOptions, setSavedLanguagePreference, type LanguagePreference, type TemperatureUnit } from '@/lib/temperature';
+import { estimateRemainingDays, getZodiacSign, type ProfileGender } from '@/lib/profile-insights';
 
 type SolarProperty = {
   id: string;
@@ -32,23 +33,6 @@ type SolarDraft = { clientId: string; clientSecret: string; siteId: string };
 
 const inputClass = 'mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600';
 
-function getZodiacSign(birthdate: string) {
-  const [year, month, day] = birthdate.split('-').map(Number);
-  if (!year || !month || !day) return null;
-  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius';
-  if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return 'Pisces';
-  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries';
-  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus';
-  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini';
-  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer';
-  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo';
-  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo';
-  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra';
-  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio';
-  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius';
-  return 'Capricorn';
-}
-
 export default function SettingsPage() {
   const router = useRouter();
   const timeFormat = useTimeFormat();
@@ -64,6 +48,9 @@ export default function SettingsPage() {
   const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>('fahrenheit');
   const [language, setLanguage] = useState<LanguagePreference>('en');
   const [birthdate, setBirthdate] = useState('');
+  const [gender, setGender] = useState<ProfileGender | ''>('');
+  const [horoscope, setHoroscope] = useState<{ key: string; text: string; date: string } | null>(null);
+  const [horoscopeError, setHoroscopeError] = useState('');
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState('');
   const [preferencesNotice, setPreferencesNotice] = useState('');
@@ -85,6 +72,7 @@ export default function SettingsPage() {
           setTemperatureUnit(getTemperatureUnit(preferences.temperature_unit));
           setLanguage(getLanguagePreference(preferences.language));
           setBirthdate(typeof preferences.birthdate === 'string' ? preferences.birthdate : '');
+          setGender(preferences.gender === 'female' || preferences.gender === 'male' || preferences.gender === 'non_binary' ? preferences.gender : '');
         } catch (preferenceError) {
           setPreferencesError(preferenceError instanceof Error ? preferenceError.message : 'Account preferences could not be loaded.');
         }
@@ -128,6 +116,41 @@ export default function SettingsPage() {
     })();
   }, [router]);
 
+  const zodiacSign = birthdate ? getZodiacSign(birthdate) : null;
+
+  useEffect(() => {
+    if (!zodiacSign) return;
+    const controller = new AbortController();
+    let active = true;
+    const key = `${zodiacSign}:${language}`;
+    void (async () => {
+      try {
+        const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+        if (!token) return;
+        const query = new URLSearchParams({ sign: zodiacSign, language });
+        const response = await fetch(`/api/horoscope?${query}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Today’s horoscope is unavailable.');
+        if (active) {
+          setHoroscope({ key, text: result.horoscope, date: result.date });
+          setHoroscopeError('');
+        }
+      } catch (error) {
+        if (active && !controller.signal.aborted) {
+          setHoroscopeError(error instanceof Error ? error.message : 'Today’s horoscope is unavailable.');
+        }
+      }
+    })();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [zodiacSign, language]);
+
   async function savePreferences() {
     setSavingPreferences(true);
     setPreferencesError('');
@@ -142,10 +165,11 @@ export default function SettingsPage() {
       const response = await fetch('/api/account-preferences', {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ temperature_unit: temperatureUnit, language, birthdate }),
+        body: JSON.stringify({ temperature_unit: temperatureUnit, language, birthdate, gender: gender || null }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Preferences could not be saved.');
+      setSavedLanguagePreference(language);
       setPreferencesNotice('Preferences saved.');
     } catch (saveError) {
       setPreferencesError(saveError instanceof Error ? saveError.message : 'Preferences could not be saved.');
@@ -246,7 +270,25 @@ export default function SettingsPage() {
             <div>
               <label className="block text-base font-semibold text-slate-900" htmlFor="birthdate">What&apos;s your birthday?</label>
               <input id="birthdate" className={inputClass} type="date" max={new Date().toISOString().slice(0, 10)} value={birthdate} onChange={(event) => setBirthdate(event.target.value)} />
-              <p className="mt-2 text-sm text-slate-600">Zodiac sign: <span className="font-medium text-slate-900">{birthdate ? getZodiacSign(birthdate) ?? 'Unavailable' : 'Not set'}</span></p>
+              <p className="mt-2 text-sm text-slate-600">Zodiac sign: <span className="font-medium text-slate-900">{zodiacSign ?? 'Not set'}</span></p>
+              {zodiacSign && <div className="mt-3 border-l-2 border-emerald-600 pl-3" aria-live="polite">
+                <p className="text-sm font-semibold text-slate-800">Today&apos;s horoscope</p>
+                {horoscope?.key === `${zodiacSign}:${language}` ? <p className="mt-1 text-sm text-slate-600">{horoscope.text}</p> : horoscopeError ? <p className="mt-1 text-sm text-slate-500">{horoscopeError}</p> : <p className="mt-1 text-sm text-slate-500">Loading horoscope...</p>}
+              </div>}
+            </div>
+            <div>
+              <label className="block text-base font-semibold text-slate-900" htmlFor="gender">Gender</label>
+              <select id="gender" className={inputClass} value={gender} onChange={(event) => setGender(event.target.value as ProfileGender | '')}>
+                <option value="">Select gender</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="non_binary">Non-binary</option>
+              </select>
+              {birthdate && gender && <div className="mt-3 border-l-2 border-slate-300 pl-3">
+                <p className="text-sm font-semibold text-slate-800">Estimated days remaining</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{estimateRemainingDays(birthdate, gender).toLocaleString()}</p>
+                <p className="mt-1 text-xs text-slate-500">A rough U.S. population estimate based on age and sex-specific <a className="underline" href="https://www.ssa.gov/oact/STATS/table4c6.html" target="_blank" rel="noreferrer">SSA life tables</a>, not an individual prediction. Non-binary uses the midpoint of the female and male estimates.</p>
+              </div>}
             </div>
           </div>
           {preferencesError && <p role="alert" className="mt-4 text-sm text-rose-700">{preferencesError}</p>}
