@@ -1,10 +1,25 @@
 create table if not exists public.user_preferences (
   user_id uuid primary key references auth.users(id) on delete cascade,
   temperature_unit text not null default 'fahrenheit' check (temperature_unit in ('fahrenheit', 'celsius')),
+  language text not null default 'en',
   birthdate date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.user_preferences add column if not exists language text not null default 'en';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'user_preferences_language_check'
+      and conrelid = 'public.user_preferences'::regclass
+  ) then
+    alter table public.user_preferences
+      add constraint user_preferences_language_check check (language in ('en', 'es', 'fr', 'de', 'pt'));
+  end if;
+end $$;
 
 alter table public.user_preferences enable row level security;
 

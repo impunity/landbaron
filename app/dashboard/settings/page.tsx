@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
 import { setTimeFormat, useTimeFormat, type TimeFormat } from '@/lib/time-format';
-import { getTemperatureUnit, type TemperatureUnit } from '@/lib/temperature';
+import { getLanguagePreference, getTemperatureUnit, languageOptions, type LanguagePreference, type TemperatureUnit } from '@/lib/temperature';
 
 type SolarProperty = {
   id: string;
@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>('fahrenheit');
+  const [language, setLanguage] = useState<LanguagePreference>('en');
   const [birthdate, setBirthdate] = useState('');
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState('');
@@ -82,6 +83,7 @@ export default function SettingsPage() {
           const preferences = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(preferences.error || 'Account preferences could not be loaded.');
           setTemperatureUnit(getTemperatureUnit(preferences.temperature_unit));
+          setLanguage(getLanguagePreference(preferences.language));
           setBirthdate(typeof preferences.birthdate === 'string' ? preferences.birthdate : '');
         } catch (preferenceError) {
           setPreferencesError(preferenceError instanceof Error ? preferenceError.message : 'Account preferences could not be loaded.');
@@ -140,7 +142,7 @@ export default function SettingsPage() {
       const response = await fetch('/api/account-preferences', {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ temperature_unit: temperatureUnit, birthdate }),
+        body: JSON.stringify({ temperature_unit: temperatureUnit, language, birthdate }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Preferences could not be saved.');
@@ -224,11 +226,10 @@ export default function SettingsPage() {
         </section>
 
         <section className="mt-7 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
-          <h2 className="text-base font-semibold">Your preferences</h2>
-          <div className="mt-4 grid gap-6 sm:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <p className="text-sm font-medium text-slate-700">Temperature</p>
-              <fieldset className="mt-2 inline-flex overflow-hidden rounded-md border border-slate-300" aria-label="Temperature unit">
+              <h2 className="text-base font-semibold">Temperature Units</h2>
+              <fieldset className="mt-3 inline-flex overflow-hidden rounded-md border border-slate-300" aria-label="Temperature unit">
                 {([{ value: 'fahrenheit', label: '°F Fahrenheit' }, { value: 'celsius', label: '°C Celsius' }] as const).map((option) => (
                   <button key={option.value} type="button" aria-pressed={temperatureUnit === option.value} onClick={() => setTemperatureUnit(option.value)} className={`px-3 py-2 text-sm font-medium ${temperatureUnit === option.value ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
                     {option.label}
@@ -237,7 +238,13 @@ export default function SettingsPage() {
               </fieldset>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700" htmlFor="birthdate">What&apos;s your birthday?</label>
+              <label className="block text-base font-semibold text-slate-900" htmlFor="language">Language</label>
+              <select id="language" className={inputClass} value={language} onChange={(event) => setLanguage(getLanguagePreference(event.target.value))}>
+                {languageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-base font-semibold text-slate-900" htmlFor="birthdate">What&apos;s your birthday?</label>
               <input id="birthdate" className={inputClass} type="date" max={new Date().toISOString().slice(0, 10)} value={birthdate} onChange={(event) => setBirthdate(event.target.value)} />
               <p className="mt-2 text-sm text-slate-600">Zodiac sign: <span className="font-medium text-slate-900">{birthdate ? getZodiacSign(birthdate) ?? 'Unavailable' : 'Not set'}</span></p>
             </div>
