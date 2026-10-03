@@ -4,6 +4,7 @@ import { getRequestOrganizationId } from '@/lib/organization-context';
 import { decryptSolarSecret, encryptSolarSecret, SOLAREDGE_API_BASE_URL, SOLAREDGE_TOKEN_URL } from '@/lib/solaredge';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { solarToday, solarWindow, type SolarRange } from '@/lib/solar-calendar';
 
 const SITE_TIME_ZONE = 'America/Los_Angeles';
 const BLENDED_DAYTIME_RATE = 0.44;
@@ -283,6 +284,11 @@ export async function GET(request: NextRequest) {
     if (!organizationId) return NextResponse.json({ properties: [] });
 
     const requestedPropertyId = request.nextUrl.searchParams.get('propertyId');
+    const chartDate = request.nextUrl.searchParams.get('date');
+    const chartRange = request.nextUrl.searchParams.get('range') ?? 'day';
+    if (chartDate && (!/^\d{4}-\d{2}-\d{2}$/.test(chartDate) || !Number.isFinite(Date.parse(`${chartDate}T00:00:00Z`)) || new Date(`${chartDate}T00:00:00Z`).toISOString().slice(0, 10) !== chartDate || chartDate > solarToday() || !['day', 'week', 'month', 'year'].includes(chartRange))) {
+      return NextResponse.json({ error: 'Choose a valid date on or before today and a supported range.' }, { status: 400 });
+    }
     let tenantPropertyId: string | null = null;
     if (user.role === 'tenant') {
       const { data: tenant, error: tenantError } = await supabaseAdmin.from('tenants')
@@ -324,6 +330,24 @@ export async function GET(request: NextRequest) {
       try {
         const accessToken = await getAccessToken(integration as unknown as Record<string, unknown>);
         const now = getLocalTime(new Date());
+        if (chartDate) {
+          const window = solarWindow(chartDate, chartRange as SolarRange);
+          const from = parsePointTime(window.start)!;
+          const fullEnd = parsePointTime(window.end)!;
+          const to = localOrdinal(fullEnd) > localOrdinal(now) ? now : fullEnd;
+          const previousFrom = parsePointTime(window.previousStart)!;
+          const previousTo = chartRange === 'month' ? shiftLocalMonths(to, -1) : chartRange === 'year' ? shiftLocalMonths(to, -12) : shiftLocalDays(to, chartRange === 'week' ? -7 : -1);
+          const resolution = chartRange === 'day' ? 'QUARTER_HOUR' : chartRange === 'year' ? 'MONTH' : 'DAY';
+          const [currentPayload, previousPayload] = await Promise.all([
+            getSolarJson(integration.site_id, accessToken, from, to, resolution),
+            getSolarJson(integration.site_id, accessToken, previousFrom, previousTo, resolution),
+          ]);
+          const points = [...energyPoints(currentPayload), ...energyPoints(previousPayload)];
+          const intervalHours = chartRange === 'day' ? 0.25 : chartRange === 'year'
+            ? (point: EnergyPoint) => new Date(Date.UTC(point.time.year, point.time.month, 0)).getUTCDate() * 24
+            : 24;
+          return { id: property.id, status: 'connected', charts: { [chartRange]: pointsToChart(points, from, to, previousFrom, previousTo, chartRange, intervalHours) } };
+        }
         const today = { ...now, hour: 0, minute: 0, second: 0 };
         const yesterday = shiftLocalDays(today, -1);
         const dayBeforeYesterday = shiftLocalDays(today, -2);

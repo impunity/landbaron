@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { UserRole } from '@/lib/auth';
 import { AnnouncementsNavButton } from './announcements-nav-button';
 
-export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes' | 'solar-power';
+export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes' | 'solar-power' | 'property-handbook';
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserRole[] }> = [
   { key: 'dashboard', label: 'Maintenance Tickets', href: '/dashboard' },
@@ -13,6 +13,7 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserR
   { key: 'properties', label: 'Properties & Units', href: '/dashboard/properties' },
   { key: 'door-codes', label: 'Door Codes', href: '/dashboard/door-codes', roles: ['owner', 'manager', 'maintenance'] },
   { key: 'solar-power', label: 'Solar Power', href: '/dashboard/solar-power' },
+  { key: 'property-handbook', label: 'Property Handbook', href: '/dashboard/property-handbook' },
   { key: 'tenants', label: 'Tenants', href: '/dashboard/tenants' },
   { key: 'staff', label: 'Staff roster', href: '/dashboard/staff', roles: ['owner', 'manager'] },
   { key: 'analysis', label: 'Analysis', href: '/dashboard/analysis', roles: ['owner', 'manager'] },
@@ -29,7 +30,7 @@ export function DashboardNavButtons({ current, role, propertyId }: { current?: N
         <button
           key={item.key}
           type="button"
-          onClick={() => router.push(item.href)}
+          onClick={() => router.push(item.key === 'property-handbook' && propertyId ? `${item.href}?propertyId=${encodeURIComponent(propertyId)}` : item.href)}
           className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           {item.label}

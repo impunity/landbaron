@@ -221,7 +221,7 @@ export default function DoorCodesPage() {
       <div className="mx-auto max-w-6xl">
         <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Door Codes', href: '/dashboard/door-codes' }]} />
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold">Door Codes</h1><p className="mt-1 text-sm text-slate-600">Locks and garage assignments by property</p></div></div>
-        {userRole && <div className="mt-4 flex flex-wrap gap-2"><DashboardNavButtons current="door-codes" role={userRole} /></div>}
+        {userRole && <div className="mt-4 flex flex-wrap gap-2"><DashboardNavButtons current="door-codes" role={userRole} propertyId={propertyId} /></div>}
         {error && <p role="alert" className="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
         {loading ? <p className="mt-6 text-sm text-slate-500">Loading...</p> : data && (
           <>

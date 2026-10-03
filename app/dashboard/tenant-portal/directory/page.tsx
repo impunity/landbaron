@@ -44,6 +44,7 @@ export default function TenantDirectoryPage() {
       <div className="mx-auto max-w-4xl">
         <header className="mb-8">
           <button type="button" onClick={() => router.push('/dashboard')} className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">← Return to Maintenance Portal</button>
+          <button type="button" onClick={() => router.push('/dashboard/property-handbook')} className="ml-4 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Property Handbook</button>
           <h1 className="mt-2 text-3xl font-semibold">Tenant Directory</h1>
           {property && <p className="mt-1 text-sm text-slate-500">{property.name} · {property.address}</p>}
         </header>

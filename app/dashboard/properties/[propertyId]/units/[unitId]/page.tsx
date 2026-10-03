@@ -755,7 +755,7 @@ export default function UnitDetailPage() {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <DashboardNavButtons current="properties" role={session.role} />
+            <DashboardNavButtons current="properties" role={session.role} propertyId={unit.property_id} />
             <button
               type="button"
               onClick={() => router.push(`/dashboard?propertyId=${unit.property_id}&unitId=${unit.id}`)}

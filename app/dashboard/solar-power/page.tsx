@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowDownRight, ArrowUpRight, Clock3, CloudSun, Minus, RefreshCw } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, Clock3, CloudSun, Minus, RefreshCw } from 'lucide-react';
 
 import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { formatCurrency } from '@/lib/format-currency';
 import { formatTemperature, getTemperatureUnit, type TemperatureUnit } from '@/lib/temperature';
 import { supabase } from '@/lib/supabase';
 import { useTimeFormat } from '@/lib/time-format';
+import { shiftSolarDate, solarToday, solarWindow } from '@/lib/solar-calendar';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
 
@@ -191,8 +192,34 @@ export default function SolarPowerPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [chartRange, setChartRange] = useState<ChartRange>('day');
+  const [chartDate, setChartDate] = useState('');
+  const [history, setHistory] = useState<{ key: string; properties: SolarProperty[]; error: string } | null>(null);
+  const today = solarToday();
+  const historyKey = `${chartDate}:${chartRange}`;
+  const loadingHistory = Boolean(chartDate && history?.key !== historyKey);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    if (!chartDate) return;
+    const controller = new AbortController();
+    const key = `${chartDate}:${chartRange}`;
+    void (async () => {
+      try {
+        const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+        if (!token) throw new Error('Sign in is required.');
+        const query = new URLSearchParams({ date: chartDate, range: chartRange });
+        if (propertyId) query.set('propertyId', propertyId);
+        const response = await fetch(`/api/solar-power?${query}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Historical production could not be loaded.');
+        if (!controller.signal.aborted) setHistory({ key, properties: result.properties ?? [], error: '' });
+      } catch (loadError) {
+        if (!controller.signal.aborted) setHistory({ key, properties: [], error: loadError instanceof Error ? loadError.message : 'Historical production could not be loaded.' });
+      }
+    })();
+    return () => controller.abort();
+  }, [chartDate, chartRange, propertyId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 60_000);
@@ -298,13 +325,17 @@ export default function SolarPowerPage() {
       <div className="mx-auto max-w-6xl">
         <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Solar Power', href: '/dashboard/solar-power' }]} />
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold">Solar Power</h1><p className="mt-1 text-sm text-slate-600">Production and estimated energy value</p></div><button type="button" onClick={() => void refresh()} disabled={loading || refreshing} title="Refresh SolarEdge data" aria-label="Refresh SolarEdge data" className="inline-flex size-9 items-center justify-center border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /></button></div>
-        {role && <div className="mt-4 flex flex-wrap gap-2"><DashboardNavButtons current="solar-power" role={role} /></div>}
+        {role && <div className="mt-4 flex flex-wrap gap-2"><DashboardNavButtons current="solar-power" role={role} propertyId={propertyId} /></div>}
         {notice && <p role="status" className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
         {error && <p role="alert" className="mt-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
         {loading ? <p className="mt-6 text-sm text-slate-500">Loading solar sites...</p> : properties.length === 0 ? (
           <p className="mt-6 border-t border-slate-300 bg-white px-5 py-6 text-sm text-slate-600">No properties are currently enabled for solar power.</p>
         ) : <div className="mt-6 divide-y divide-slate-300 border-y border-slate-300 bg-white px-5 sm:px-6">
-          {properties.map((property) => <article key={property.id} className="py-5">
+          {properties.map((property) => {
+            const historicalProperty = history?.key === historyKey ? history.properties.find((entry) => entry.id === property.id) : undefined;
+            const chartPoints = chartDate ? historicalProperty?.charts?.[chartRange] ?? [] : property.charts?.[chartRange] ?? [];
+            const chartError = chartDate && !loadingHistory ? history?.error || (historicalProperty?.status !== 'connected' ? 'Historical production is unavailable. Try refreshing or selecting another period.' : '') : '';
+            return <article key={property.id} className="py-5">
             <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{property.name}</h2>{property.siteId && <p className="text-xs text-slate-500">SolarEdge site {property.siteId}</p>}</div><div className="min-w-0"><div className="text-left sm:text-right">{property.status === 'connected' ? <p className="text-xs font-medium text-emerald-700">Connected</p> : property.status === 'rate_limited' ? <p role="status" className="text-sm font-medium text-amber-800">SolarEdge is rate-limiting requests; wait briefly, then refresh.</p> : property.status === 'reauthorize' ? <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">Authorization expired or missing scopes · Reconnect in Settings</a> : property.status === 'api_error' ? <div role="alert" className="max-w-2xl text-sm text-rose-700"><p>SolarEdge data request failed (HTTP {property.providerStatus}).</p>{property.providerMessage && <p className="mt-1 text-xs text-rose-800">{property.providerMessage}</p>}</div> : <a href="/dashboard/settings" className="text-sm font-medium text-teal-800 underline">{property.status === 'not_connected' ? 'Complete setup in Settings' : 'Check SolarEdge setup in Settings'}</a>}</div><PropertyWeather property={property} observation={weatherByProperty[property.id]} now={clockNow} temperatureUnit={temperatureUnit} timeFormat={timeFormat} /></div></div>
             {property.status === 'connected' && property.periods && property.charts && <>
               <section className="mt-5 grid gap-5 border-t border-slate-200 pt-4 sm:grid-cols-3" aria-label={`${property.name} production summary`}>
@@ -319,16 +350,26 @@ export default function SolarPowerPage() {
               </section>
               <section className="mt-6 border-t border-slate-200 pt-5" aria-label={`${property.name} power history chart`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div><h3 className="font-semibold">Production over time</h3><p className="mt-1 text-xs text-slate-500">{chartRange === 'day' ? '15-minute samples' : 'Daily average'} · current period vs previous matching period</p></div>
+                  <div><h3 className="font-semibold">Production over time</h3><p className="mt-1 text-xs text-slate-500">{chartRange === 'day' ? '15-minute samples' : chartRange === 'year' ? 'Monthly average' : 'Daily average'} · selected period vs previous matching period</p></div>
                   <div className="inline-flex border border-slate-300" role="group" aria-label="Chart time range">
                     {rangeOptions.map((option) => <button key={option.key} type="button" aria-pressed={chartRange === option.key} onClick={() => setChartRange(option.key)} className={`px-3 py-1.5 text-sm font-medium ${chartRange === option.key ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>{option.label}</button>)}
                   </div>
                 </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Production date navigation">
+                  <button type="button" title={`Previous ${chartRange}`} aria-label={`Previous ${chartRange}`} disabled={loadingHistory} onClick={() => setChartDate(shiftSolarDate(chartDate || today, chartRange, -1))} className="grid size-9 place-items-center border border-slate-300 disabled:opacity-50"><ChevronLeft size={16} /></button>
+                  <input type="date" aria-label="Production date" max={today} value={chartDate || today} onChange={(event) => { if (event.target.value && event.target.value <= today) setChartDate(event.target.value); }} className="h-9 min-w-0 rounded-md border border-slate-300 px-2 text-sm" />
+                  <button type="button" title={`Next ${chartRange}`} aria-label={`Next ${chartRange}`} disabled={loadingHistory || (chartDate || today) >= today} onClick={() => setChartDate(shiftSolarDate(chartDate || today, chartRange, 1) > today ? today : shiftSolarDate(chartDate || today, chartRange, 1))} className="grid size-9 place-items-center border border-slate-300 disabled:opacity-50"><ChevronRight size={16} /></button>
+                  <button type="button" onClick={() => setChartDate('')} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium">Today</button>
+                  <span className="text-xs text-slate-500">{solarWindow(chartDate || today, chartRange).start} – {shiftSolarDate(solarWindow(chartDate || today, chartRange).end, 'day', -1)}</span>
+                </div>
+                {chartError && <p role="alert" className="mt-3 text-sm text-rose-700">{chartError}</p>}
+                {loadingHistory ? <p role="status" className="mt-4 grid h-72 place-items-center text-sm text-slate-500 sm:h-80">Loading production...</p> : <>
+                {!chartError && chartPoints.length === 0 && <p className="mt-3 text-sm text-slate-500">No production samples for this period.</p>}
                 <div className="mt-4 h-72 w-full sm:h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={property.charts[chartRange]} margin={{ top: 8, right: 14, left: 2, bottom: 4 }}>
+                    <AreaChart data={chartPoints} margin={{ top: 8, right: 14, left: 2, bottom: 4 }}>
                       <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="slot" type="number" scale="linear" domain={[0, 'dataMax']} ticks={getChartTicks(chartRange, Math.max(...property.charts[chartRange].map((point) => point.slot), 1))} tickFormatter={(value) => formatSlot(Number(value), chartRange)} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} />
+                      <XAxis dataKey="slot" type="number" scale="linear" domain={[0, 'dataMax']} ticks={getChartTicks(chartRange, Math.max(...chartPoints.map((point) => point.slot), 1))} tickFormatter={(value) => formatSlot(Number(value), chartRange)} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} />
                       <YAxis width={62} tickFormatter={(value) => `${Number(value).toFixed(1)} kW`} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <Tooltip labelFormatter={(value) => formatSlot(Number(value), chartRange)} formatter={(value, name) => [`${Number(value ?? 0).toFixed(2)} kW`, name === 'currentKw' ? 'Current' : 'Previous']} contentStyle={{ borderRadius: 4, borderColor: '#cbd5e1', fontSize: 12 }} />
                       <Legend formatter={(value) => value === 'currentKw' ? 'Current period' : 'Previous period'} wrapperStyle={{ fontSize: 12 }} />
@@ -337,10 +378,11 @@ export default function SolarPowerPage() {
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
+                </>}
               </section>
               <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">{property.rateNote ?? `Estimated avoided energy value uses an approximate SDG&E daytime blended rate of ${formatCurrency(property.blendedRate ?? 0.44)}/kWh. Actual value depends on your tariff and self-consumption; this is not an NEM export-credit or bill calculation.`}</p>
             </>}
-          </article>)}
+          </article>; })}
         </div>}
       </div>
     </main>

@@ -517,7 +517,7 @@ export default function PropertyDetailPage() {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <DashboardNavButtons current="properties" role={session.role} />
+            <DashboardNavButtons current="properties" role={session.role} propertyId={propertyId} />
             <button
               type="button"
               onClick={() => setShowEditPropertyModal(true)}

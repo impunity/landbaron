@@ -8,6 +8,7 @@ import { fetchUserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 type OAuthProvider = 'google' | 'apple';
+const SHOW_ODOMETER = false;
 
 const getAuthRedirectTo = () => {
   const browserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -33,6 +34,7 @@ export default function LoginPage() {
   const [requestDraft, setRequestDraft] = useState({ invite_code: '', requested_role: 'tenant', name: '', phone: '', address: '' });
 
   useEffect(() => {
+    if (!SHOW_ODOMETER) return;
     let timeout = 0;
     let active = true;
     const scheduleIncrement = () => {
@@ -234,14 +236,14 @@ export default function LoginPage() {
           </div>
         </div>
       )}
-      <section className="mb-5 w-full max-w-xl border-y border-slate-300 bg-white px-5 py-4" aria-label="Unit count">
+      {SHOW_ODOMETER && <section className="mb-5 w-full max-w-xl border-y border-slate-300 bg-white px-5 py-4" aria-label="Unit count">
         <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
           <div className="flex gap-1" aria-label={`${odometer.toLocaleString()} units`}>
             {String(odometer).padStart(6, '0').split('').map((digit, index) => <span key={index} className="grid h-11 w-8 place-items-center border border-slate-700 bg-slate-950 font-mono text-2xl font-semibold tabular-nums text-emerald-300 sm:h-12 sm:w-9">{digit}</span>)}
           </div>
           <p className="text-lg font-semibold text-slate-900">Units Can&apos;t Be Wrong!</p>
         </div>
-      </section>
+      </section>}
       <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-semibold text-slate-900">Sign in / Sign up</h1>
