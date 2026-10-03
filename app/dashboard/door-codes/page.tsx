@@ -12,7 +12,7 @@ import { DashboardNavButtons } from '../nav-buttons';
 
 type Property = { id: string; name: string; address: string };
 type Unit = { id: string; unit_number: string; tenants?: Array<{ name: string }>; unit_photos?: Array<{ photo_url: string; is_primary?: boolean | null; created_at?: string }> };
-type Lock = { id: string; unit_id: string | null; door: string; code: string; programming_code: string; photo_url: string | null };
+type Lock = { id: string; unit_id: string | null; door: string; lock_group?: LockGroup | null; code: string; programming_code: string; photo_url: string | null };
 type Garage = { id: string; unit_id: string | null; owner_assigned: boolean; garage_id: string; code: string; programming_code: string; garage_rent: number | null };
 type PageData = { properties: Property[]; property: Property | null; units: Unit[]; locks: Lock[]; garages: Garage[]; canManageGarages: boolean };
 type LockGroup = 'entrance' | 'other' | 'gate';
@@ -23,8 +23,7 @@ const entranceDoors = ['Front Door', 'Back Door', 'Side Door'];
 const otherLockTypes = ['Laundry Room', 'Trash Area', 'Utility Closet'];
 const emptyDraft = (unitId: string | null, lockGroup: LockGroup = 'entrance'): Draft => ({ door: lockGroup === 'other' ? otherLockTypes[0] : entranceDoors[0], otherDoor: '', code: '', programmingCode: '', garageId: '', garageRent: '', unitId: unitId ?? '', ownerAssigned: false });
 const inputClass = 'w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600';
-const isGateLock = (door: string) => /^gates?(?:\s|$)/i.test(door.trim());
-const isEntranceLock = (door: string) => entranceDoors.some((option) => option.toLowerCase() === door.toLowerCase()) || /^property entrances?$/i.test(door.trim());
+const isGateLock = (lock: Lock) => lock.lock_group ? lock.lock_group === 'gate' : /\bgates?\b/i.test(lock.door.trim());
 const getUnitLabel = (unit: Unit) => {
   const tenantNames = unit.tenants?.map((tenant) => tenant.name.trim()).filter(Boolean) ?? [];
   return `Unit ${unit.unit_number}${tenantNames.length ? ` · ${tenantNames.join(', ')}` : ''}`;
@@ -76,7 +75,7 @@ export default function DoorCodesPage() {
     setError('');
     const options = lockGroup === 'other' ? otherLockTypes : entranceDoors;
     const selectedDoor = options.find((option) => option.toLowerCase() === lock?.door.toLowerCase());
-    const gateName = lock?.door ?? `Gate ${(data?.locks.filter((entry) => isGateLock(entry.door)).length ?? 0) + 1}`;
+    const gateName = lock?.door ?? `Gate ${(data?.locks.filter(isGateLock).length ?? 0) + 1}`;
     const recordUnitId = lockGroup === 'gate' ? null : unitId;
     setEditor({ kind: 'lock', id: lock?.id ?? null, unitId: recordUnitId, lockGroup });
     setDraft({ ...emptyDraft(recordUnitId, lockGroup), door: lockGroup === 'gate' ? gateName : lock ? selectedDoor ?? 'Other' : lockGroup === 'other' ? otherLockTypes[0] : entranceDoors[0], otherDoor: lockGroup === 'gate' || selectedDoor || !lock ? '' : lock.door, code: lock?.code ?? '', programmingCode: lock?.programming_code ?? '' });
@@ -88,7 +87,7 @@ export default function DoorCodesPage() {
     setDraft({ ...emptyDraft(garage?.unit_id ?? null), ownerAssigned: garage?.owner_assigned ?? false, garageId: garage?.garage_id ?? '', garageRent: garage?.garage_rent?.toString() ?? '', code: garage?.code ?? '', programmingCode: garage?.programming_code ?? '' });
   }
 
-  async function send(method: 'POST' | 'PATCH' | 'DELETE', kind: 'lock' | 'garage', id: string | null, payload?: Draft) {
+  async function send(method: 'POST' | 'PATCH' | 'DELETE', kind: 'lock' | 'garage', id: string | null, payload?: Draft, lockGroup = editor?.lockGroup) {
     const token = (await supabase?.auth.getSession())?.data.session?.access_token;
     if (!token) throw new Error('Sign in is required.');
     const params = new URLSearchParams();
@@ -100,7 +99,7 @@ export default function DoorCodesPage() {
     const response = await fetch(`/api/door-codes${params.size ? `?${params}` : ''}`, {
       method,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      ...(payload ? { body: JSON.stringify({ propertyId, kind, unitId: payload.unitId || null, ownerAssigned: payload.ownerAssigned, door: payload.door === 'Other' ? payload.otherDoor : payload.door, code: payload.code, programmingCode: payload.programmingCode, garageId: payload.garageId, garageRent: payload.garageRent }) } : {}),
+      ...(payload ? { body: JSON.stringify({ propertyId, kind, lockGroup, unitId: payload.unitId || null, ownerAssigned: payload.ownerAssigned, door: payload.door === 'Other' ? payload.otherDoor : payload.door, code: payload.code, programmingCode: payload.programmingCode, garageId: payload.garageId, garageRent: payload.garageRent }) } : {}),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || 'Changes could not be saved.');
@@ -117,6 +116,20 @@ export default function DoorCodesPage() {
       setEditor(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Changes could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function moveToGates(lock: Lock) {
+    setSaving(true);
+    setError('');
+    try {
+      const payload = { ...emptyDraft(null, 'gate'), door: lock.door, code: lock.code, programmingCode: lock.programming_code };
+      await send('PATCH', 'lock', lock.id, payload, 'gate');
+      setEditor(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Lock could not be moved to Gates.');
     } finally {
       setSaving(false);
     }
@@ -182,10 +195,10 @@ export default function DoorCodesPage() {
 
   const lockSection = (title: string, unitId: string | null, lockGroup: LockGroup, unitPhotoUrl: string | null = null) => {
     const locks = data?.locks.filter((lock) => {
-      if (lockGroup === 'gate') return isGateLock(lock.door);
-      if (lock.unit_id !== unitId || isGateLock(lock.door)) return false;
+      if (lockGroup === 'gate') return isGateLock(lock);
+      if (lock.unit_id !== unitId || isGateLock(lock)) return false;
       if (unitId !== null) return true;
-      return lockGroup === 'entrance' ? isEntranceLock(lock.door) : !isEntranceLock(lock.door);
+      return lockGroup === 'entrance' ? entranceDoors.some((option) => option.toLowerCase() === lock.door.toLowerCase()) : true;
     }) ?? [];
     return (
       <section key={unitId ?? lockGroup} className="border-b border-slate-200 py-5 last:border-0">
@@ -195,6 +208,7 @@ export default function DoorCodesPage() {
               <div className="flex items-center justify-between gap-2"><p className="font-semibold">{lock.door}</p><div className="flex gap-2"><button type="button" onClick={() => startLock(unitId, lockGroup, lock)} className="text-xs font-medium text-teal-800 underline">Edit</button><button type="button" disabled={saving} onClick={() => void remove('lock', lock.id)} title="Remove lock" aria-label={`Remove ${lock.door}`} className="text-rose-700"><Trash2 size={16} /></button></div></div>
               {lock.unit_id === null && <div className="mt-3 flex flex-wrap items-center gap-3">{lock.photo_url && <Image src={lock.photo_url} alt={`${lock.door} lock`} width={64} height={64} unoptimized className="size-16 rounded-md border border-slate-200 object-cover" />}<label className="inline-flex cursor-pointer items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-slate-50">{lock.photo_url ? 'Replace photo' : 'Add photo'}<input type="file" accept="image/*" className="sr-only" disabled={saving} onChange={(event) => { void uploadLockPhoto(lock.id, event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} /></label></div>}
               {codeFields(lock)}
+              {lockGroup === 'other' && lock.unit_id === null && <button type="button" disabled={saving} onClick={() => void moveToGates(lock)} className="mt-3 text-xs font-medium text-teal-800 underline disabled:opacity-50">Move to Gates</button>}
             </div>
           ))}</div>}
         {lockForm(unitId, lockGroup)}
@@ -221,7 +235,6 @@ export default function DoorCodesPage() {
               <>
                 <section className="mt-7 border-t border-slate-300 bg-white px-5 py-2 sm:px-6">
                   <h2 className="pt-4 text-lg font-semibold">Doors & Locks</h2>
-                  {lockSection('Property entrances', null, 'entrance')}
                   {lockSection('Other Locks', null, 'other')}
                   {lockSection('Gates', null, 'gate')}
                   {data.units.map((unit) => lockSection(getUnitLabel(unit), unit.id, 'entrance', unit.unit_photos?.[0]?.photo_url ?? null))}

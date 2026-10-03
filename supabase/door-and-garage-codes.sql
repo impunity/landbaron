@@ -13,6 +13,17 @@ create table if not exists public.property_door_locks (
 
 create index if not exists property_door_locks_property_idx on public.property_door_locks (property_id, unit_id);
 alter table public.property_door_locks add column if not exists photo_url text;
+alter table public.property_door_locks add column if not exists lock_group text
+  check (lock_group in ('gate', 'other', 'entrance'));
+
+update public.property_door_locks
+set lock_group = case
+  when door ~* '\mgates?\M' then 'gate'
+  when unit_id is not null then 'entrance'
+  else 'other'
+end
+where lock_group is null;
+
 alter table public.property_door_locks enable row level security;
 
 create table if not exists public.property_garages (

@@ -46,7 +46,14 @@ async function parseEntry(request: NextRequest, user: AuthenticatedRequestUser) 
     if (!door || door.length > 100 || code.length > 100 || programmingCode.length > 100) {
       return { error: 'Door and codes must be 100 characters or fewer; door is required.', status: 400 } as const;
     }
-    return { kind, propertyId, values: { property_id: propertyId, unit_id: unitId, door, code, programming_code: programmingCode } } as const;
+    const lockGroup = body.lockGroup;
+    if (lockGroup !== undefined && !['gate', 'other', 'entrance'].includes(lockGroup)) {
+      return { error: 'Invalid lock category.', status: 400 } as const;
+    }
+    if (lockGroup === 'gate' && unitId !== null) {
+      return { error: 'Gate locks must belong to the property, not a unit.', status: 400 } as const;
+    }
+    return { kind, propertyId, values: { property_id: propertyId, unit_id: unitId, door, code, programming_code: programmingCode, ...(lockGroup !== undefined ? { lock_group: lockGroup } : {}) } } as const;
   }
 
   const ownerAssigned = body.ownerAssigned === true;
@@ -82,7 +89,7 @@ export async function GET(request: NextRequest) {
     if (!property) return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     const [unitsResult, locksResult, garagesResult] = await Promise.all([
       supabaseAdmin.from('units').select('id, unit_number, tenants(name), unit_photos(photo_url, is_primary, created_at)').eq('property_id', propertyId).order('unit_number'),
-      supabaseAdmin.from('property_door_locks').select('id, unit_id, door, code, programming_code, photo_url').eq('property_id', propertyId).order('door'),
+      supabaseAdmin.from('property_door_locks').select('id, unit_id, door, lock_group, code, programming_code, photo_url').eq('property_id', propertyId).order('door'),
       supabaseAdmin.from('property_garages').select('id, unit_id, owner_assigned, garage_id, code, programming_code, garage_rent').eq('property_id', propertyId).order('garage_id'),
     ]);
     if (unitsResult.error) throw unitsResult.error;
