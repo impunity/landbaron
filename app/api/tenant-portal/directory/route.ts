@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => a.unit_number.localeCompare(b.unit_number, undefined, { numeric: true }) || a.name.localeCompare(b.name));
 
-    return NextResponse.json({ property: property ?? null, tenants: directory });
+    return NextResponse.json({ property: property ? { id: unit.property_id, ...property } : null, tenants: directory });
   } catch (error) {
     console.error('GET /api/tenant-portal/directory failed:', error);
     return NextResponse.json({ error: 'Tenant directory could not be loaded.' }, { status: 500 });

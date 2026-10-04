@@ -124,23 +124,12 @@ export default function VendorsPage() {
       <div className="mx-auto max-w-5xl">
         <header className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-center md:justify-between">
           <div>
-            {session.role === 'tenant' ? (
-              <div className="flex flex-wrap items-center gap-3">
-              <button type="button" onClick={() => router.push('/dashboard')} className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 hover:text-slate-800">
-                ← Back to Maintenance Portal
-              </button>
-              <button type="button" onClick={() => router.push('/dashboard/property-handbook')} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Property Handbook</button>
-              </div>
-            ) : (
-              <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Approved Vendors', href: '/dashboard/vendors' }]} />
-            )}
+            <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Approved Vendors', href: '/dashboard/vendors' }]} />
             <h1 className="mt-3 text-3xl font-semibold">Approved Vendors</h1>
           </div>
-          {session.role !== 'tenant' && (
-            <div className="flex flex-wrap items-center gap-3">
-              <DashboardNavButtons current="vendors" role={session.role} />
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <DashboardNavButtons current="vendors" role={session.role} />
+          </div>
         </header>
 
         {error && <div className="mb-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}

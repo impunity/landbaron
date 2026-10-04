@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { DashboardNavButtons } from '../../nav-buttons';
 
 type DirectoryEntry = {
   id: string;
@@ -16,8 +17,8 @@ type DirectoryEntry = {
 };
 
 export default function TenantDirectoryPage() {
-  const router = useRouter();
-  const [property, setProperty] = useState<{ name: string; address: string } | null>(null);
+  const [property, setProperty] = useState<{ id: string; name: string; address: string } | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [tenants, setTenants] = useState<DirectoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,10 @@ export default function TenantDirectoryPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+        const session = (await supabase?.auth.getSession())?.data.session;
+        if (!session) throw new Error('Sign in is required.');
+        setRole(await fetchUserRole(session.user.email, supabase));
+        const token = session.access_token;
         const response = await fetch('/api/tenant-portal/directory', { headers: { Authorization: `Bearer ${token}` } });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result?.error || 'Tenant directory could not be loaded.');
@@ -43,8 +47,7 @@ export default function TenantDirectoryPage() {
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-4xl">
         <header className="mb-8">
-          <button type="button" onClick={() => router.push('/dashboard')} className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">← Return to Maintenance Portal</button>
-          <button type="button" onClick={() => router.push('/dashboard/property-handbook')} className="ml-4 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Property Handbook</button>
+          {role && <div className="mb-4 flex flex-wrap gap-2"><DashboardNavButtons current="tenant-directory" role={role} propertyId={property?.id} /></div>}
           <h1 className="mt-2 text-3xl font-semibold">Tenant Directory</h1>
           {property && <p className="mt-1 text-sm text-slate-500">{property.name} · {property.address}</p>}
         </header>

@@ -5,6 +5,9 @@ import { getAuthenticatedRequestUser, type AuthenticatedRequestUser } from '@/li
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 type RecordKind = 'lock' | 'garage';
+type UnitRecord = { id: string; unit_number: string; tenants?: { name: string }[]; unit_photos?: { photo_url: string; is_primary: boolean | null; created_at: string }[] };
+type LockRecord = { id: string; unit_id: string | null; door: string; lock_group: string | null; code: string; programming_code?: string; photo_url: string | null };
+type GarageRecord = { id: string; unit_id: string | null; owner_assigned: boolean; garage_id: string; code: string; programming_code?: string; garage_rent?: number | null };
 
 const canAccess = (role: string) => role === 'owner' || role === 'manager' || role === 'maintenance';
 const canManageGarages = (role: string) => role === 'owner' || role === 'manager';
@@ -76,21 +79,46 @@ export async function GET(request: NextRequest) {
     if (!supabaseAdmin) return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 500 });
     const user = await getAuthenticatedRequestUser(request);
     if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
-    if (!canAccess(user.role)) return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    const isTenant = user.role === 'tenant';
+    if (!canAccess(user.role) && !isTenant) return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
     const organizationId = await getRequestOrganizationId(user);
-    if (!organizationId) return NextResponse.json({ properties: [], property: null, units: [], locks: [], garages: [] });
-    const { data: properties, error: propertiesError } = await supabaseAdmin.from('properties')
-      .select('id, name, address').eq('organization_id', organizationId).order('name');
+    const emptyData = { properties: [], property: null, units: [], locks: [], garages: [], canManageLocks: canAccess(user.role), canManageGarages: canManageGarages(user.role) };
+    if (!organizationId) return NextResponse.json(emptyData, { headers: { 'Cache-Control': 'no-store' } });
+    const requestedPropertyId = request.nextUrl.searchParams.get('propertyId');
+    let tenantUnitId: string | null = null;
+    let tenantPropertyId: string | null = null;
+    if (isTenant) {
+      const { data: tenant, error: tenantError } = await supabaseAdmin.from('tenants').select('unit_id').ilike('email', user.email).eq('status', 'active').limit(1).maybeSingle();
+      if (tenantError) throw tenantError;
+      if (!tenant?.unit_id) return NextResponse.json(emptyData, { headers: { 'Cache-Control': 'no-store' } });
+      const { data: unit, error: unitError } = await supabaseAdmin.from('units').select('id, property_id').eq('id', tenant.unit_id).maybeSingle();
+      if (unitError) throw unitError;
+      if (!unit) return NextResponse.json(emptyData, { headers: { 'Cache-Control': 'no-store' } });
+      tenantUnitId = unit.id;
+      tenantPropertyId = unit.property_id;
+      if (requestedPropertyId && requestedPropertyId !== tenantPropertyId) return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+    let propertiesQuery = supabaseAdmin.from('properties').select('id, name, address').eq('organization_id', organizationId).order('name');
+    if (tenantPropertyId) propertiesQuery = propertiesQuery.eq('id', tenantPropertyId);
+    const { data: properties, error: propertiesError } = await propertiesQuery;
     if (propertiesError) throw propertiesError;
 
-    const propertyId = request.nextUrl.searchParams.get('propertyId');
-    if (!propertyId) return NextResponse.json({ properties: properties ?? [], property: null, units: [], locks: [], garages: [] });
+    const propertyId = tenantPropertyId ?? requestedPropertyId;
+    if (!propertyId) return NextResponse.json({ ...emptyData, properties: properties ?? [] }, { headers: { 'Cache-Control': 'no-store' } });
     const property = properties?.find((item) => item.id === propertyId);
     if (!property) return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
+    let unitsQuery = supabaseAdmin.from('units').select(isTenant ? 'id, unit_number, unit_photos(photo_url, is_primary, created_at)' : 'id, unit_number, tenants(name), unit_photos(photo_url, is_primary, created_at)').eq('property_id', propertyId).order('unit_number');
+    let locksQuery = supabaseAdmin.from('property_door_locks').select(isTenant ? 'id, unit_id, door, lock_group, code, photo_url' : 'id, unit_id, door, lock_group, code, programming_code, photo_url').eq('property_id', propertyId).order('door');
+    let garagesQuery = supabaseAdmin.from('property_garages').select(isTenant ? 'id, unit_id, owner_assigned, garage_id, code' : 'id, unit_id, owner_assigned, garage_id, code, programming_code, garage_rent').eq('property_id', propertyId).order('garage_id');
+    if (isTenant && tenantUnitId) {
+      unitsQuery = unitsQuery.eq('id', tenantUnitId);
+      locksQuery = locksQuery.or(`unit_id.is.null,unit_id.eq.${tenantUnitId}`);
+      garagesQuery = garagesQuery.eq('unit_id', tenantUnitId).eq('owner_assigned', false);
+    }
     const [unitsResult, locksResult, garagesResult] = await Promise.all([
-      supabaseAdmin.from('units').select('id, unit_number, tenants(name), unit_photos(photo_url, is_primary, created_at)').eq('property_id', propertyId).order('unit_number'),
-      supabaseAdmin.from('property_door_locks').select('id, unit_id, door, lock_group, code, programming_code, photo_url').eq('property_id', propertyId).order('door'),
-      supabaseAdmin.from('property_garages').select('id, unit_id, owner_assigned, garage_id, code, programming_code, garage_rent').eq('property_id', propertyId).order('garage_id'),
+      unitsQuery.overrideTypes<UnitRecord[], { merge: false }>(),
+      locksQuery.overrideTypes<LockRecord[], { merge: false }>(),
+      garagesQuery.overrideTypes<GarageRecord[], { merge: false }>(),
     ]);
     if (unitsResult.error) throw unitsResult.error;
     if (locksResult.error) throw locksResult.error;
@@ -103,8 +131,9 @@ export async function GET(request: NextRequest) {
         ...unit,
         unit_photos: [...(unit.unit_photos ?? [])].sort((left, right) => Number(Boolean(right.is_primary)) - Number(Boolean(left.is_primary)) || new Date(right.created_at).getTime() - new Date(left.created_at).getTime()),
       })),
-      locks: locksResult.data ?? [],
-      garages: (garagesResult.data ?? []).map((garage) => ({ ...garage, garage_rent: canManageGarages(user.role) ? garage.garage_rent : null })),
+      locks: (locksResult.data ?? []).map((lock) => ({ ...lock, programming_code: isTenant ? '' : lock.programming_code ?? '' })),
+      garages: (garagesResult.data ?? []).map((garage) => ({ ...garage, programming_code: isTenant ? '' : garage.programming_code ?? '', garage_rent: canManageGarages(user.role) ? garage.garage_rent ?? null : null })),
+      canManageLocks: canAccess(user.role),
       canManageGarages: canManageGarages(user.role),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {

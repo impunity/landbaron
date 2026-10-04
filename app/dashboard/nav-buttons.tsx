@@ -5,15 +5,17 @@ import { useRouter } from 'next/navigation';
 import type { UserRole } from '@/lib/auth';
 import { AnnouncementsNavButton } from './announcements-nav-button';
 
-export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes' | 'solar-power' | 'property-handbook';
+export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes' | 'solar-power' | 'property-handbook' | 'tenant-directory' | 'emergency-contacts';
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserRole[] }> = [
   { key: 'dashboard', label: 'Maintenance Tickets', href: '/dashboard' },
   { key: 'vendors', label: 'Approved Vendors', href: '/dashboard/vendors' },
   { key: 'properties', label: 'Properties & Units', href: '/dashboard/properties' },
-  { key: 'door-codes', label: 'Door Codes', href: '/dashboard/door-codes', roles: ['owner', 'manager', 'maintenance'] },
+  { key: 'door-codes', label: 'Door Codes', href: '/dashboard/door-codes', roles: ['owner', 'manager', 'maintenance', 'tenant'] },
   { key: 'solar-power', label: 'Solar Power', href: '/dashboard/solar-power' },
   { key: 'property-handbook', label: 'Property Handbook', href: '/dashboard/property-handbook' },
+  { key: 'tenant-directory', label: 'Tenant Directory', href: '/dashboard/tenant-portal/directory', roles: ['tenant'] },
+  { key: 'emergency-contacts', label: 'Emergency Contacts', href: '/dashboard/tenant-portal/emergency-contacts', roles: ['tenant'] },
   { key: 'tenants', label: 'Tenants', href: '/dashboard/tenants' },
   { key: 'staff', label: 'Staff roster', href: '/dashboard/staff', roles: ['owner', 'manager'] },
   { key: 'analysis', label: 'Analysis', href: '/dashboard/analysis', roles: ['owner', 'manager'] },

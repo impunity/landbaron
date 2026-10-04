@@ -14,7 +14,7 @@ type Property = { id: string; name: string; address: string };
 type Unit = { id: string; unit_number: string; tenants?: Array<{ name: string }>; unit_photos?: Array<{ photo_url: string; is_primary?: boolean | null; created_at?: string }> };
 type Lock = { id: string; unit_id: string | null; door: string; lock_group?: LockGroup | null; code: string; programming_code: string; photo_url: string | null };
 type Garage = { id: string; unit_id: string | null; owner_assigned: boolean; garage_id: string; code: string; programming_code: string; garage_rent: number | null };
-type PageData = { properties: Property[]; property: Property | null; units: Unit[]; locks: Lock[]; garages: Garage[]; canManageGarages: boolean };
+type PageData = { properties: Property[]; property: Property | null; units: Unit[]; locks: Lock[]; garages: Garage[]; canManageLocks: boolean; canManageGarages: boolean };
 type LockGroup = 'entrance' | 'other' | 'gate';
 type Editor = { kind: 'lock' | 'garage'; id: string | null; unitId: string | null; lockGroup: LockGroup | null };
 type Draft = { door: string; otherDoor: string; code: string; programmingCode: string; garageId: string; garageRent: string; unitId: string; ownerAssigned: boolean };
@@ -59,7 +59,9 @@ export default function DoorCodesPage() {
         const sessionUser = (await supabase?.auth.getSession())?.data.session?.user;
         if (sessionUser) setUserRole(await fetchUserRole(sessionUser.email, supabase));
         const overview = await load('');
-        if (overview.properties.length) {
+        if (overview.property) {
+          setPropertyId(overview.property.id);
+        } else if (overview.properties.length) {
           setPropertyId(overview.properties[0].id);
           await load(overview.properties[0].id);
         }
@@ -174,7 +176,7 @@ export default function DoorCodesPage() {
   }
 
   const codeFields = (entry: { id: string; code: string; programming_code: string }) => (
-    (['code', 'programming_code'] as const).map((field) => (
+    (data?.canManageLocks ? ['code', 'programming_code'] as const : ['code'] as const).map((field) => (
       <div key={field} className="mt-2 flex min-w-0 items-center gap-2">
         <span className="w-32 shrink-0 text-xs text-slate-500">{field === 'code' ? 'Access code' : 'Programming code'}</span>
         <span className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono">{revealed[`${entry.id}-${field}`] ? entry[field] || 'Not set' : entry[field] ? '••••••' : 'Not set'}</span>
@@ -183,7 +185,7 @@ export default function DoorCodesPage() {
     ))
   );
 
-  const lockForm = (unitId: string | null, lockGroup: LockGroup) => editor?.kind === 'lock' && editor.unitId === unitId && editor.lockGroup === lockGroup ? (
+  const lockForm = (unitId: string | null, lockGroup: LockGroup) => data?.canManageLocks && editor?.kind === 'lock' && editor.unitId === unitId && editor.lockGroup === lockGroup ? (
     <form onSubmit={(event) => void save(event)} className="mt-3 grid gap-3 rounded-md border border-teal-200 bg-teal-50/50 p-4 sm:grid-cols-3">
       {lockGroup === 'gate' ? <label className="text-xs font-semibold text-slate-600">Gate name<input className={`mt-1 ${inputClass}`} required maxLength={100} value={draft.door} onChange={(event) => setDraft({ ...draft, door: event.target.value })} /></label> : <label className="text-xs font-semibold text-slate-600">{lockGroup === 'other' ? 'Lock type' : 'Door'}<select className={`mt-1 ${inputClass}`} required value={draft.door} onChange={(event) => setDraft({ ...draft, door: event.target.value, otherDoor: event.target.value === 'Other' ? draft.otherDoor : '' })}>{(lockGroup === 'other' ? otherLockTypes : entranceDoors).map((option) => <option key={option} value={option}>{option}</option>)}<option value="Other">Other (fill in blank)</option></select></label>}
       {lockGroup !== 'gate' && draft.door === 'Other' && <label className="text-xs font-semibold text-slate-600">{lockGroup === 'other' ? 'Other lock name' : 'Other door name'}<input className={`mt-1 ${inputClass}`} required maxLength={100} value={draft.otherDoor} onChange={(event) => setDraft({ ...draft, otherDoor: event.target.value })} /></label>}
@@ -202,13 +204,13 @@ export default function DoorCodesPage() {
     }) ?? [];
     return (
       <section key={unitId ?? lockGroup} className="border-b border-slate-200 py-5 last:border-0">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{unitId !== null && (unitPhotoUrl ? <Image src={unitPhotoUrl} alt={`${title} thumbnail`} width={56} height={56} unoptimized className="size-14 shrink-0 rounded-md border border-slate-200 object-cover" /> : <div aria-hidden="true" className="size-14 shrink-0 rounded-md border border-slate-200 bg-slate-100" />)}<h3 className="font-semibold text-slate-900">{title}</h3></div><button type="button" onClick={() => startLock(unitId, lockGroup)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"><Plus size={15} />{lockGroup === 'gate' ? 'Add Gate' : 'Add Lock'}</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{unitId !== null && (unitPhotoUrl ? <Image src={unitPhotoUrl} alt={`${title} thumbnail`} width={56} height={56} unoptimized className="size-14 shrink-0 rounded-md border border-slate-200 object-cover" /> : <div aria-hidden="true" className="size-14 shrink-0 rounded-md border border-slate-200 bg-slate-100" />)}<h3 className="font-semibold text-slate-900">{title}</h3></div>{data?.canManageLocks && <button type="button" onClick={() => startLock(unitId, lockGroup)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"><Plus size={15} />{lockGroup === 'gate' ? 'Add Gate' : 'Add Lock'}</button>}</div>
         {locks.length === 0 ? <p className="mt-3 text-sm text-slate-500">No Locks Added</p> : <div className="mt-3 grid gap-2 sm:grid-cols-2">{locks.map((lock) => (
             <div key={lock.id} className="min-w-0 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-              <div className="flex items-center justify-between gap-2"><p className="font-semibold">{lock.door}</p><div className="flex gap-2"><button type="button" onClick={() => startLock(unitId, lockGroup, lock)} className="text-xs font-medium text-teal-800 underline">Edit</button><button type="button" disabled={saving} onClick={() => void remove('lock', lock.id)} title="Remove lock" aria-label={`Remove ${lock.door}`} className="text-rose-700"><Trash2 size={16} /></button></div></div>
-              {lock.unit_id === null && <div className="mt-3 flex flex-wrap items-center gap-3">{lock.photo_url && <Image src={lock.photo_url} alt={`${lock.door} lock`} width={64} height={64} unoptimized className="size-16 rounded-md border border-slate-200 object-cover" />}<label className="inline-flex cursor-pointer items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-slate-50">{lock.photo_url ? 'Replace photo' : 'Add photo'}<input type="file" accept="image/*" className="sr-only" disabled={saving} onChange={(event) => { void uploadLockPhoto(lock.id, event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} /></label></div>}
+              <div className="flex items-center justify-between gap-2"><p className="font-semibold">{lock.door}</p>{data?.canManageLocks && <div className="flex gap-2"><button type="button" onClick={() => startLock(unitId, lockGroup, lock)} className="text-xs font-medium text-teal-800 underline">Edit</button><button type="button" disabled={saving} onClick={() => void remove('lock', lock.id)} title="Remove lock" aria-label={`Remove ${lock.door}`} className="text-rose-700"><Trash2 size={16} /></button></div>}</div>
+              {lock.unit_id === null && <div className="mt-3 flex flex-wrap items-center gap-3">{lock.photo_url && <Image src={lock.photo_url} alt={`${lock.door} lock`} width={64} height={64} unoptimized className="size-16 rounded-md border border-slate-200 object-cover" />}{data?.canManageLocks && <label className="inline-flex cursor-pointer items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-slate-50">{lock.photo_url ? 'Replace photo' : 'Add photo'}<input type="file" accept="image/*" className="sr-only" disabled={saving} onChange={(event) => { void uploadLockPhoto(lock.id, event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} /></label>}</div>}
               {codeFields(lock)}
-              {lockGroup === 'other' && lock.unit_id === null && <button type="button" disabled={saving} onClick={() => void moveToGates(lock)} className="mt-3 text-xs font-medium text-teal-800 underline disabled:opacity-50">Move to Gates</button>}
+              {data?.canManageLocks && lockGroup === 'other' && lock.unit_id === null && <button type="button" disabled={saving} onClick={() => void moveToGates(lock)} className="mt-3 text-xs font-medium text-teal-800 underline disabled:opacity-50">Move to Gates</button>}
             </div>
           ))}</div>}
         {lockForm(unitId, lockGroup)}

@@ -629,13 +629,7 @@ export default function TicketDetailPage() {
           <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }]} />
           <h1 className="mt-3 text-2xl font-semibold text-slate-900">Ticket unavailable</h1>
           <p className="mt-3 text-sm text-rose-700">{error}</p>
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard')}
-            className="mt-6 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            Back to tickets
-          </button>
+          <div className="mt-6 flex flex-wrap gap-2"><DashboardNavButtons current="dashboard" role={session.role} /></div>
         </div>
       </main>
     );

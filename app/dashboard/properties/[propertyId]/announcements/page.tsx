@@ -309,8 +309,7 @@ export default function PropertyAnnouncementsPage() {
             <p className="mt-1 text-sm text-slate-600">{data?.property.name}{data?.property.address ? ` · ${data.property.address}` : ''}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {session.role !== 'tenant' ? <DashboardNavButtons current="properties" role={session.role} propertyId={propertyId} /> : <button type="button" onClick={() => router.push(`/dashboard/property-handbook?propertyId=${encodeURIComponent(propertyId)}`)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Property Handbook</button>}
-            <button type="button" onClick={() => router.push(session.role === 'tenant' ? '/dashboard' : `/dashboard/properties/${propertyId}`)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Back to property</button>
+            <DashboardNavButtons current="properties" role={session.role} propertyId={propertyId} />
           </div>
         </header>
 
