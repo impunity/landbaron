@@ -125,6 +125,15 @@ const normalizePriority = (priority?: string | null) => {
   return value;
 };
 
+const getTicketFiledAge = (createdAt: string) => {
+  const filedDate = new Date(createdAt);
+  if (!Number.isFinite(filedDate.getTime())) return null;
+  const now = new Date();
+  const filedDay = Date.UTC(filedDate.getFullYear(), filedDate.getMonth(), filedDate.getDate());
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(0, Math.floor((today - filedDay) / 86_400_000));
+};
+
 const sanitizeTicketDescription = (description?: string | null) => {
   if (!description) {
     return '';
@@ -1336,6 +1345,7 @@ export default function DashboardPage() {
                 const locationLabel = getTicketLocationLabel(ticket, propertyOptions);
                 const attachmentEntries = parsePhotoUrls(ticket.description);
                 const unitSummary = getTicketUnitSummary(ticket, propertyOptions);
+                const filedAge = getTicketFiledAge(ticket.created_at);
 
                 return (
                   <article
@@ -1346,7 +1356,10 @@ export default function DashboardPage() {
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div className="space-y-2">
                         {unitSummary.heading && (
-                          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{unitSummary.heading}</p>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{unitSummary.heading}</p>
+                            {filedAge !== null && <p className="text-xs font-medium text-slate-500">{filedAge === 0 ? 'Filed Today' : `Filed ${filedAge} ${filedAge === 1 ? 'Day' : 'Days'} Ago`}</p>}
+                          </div>
                         )}
                         <div className="flex items-center gap-3">
                           <h3 className="text-lg font-semibold text-slate-900">{ticket.title}</h3>
