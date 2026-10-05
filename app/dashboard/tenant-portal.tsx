@@ -1,13 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import type { SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from './breadcrumbs';
-import { AnnouncementsNavButton } from './announcements-nav-button';
+import { DashboardNavButtons } from './nav-buttons';
 
 
 type PortalData = {
@@ -271,19 +270,12 @@ export function TenantPortal({ session }: { session: SessionUser }) {
             <h1 className="mt-2 text-3xl font-semibold">Welcome to the {data.property.name} Maintenance Portal</h1>
             <p className="mt-2 text-sm text-slate-600">File maintenance requests, share improvements, and stay connected with your maintenance team.</p>
           </div>
-          <nav aria-label="Tenant portal" className="mt-5 flex flex-wrap items-center gap-3">
+          <div className="mt-5">
             <button type="button" onClick={() => setShowRequestForm(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white">Submit Maintenance Request</button>
-            <AnnouncementsNavButton propertyId={data.property.id} />
-            <div className="flex flex-wrap gap-3">
-              <Link href="/dashboard/vendors" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Approved Vendors</Link>
-              <Link href="/dashboard/tenant-portal/emergency-contacts" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Emergency Contacts</Link>
-              <Link href="/dashboard/tenant-portal/directory" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Tenant Directory</Link>
-              <Link href={`/dashboard/door-codes?propertyId=${encodeURIComponent(data.property.id)}`} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Door Codes</Link>
-              {data.property.solar_enabled && <Link href={`/dashboard/solar-power?propertyId=${encodeURIComponent(data.property.id)}`} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Solar Power</Link>}
-              <Link href={`/dashboard/property-handbook?propertyId=${encodeURIComponent(data.property.id)}`} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Property Handbook</Link>
-              <Link href="/dashboard/legal-disclosures" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Legal Disclosures</Link>
-            </div>
-          </nav>
+            <nav aria-label="Tenant portal" className="mt-3 flex flex-wrap items-center gap-3">
+              <DashboardNavButtons current="dashboard" role="tenant" propertyId={data.property.id} />
+            </nav>
+          </div>
         </header>
 
         {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}

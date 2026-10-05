@@ -23,23 +23,37 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserR
   { key: 'organization', label: 'Organization', href: '/dashboard/organization', roles: ['owner', 'manager'] },
 ];
 
+const TENANT_NAV_KEYS: NavKey[] = [
+  'dashboard',
+  'tenant-directory',
+  'vendors',
+  'door-codes',
+  'emergency-contacts',
+  'solar-power',
+  'property-handbook',
+  'legal-disclosures',
+];
+
 // Same canonical button set on every dashboard page, minus the button for the page you're already on.
 export function DashboardNavButtons({ current, role, propertyId }: { current?: NavKey; role: UserRole; propertyId?: string | null }) {
   const router = useRouter();
+  const items = role === 'tenant'
+    ? TENANT_NAV_KEYS.map((key) => NAV_ITEMS.find((item) => item.key === key)!).filter((item) => item.key !== current)
+    : NAV_ITEMS.filter((item) => item.key !== current && (!item.roles || item.roles.includes(role)));
 
   return (
     <>
-      {NAV_ITEMS.filter((item) => item.key !== current && (!item.roles || item.roles.includes(role))).map((item) => (
+      {items.map((item) => <span key={item.key} className="contents">
+        {role === 'tenant' && item.key === 'tenant-directory' && <AnnouncementsNavButton propertyId={propertyId} />}
         <button
-          key={item.key}
           type="button"
           onClick={() => router.push(item.key === 'property-handbook' && propertyId ? `${item.href}?propertyId=${encodeURIComponent(propertyId)}` : item.href)}
           className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          {item.label}
+          {role === 'tenant' && item.key === 'dashboard' ? 'Maintenance Tickets' : item.label}
         </button>
-      ))}
-      <AnnouncementsNavButton propertyId={propertyId} />
+      </span>)}
+      {role !== 'tenant' && <AnnouncementsNavButton propertyId={propertyId} />}
     </>
   );
 }
