@@ -37,6 +37,11 @@ export async function GET(request: NextRequest) {
       avatarUrl = staff?.avatar_url ?? null;
     }
 
+    const { data: preferences, error: preferencesError } = await supabaseAdmin.from('user_preferences')
+      .select('avatar_url').eq('user_id', user.id).maybeSingle();
+    if (preferencesError && !['PGRST205', 'PGRST204', '42P01', '42703'].includes(preferencesError.code ?? '')) throw preferencesError;
+    avatarUrl = preferences?.avatar_url ?? avatarUrl;
+
     const { data: ownedOrganization } = await supabaseAdmin
       .from('organizations')
       .select('name')

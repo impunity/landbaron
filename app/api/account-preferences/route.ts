@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-const defaultPreferences = { temperature_unit: 'fahrenheit', language: 'en', birthdate: null, gender: null };
+const defaultPreferences = { temperature_unit: 'fahrenheit', language: 'en', birthdate: null, gender: null, avatar_url: null };
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
 
     const { data, error } = await supabaseAdmin.from('user_preferences')
-      .select('temperature_unit, language, birthdate, gender').eq('user_id', user.id).maybeSingle();
+      .select('temperature_unit, language, birthdate, gender, avatar_url').eq('user_id', user.id).maybeSingle();
     if (error) throw error;
     return NextResponse.json(data ? { ...defaultPreferences, ...data } : defaultPreferences);
   } catch (error) {
@@ -58,7 +58,7 @@ export async function PUT(request: NextRequest) {
       birthdate,
       gender: body.gender,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' }).select('temperature_unit, language, birthdate, gender').single();
+    }, { onConflict: 'user_id' }).select('temperature_unit, language, birthdate, gender, avatar_url').single();
     if (error) throw error;
     return NextResponse.json(data);
   } catch (error) {

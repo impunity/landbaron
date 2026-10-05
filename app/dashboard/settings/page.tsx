@@ -54,6 +54,9 @@ export default function SettingsPage() {
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState('');
   const [preferencesNotice, setPreferencesNotice] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
 
   useEffect(() => {
     void (async () => {
@@ -65,6 +68,9 @@ export default function SettingsPage() {
       }
       const accessToken = (await client?.auth.getSession())?.data.session?.access_token;
       if (accessToken) {
+        const profileResponse = await fetch('/api/me', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
+        const profileResult = await profileResponse.json().catch(() => ({}));
+        if (profileResponse.ok) setAvatarUrl(typeof profileResult.avatarUrl === 'string' ? profileResult.avatarUrl : '');
         try {
           const response = await fetch('/api/account-preferences', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
           const preferences = await response.json().catch(() => ({}));
@@ -178,6 +184,31 @@ export default function SettingsPage() {
     }
   }
 
+  async function uploadAvatar(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setUploadingAvatar(true);
+    setAvatarError('');
+    setPreferencesNotice('');
+    try {
+      const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+      if (!token) throw new Error('Sign in is required.');
+      const form = new FormData();
+      form.set('file', file);
+      const response = await fetch('/api/me/avatar', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Avatar could not be uploaded.');
+      setAvatarUrl(result.avatarUrl);
+      window.dispatchEvent(new Event('landbaron-profile-avatar-changed'));
+      setPreferencesNotice('Profile photo saved.');
+    } catch (uploadError) {
+      setAvatarError(uploadError instanceof Error ? uploadError.message : 'Avatar could not be uploaded.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function saveProperty(propertyId: string, enabled: boolean) {
     const draft = drafts[propertyId];
     if (!draft) return;
@@ -237,6 +268,10 @@ export default function SettingsPage() {
         <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Settings', href: '/dashboard/settings' }]} />
         <h1 className="mt-3 text-2xl font-semibold">Settings</h1>
         {session && <div className="mt-4 flex flex-wrap gap-2"><DashboardNavButtons role={session.role} /></div>}
+        <section className="mt-7 flex flex-wrap items-center gap-5 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
+          <img src={avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(session?.name ?? 'User')}&background=0f766e&color=fff&size=240`} alt={`${session?.name ?? 'User'} profile`} className="size-24 rounded-full border border-slate-200 object-cover" />
+          <div><h2 className="text-base font-semibold">Profile photo</h2><p className="mt-1 text-sm text-slate-600">Shown in your account avatar.</p><label className={`mt-3 inline-flex cursor-pointer items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 ${uploadingAvatar ? 'pointer-events-none opacity-50' : ''}`}>{uploadingAvatar ? 'Uploading...' : 'Upload new photo'}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif" className="sr-only" disabled={uploadingAvatar} onChange={(event) => void uploadAvatar(event)} /></label>{avatarError && <p role="alert" className="mt-2 text-sm text-rose-700">{avatarError}</p>}</div>
+        </section>
         <section className="mt-7 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
           <h2 className="text-base font-semibold">Time display</h2>
           <p className="mt-1 text-sm text-slate-600">Choose how times appear on this device.</p>

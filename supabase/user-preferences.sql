@@ -4,12 +4,27 @@ create table if not exists public.user_preferences (
   language text not null default 'en',
   birthdate date,
   gender text,
+  avatar_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.user_preferences add column if not exists language text not null default 'en';
 alter table public.user_preferences add column if not exists gender text;
+alter table public.user_preferences add column if not exists avatar_url text;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'user-avatars',
+  'user-avatars',
+  true,
+  8388608,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+on conflict (id) do update set
+  public = true,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 do $$
 begin

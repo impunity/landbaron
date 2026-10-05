@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     if (!propertyIds.length) return NextResponse.json({ count: 0 });
 
     const { data: announcements, error: announcementError } = await supabaseAdmin.from('property_announcements')
-      .select('id, author_user_id, created_at').in('property_id', propertyIds);
+      .select('id, property_id, author_user_id, created_at').in('property_id', propertyIds);
     if (announcementError) throw announcementError;
     const announcementIds = (announcements ?? []).map((announcement) => announcement.id as string);
     if (!announcementIds.length) return NextResponse.json({ count: 0 });
@@ -53,19 +53,28 @@ export async function GET(request: NextRequest) {
 
     const lastReadByAnnouncement = new Map((readsResult.data ?? []).map((read) => [read.announcement_id, Date.parse(read.read_at)]));
     const hasUnread = new Set<string>();
+    const unreadPropertyIds = new Set<string>();
+    const propertyByAnnouncement = new Map((announcements ?? []).map((announcement) => [announcement.id, announcement.property_id]));
     for (const announcement of announcements ?? []) {
       if (announcement.author_user_id !== user.id) {
         const readAt = lastReadByAnnouncement.get(announcement.id) ?? 0;
-        if (Date.parse(announcement.created_at) > readAt) hasUnread.add(announcement.id);
+        if (Date.parse(announcement.created_at) > readAt) {
+          hasUnread.add(announcement.id);
+          unreadPropertyIds.add(announcement.property_id);
+        }
       }
     }
     for (const reply of repliesResult.data ?? []) {
       if (reply.author_user_id !== user.id) {
         const readAt = lastReadByAnnouncement.get(reply.announcement_id) ?? 0;
-        if (Date.parse(reply.created_at) > readAt) hasUnread.add(reply.announcement_id);
+        if (Date.parse(reply.created_at) > readAt) {
+          hasUnread.add(reply.announcement_id);
+          const propertyId = propertyByAnnouncement.get(reply.announcement_id);
+          if (propertyId) unreadPropertyIds.add(propertyId);
+        }
       }
     }
-    return NextResponse.json({ count: hasUnread.size });
+    return NextResponse.json({ count: hasUnread.size, propertyId: unreadPropertyIds.values().next().value ?? null });
   } catch (error) {
     console.error('GET unread announcements failed:', error);
     return NextResponse.json({ error: 'Unread discussions could not be loaded.' }, { status: 500 });
