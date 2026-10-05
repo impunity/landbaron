@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { UserRole } from '@/lib/auth';
 import { AnnouncementsNavButton } from './announcements-nav-button';
 
-export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes' | 'solar-power' | 'property-handbook' | 'tenant-directory' | 'emergency-contacts';
+export type NavKey = 'dashboard' | 'vendors' | 'properties' | 'tenants' | 'staff' | 'analysis' | 'organization' | 'door-codes' | 'solar-power' | 'property-handbook' | 'tenant-directory' | 'emergency-contacts' | 'legal-disclosures';
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserRole[] }> = [
   { key: 'dashboard', label: 'Maintenance Tickets', href: '/dashboard' },
@@ -16,6 +16,7 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; href: string; roles?: UserR
   { key: 'property-handbook', label: 'Property Handbook', href: '/dashboard/property-handbook' },
   { key: 'tenant-directory', label: 'Tenant Directory', href: '/dashboard/tenant-portal/directory', roles: ['tenant'] },
   { key: 'emergency-contacts', label: 'Emergency Contacts', href: '/dashboard/tenant-portal/emergency-contacts', roles: ['tenant'] },
+  { key: 'legal-disclosures', label: 'Legal Disclosures', href: '/dashboard/legal-disclosures' },
   { key: 'tenants', label: 'Tenants', href: '/dashboard/tenants' },
   { key: 'staff', label: 'Staff roster', href: '/dashboard/staff', roles: ['owner', 'manager'] },
   { key: 'analysis', label: 'Analysis', href: '/dashboard/analysis', roles: ['owner', 'manager'] },

@@ -158,6 +158,12 @@ export default function PropertyAnnouncementsPage() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || 'Announcements could not be loaded.');
       setData({ property: result.property, announcements: result.announcements ?? [] });
+      const readResponse = await fetch('/api/announcements/unread', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId, readAt: result.readThrough }),
+      });
+      if (readResponse.ok) window.dispatchEvent(new Event('landbaron-unread-changed'));
       const mentionsResponse = await fetch(`/api/properties/${propertyId}/announcements/mentions`, {
         headers: { Authorization: `Bearer ${token}` },
       });

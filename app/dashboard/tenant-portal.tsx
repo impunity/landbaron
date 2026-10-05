@@ -281,6 +281,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
               <Link href={`/dashboard/door-codes?propertyId=${encodeURIComponent(data.property.id)}`} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Door Codes</Link>
               {data.property.solar_enabled && <Link href={`/dashboard/solar-power?propertyId=${encodeURIComponent(data.property.id)}`} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Solar Power</Link>}
               <Link href={`/dashboard/property-handbook?propertyId=${encodeURIComponent(data.property.id)}`} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Property Handbook</Link>
+              <Link href="/dashboard/legal-disclosures" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Legal Disclosures</Link>
             </div>
           </nav>
         </header>

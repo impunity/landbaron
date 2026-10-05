@@ -27,6 +27,7 @@ export async function GET(
     const property = await getAccessibleAnnouncementProperty(propertyId, user);
     if (!property) return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
 
+    const readThrough = new Date().toISOString();
     const { data: announcements, error } = await supabaseAdmin
       .from('property_announcements')
       .select('*, property_announcement_replies(*)')
@@ -51,7 +52,7 @@ export async function GET(
       property_announcement_replies: [...(announcement.property_announcement_replies ?? [])]
         .sort((first, second) => new Date(first.created_at).getTime() - new Date(second.created_at).getTime()),
     }));
-    return NextResponse.json({ property, announcements: ordered });
+    return NextResponse.json({ property, announcements: ordered, readThrough });
   } catch (error) {
     console.error('GET property announcements failed:', error);
     return NextResponse.json({ error: getErrorMessage(error, 'Announcements could not be loaded.') }, { status: 500 });

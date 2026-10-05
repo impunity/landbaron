@@ -33,6 +33,7 @@ export function UserStatusBar() {
   const router = useRouter();
   const [session, setSession] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<MeProfile | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const client = supabase;
@@ -112,6 +113,33 @@ export function UserStatusBar() {
     })();
   }, [session]);
 
+  useEffect(() => {
+    if (!session) return;
+
+    let active = true;
+    const refreshUnread = async () => {
+      const accessToken = (await supabase?.auth.getSession())?.data.session?.access_token;
+      if (!accessToken) return;
+      const response = await fetch('/api/announcements/unread', { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' }).catch(() => null);
+      if (!response?.ok) return;
+      const result = await response.json().catch(() => ({}));
+      if (active) setUnreadCount(Number.isSafeInteger(result.count) && result.count > 0 ? result.count : 0);
+    };
+
+    void refreshUnread();
+    const timer = window.setInterval(() => void refreshUnread(), 120_000);
+    const handleFocus = () => void refreshUnread();
+    const handleRead = () => void refreshUnread();
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('landbaron-unread-changed', handleRead);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('landbaron-unread-changed', handleRead);
+    };
+  }, [session]);
+
   if (!session) {
     return null;
   }
@@ -141,14 +169,17 @@ export function UserStatusBar() {
         )}
 
         <div className="flex items-center gap-3">
-        <img
-          src={avatarSrc}
-          alt={`${displayName} avatar`}
-          className="h-9 w-9 rounded-full border border-slate-200 object-cover"
-          onError={(event) => {
-            event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getInitials(displayName))}&background=0f766e&color=fff`;
-          }}
-        />
+        <div className="relative size-9 shrink-0">
+          <img
+            src={avatarSrc}
+            alt={`${displayName} avatar`}
+            className="size-9 rounded-full border border-slate-200 object-cover"
+            onError={(event) => {
+              event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getInitials(displayName))}&background=0f766e&color=fff`;
+            }}
+          />
+          {unreadCount > 0 && <span className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full border-2 border-white bg-red-600 px-1 text-[9px] font-bold leading-none text-white" title={`${unreadCount} unread discussion${unreadCount === 1 ? '' : 's'}`} aria-label={`${unreadCount} unread discussion${unreadCount === 1 ? '' : 's'}`}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
+        </div>
         <div className="text-right leading-tight">
           <p className="text-sm font-semibold text-slate-900">{displayName}</p>
           <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
