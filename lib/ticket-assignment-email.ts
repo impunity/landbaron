@@ -11,7 +11,7 @@ type AssignmentNotificationTicket = {
 
 type NotificationResult = {
   sent: boolean;
-  recipient: 'tenant' | 'assignee';
+  recipient: 'tenant' | 'assignee' | 'cc';
   messageId?: string;
   reason?: 'not-configured' | 'missing-recipient' | 'duplicate-recipient';
 };
@@ -105,12 +105,14 @@ export async function sendTicketAssignmentEmail(
 export async function sendTicketCreatedEmails(
   ticket: AssignmentNotificationTicket,
   assignment?: string | null,
-  options?: { tenantCanViewTicket?: boolean; tenantSubjectPrefix?: string },
+  options?: { tenantCanViewTicket?: boolean; tenantSubjectPrefix?: string; ccEmails?: string[] },
 ) {
   const { apiKey, from, replyTo } = getEmailConfiguration();
   const assigneeEmail = getAssigneeEmail(assignment);
   const { details, requesterEmail, ticketUrl } = getTicketDetails(ticket);
   const results: NotificationResult[] = [];
+  const ccEmails = Array.from(new Set((options?.ccEmails ?? []).map((email) => email.trim().toLowerCase())))
+    .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email !== assigneeEmail.toLowerCase() && email !== requesterEmail);
   const assigneeName = getAssigneeName(assignment);
   const tenantSubjectPrefix = options?.tenantSubjectPrefix ?? '';
   const nudgeEndpoint = ticketUrl.replace('/dashboard/tickets/', '/api/tickets/') + '/nudge';
@@ -127,11 +129,26 @@ export async function sendTicketCreatedEmails(
       results: [
         { sent: false, recipient: 'tenant', reason: 'not-configured' as const },
         { sent: false, recipient: 'assignee', reason: 'not-configured' as const },
+        ...ccEmails.map(() => ({ sent: false, recipient: 'cc' as const, reason: 'not-configured' as const })),
       ],
     };
   }
 
   const resend = new Resend(apiKey);
+  const sendCcNotifications = async () => {
+    if (!ccEmails.length) return [];
+    const ccDetails = [details, requesterEmail && `Requester: ${requesterEmail}`, assigneeName && `Assigned to: ${assigneeName}`].filter(Boolean).join('\n');
+    const { data, error } = await resend.emails.send({
+      from,
+      to: ccEmails,
+      replyTo: replyTo || undefined,
+      subject: `CC: New maintenance ticket: ${ticket.title}`,
+      text: `You were copied on a new maintenance ticket.\n\n${ticket.title}\n${ccDetails}\n\nView ticket: ${ticketUrl}${photoText}`,
+      html: `<p>You were copied on a new maintenance ticket.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(ccDetails).replace(/\n/g, '<br />')}</p>${photoHtml}<p><a href="${ticketUrl}">View ticket</a></p>`,
+    });
+    if (error) throw new Error(`CC staff notification failed: ${error.message}`);
+    return ccEmails.map(() => ({ sent: true, recipient: 'cc' as const, messageId: data?.id }));
+  };
 
   if (requesterEmail && assigneeEmail.toLowerCase() === requesterEmail.toLowerCase()) {
     const { data, error } = await resend.emails.send({
@@ -143,10 +160,12 @@ export async function sendTicketCreatedEmails(
       html: `<p>Hello! This is a confirmation that your maintenance request has been received and assigned.</p><p><strong>${escapeHtml(ticket.title)}</strong></p><p>${escapeHtml(details).replace(/\n/g, '<br />')}</p><p><strong>Assigned to:</strong> ${escapeHtml(assigneeName)}</p><p>You will get an email update when the status of the request changes.</p>${photoHtml}<p><a href="${ticketUrl}">Open ticket and add information, adjust severity, or dismiss.</a></p><p><a href="${nudgeUrl}">Nudge maintenance person</a></p>`,
     });
     if (error) throw new Error(`Combined notification failed: ${error.message}`);
+    results.push(...await sendCcNotifications());
     return {
       results: [
         { sent: true, recipient: 'tenant' as const, messageId: data?.id },
         { sent: false, recipient: 'assignee' as const, reason: 'duplicate-recipient' as const },
+        ...results,
       ],
     };
   }
@@ -183,6 +202,8 @@ export async function sendTicketCreatedEmails(
     if (error) throw new Error(`Assignee email failed: ${error.message}`);
     results.push({ sent: true, recipient: 'assignee', messageId: data?.id });
   }
+
+  results.push(...await sendCcNotifications());
 
   return { results };
 }

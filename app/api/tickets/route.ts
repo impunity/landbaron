@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, description, status, priority, assigned_to, property_id, unit_id } = await request.json();
+    const { title, description, status, priority, assigned_to, cc_staff_emails, property_id, unit_id } = await request.json();
 
     if (!title || !description || !status || !priority) {
       return NextResponse.json(
@@ -137,6 +137,31 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedAssignee = user.role === 'tenant' ? '' : typeof assigned_to === 'string' ? assigned_to.trim() : '';
+    const organizationId = await getRequestOrganizationId(user);
+    let normalizedCcEmails: string[] = [];
+    if (user.role === 'owner' || user.role === 'manager') {
+      if (cc_staff_emails !== undefined && !Array.isArray(cc_staff_emails)) {
+        return NextResponse.json({ error: 'Choose up to 25 valid staff recipients.' }, { status: 400 });
+      }
+      const rawCcEmails: unknown[] = Array.isArray(cc_staff_emails) ? cc_staff_emails : [];
+      if (rawCcEmails.length > 25 || rawCcEmails.some((email) => typeof email !== 'string')) {
+        return NextResponse.json({ error: 'Choose up to 25 valid staff recipients.' }, { status: 400 });
+      }
+      const requestedCcEmails = Array.from(new Set(rawCcEmails.filter((email): email is string => typeof email === 'string').map((email) => email.trim().toLowerCase()).filter(Boolean)));
+      if (requestedCcEmails.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+        return NextResponse.json({ error: 'Choose valid staff email addresses.' }, { status: 400 });
+      }
+      if (requestedCcEmails.length) {
+        const { data: staffRecipients, error: staffError } = await supabaseAdmin.from('staff_members')
+          .select('email').eq('organization_id', organizationId ?? '');
+        if (staffError) throw staffError;
+        const organizationStaffEmails = new Set((staffRecipients ?? []).map((member) => String(member.email ?? '').trim().toLowerCase()).filter(Boolean));
+        normalizedCcEmails = requestedCcEmails.filter((email) => organizationStaffEmails.has(email));
+        if (normalizedCcEmails.length !== requestedCcEmails.length) {
+          return NextResponse.json({ error: 'Every CC recipient must be staff in your organization.' }, { status: 400 });
+        }
+      }
+    }
     const reporterEmail = user.role === 'tenant' ? user.email : '';
     const normalizedDescription = reporterEmail
       ? description.replace(/(^|\n)Email:\s*[^\n]*/i, `$1Email: ${reporterEmail}`)
@@ -151,13 +176,14 @@ export async function POST(request: NextRequest) {
           status,
           priority,
           assigned_to: normalizedAssignee || null,
+          cc_staff_emails: normalizedCcEmails,
           created_by: user.id,
-          organization_id: await getRequestOrganizationId(user),
+          organization_id: organizationId,
           property_id: typeof property_id === 'string' && property_id.trim() ? property_id.trim() : null,
           unit_id: typeof unit_id === 'string' && unit_id.trim() ? unit_id.trim() : null,
         },
       ])
-      .select('id, ticket_number, title, priority, description, unit_id')
+      .select('id, ticket_number, title, priority, description, unit_id, cc_staff_emails')
       .single();
 
     if (error) {
@@ -175,6 +201,7 @@ export async function POST(request: NextRequest) {
       try {
         const notification = await sendTicketCreatedEmails(notificationTicket, normalizedAssignee, {
           tenantCanViewTicket: user.role === 'tenant',
+          ccEmails: normalizedCcEmails,
         });
         const notConfigured = notification.results.every((result) => result.reason === 'not-configured');
         if (notConfigured) {

@@ -35,6 +35,7 @@ type TicketFormState = {
   address: string;
   description: string;
   assigned_to: string;
+  cc_staff_emails: string[];
   property_id: string;
   unit_id: string;
 };
@@ -289,6 +290,7 @@ const initialFormState: TicketFormState = {
   address: '',
   description: '',
   assigned_to: '',
+  cc_staff_emails: [],
   property_id: '',
   unit_id: '',
 };
@@ -968,6 +970,7 @@ export default function DashboardPage() {
           status,
           priority,
           assigned_to: assignedTo || null,
+          cc_staff_emails: formState.cc_staff_emails,
           property_id: formState.property_id || null,
           unit_id: formState.unit_id || null,
         }),
@@ -1149,6 +1152,16 @@ export default function DashboardPage() {
                     </select>
                   </div>
                 )}
+                {(session.role === 'owner' || session.role === 'manager') && <fieldset className="space-y-2">
+                  <legend className="mb-1 block text-sm font-medium text-slate-700">CC additional Staff</legend>
+                  <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-slate-300 bg-white p-3">
+                    {!staffHydrated ? <p className="text-sm text-slate-500">Loading staff...</p> : staffMembers.filter((member) => member.email.trim().toLowerCase() !== (formState.assigned_to.match(/<([^>]+)>/)?.[1]?.trim().toLowerCase() ?? '')).length === 0 ? <p className="text-sm text-slate-500">No additional staff available.</p> : staffMembers.filter((member) => member.email.trim().toLowerCase() !== (formState.assigned_to.match(/<([^>]+)>/)?.[1]?.trim().toLowerCase() ?? '')).map((member) => {
+                      const email = member.email.trim().toLowerCase();
+                      const checked = formState.cc_staff_emails.includes(email);
+                      return <label key={member.id} className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={checked} onChange={() => setFormState((current) => ({ ...current, cc_staff_emails: checked ? current.cc_staff_emails.filter((selected) => selected !== email) : [...current.cc_staff_emails, email] }))} /><span>{member.name}</span><span className="text-xs text-slate-500">{member.role}</span></label>;
+                    })}
+                  </div>
+                </fieldset>}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Severity</label>
                   <select name="severity" value={formState.severity} onChange={handleInputChange} required className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500">
