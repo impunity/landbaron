@@ -643,15 +643,8 @@ export default function TicketDetailPage() {
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <Breadcrumbs
-            items={[
-              { label: 'Dashboard', href: '/dashboard' },
-              { label: formatTicketNumber(ticket), href: `/dashboard/tickets/${ticketId}` },
-            ]}
-          />
-
           <div className="flex flex-wrap items-center gap-3">
-            <DashboardNavButtons current="dashboard" role={session.role} propertyId={ticket.property_id} />
+            <DashboardNavButtons role={session.role} propertyId={ticket.property_id} />
           </div>
         </div>
 
