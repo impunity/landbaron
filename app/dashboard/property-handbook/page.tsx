@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, Save } from 'lucide-react';
+import { ExternalLink, ImagePlus, Save } from 'lucide-react';
 
 import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { googleDocPreview } from '@/lib/property-handbook';
@@ -13,7 +13,7 @@ import { DashboardNavButtons } from '../nav-buttons';
 import { PropertyMap } from '../property-map';
 
 type Property = { id: string; name: string; address: string; city: string | null; state: string | null; postal_code: string | null; latitude: number | null; longitude: number | null };
-type Handbook = { body: string; google_doc_url: string | null; updated_at: string | null };
+type Handbook = { body: string; google_doc_url: string | null; photo_url: string | null; updated_at: string | null };
 type HandbookData = { properties: Property[]; property: Property | null; canEdit: boolean; unitCount: number; handbook: Handbook };
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600';
 
@@ -26,6 +26,7 @@ export default function PropertyHandbookPage() {
   const [googleDocUrl, setGoogleDocUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -86,6 +87,35 @@ export default function PropertyHandbookPage() {
     finally { setSaving(false); }
   }
 
+  async function uploadPropertyPhoto(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !data?.property || (role !== 'owner' && role !== 'manager')) return;
+    setUploadingPhoto(true);
+    setError('');
+    setNotice('');
+    try {
+      const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+      if (!token) throw new Error('Sign in is required.');
+      const formData = new FormData();
+      formData.append('propertyId', data.property.id);
+      formData.append('file', file);
+      const response = await fetch('/api/property-handbook', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Property photo could not be uploaded.');
+      setData({ ...data, handbook: result.handbook });
+      setNotice('Property photo uploaded.');
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Property photo could not be uploaded.');
+    } finally {
+      setUploadingPhoto(false);
+      event.target.value = '';
+    }
+  }
+
   return <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 sm:px-6">
     <div className="mx-auto max-w-6xl">
       <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Property Handbook', href: '/dashboard/property-handbook' }]} />
@@ -96,7 +126,14 @@ export default function PropertyHandbookPage() {
       {loading ? <p className="mt-6 text-sm text-slate-500">Loading handbook...</p> : data && !data.property ? <p className="mt-6 text-sm text-slate-500">No accessible properties found.</p> : data?.property && <>
         {data.properties.length > 1 && <label className="mt-6 block max-w-md text-sm font-medium">Property<select className={`mt-1 ${inputClass}`} value={data.property.id} disabled={saving} onChange={(event) => void selectProperty(event.target.value)}>{data.properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select></label>}
         <section className="mt-6 grid gap-6 border-t border-slate-300 bg-white px-5 py-5 sm:grid-cols-[1fr_minmax(250px,360px)] sm:px-6">
-          <div><h2 className="text-xl font-semibold">{data.property.name}</h2><p className="mt-2 text-sm text-slate-600">{[data.property.address, data.property.city, data.property.state, data.property.postal_code].filter(Boolean).join(', ')}</p><p className="mt-3 text-sm"><span className="font-semibold">Units</span> {data.unitCount}</p>{data.handbook.updated_at && <p className="mt-3 text-xs text-slate-500">Updated {formatTimestamp(data.handbook.updated_at, timeFormat)}</p>}{previewUrl && <a className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-teal-800 underline" href={previewUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />View Google Doc</a>}</div>
+          <div className="space-y-4">
+            <div><h2 className="text-xl font-semibold">{data.property.name}</h2><p className="mt-2 text-sm text-slate-600">{[data.property.address, data.property.city, data.property.state, data.property.postal_code].filter(Boolean).join(', ')}</p><p className="mt-3 text-sm"><span className="font-semibold">Units</span> {data.unitCount}</p>{data.handbook.updated_at && <p className="mt-3 text-xs text-slate-500">Updated {formatTimestamp(data.handbook.updated_at, timeFormat)}</p>}{previewUrl && <a className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-teal-800 underline" href={previewUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />View Google Doc</a>}</div>
+            {data.handbook.photo_url && <img src={data.handbook.photo_url} alt={`${data.property.name} property`} className="max-h-72 w-full rounded-lg object-cover" />}
+            {role && (role === 'owner' || role === 'manager') && <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">
+              <ImagePlus size={16} />{uploadingPhoto ? 'Uploading photo...' : data.handbook.photo_url ? 'Replace property photo' : 'Upload property photo'}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif" disabled={uploadingPhoto || saving} onChange={(event) => void uploadPropertyPhoto(event)} className="sr-only" />
+            </label>}
+          </div>
           <div><PropertyMap address={data.property.address} city={data.property.city} state={data.property.state} postalCode={data.property.postal_code} latitude={data.property.latitude} longitude={data.property.longitude} /></div>
         </section>
         <form onSubmit={(event) => void save(event)} className="border-t border-slate-200 bg-white px-5 py-5 sm:px-6">

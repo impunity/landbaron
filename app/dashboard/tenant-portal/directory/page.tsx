@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
 
 type DirectoryEntry = {
@@ -47,6 +48,7 @@ export default function TenantDirectoryPage() {
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-4xl">
         <header className="mb-8">
+          <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Tenant Directory', href: '/dashboard/tenant-portal/directory' }]} />
           {role && <div className="mb-4 flex flex-wrap gap-2"><DashboardNavButtons current="tenant-directory" role={role} propertyId={property?.id} /></div>}
           <h1 className="mt-2 text-3xl font-semibold">Tenant Directory</h1>
           {property && <p className="mt-1 text-sm text-slate-500">{property.name} · {property.address}</p>}

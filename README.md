@@ -26,6 +26,10 @@ Run [supabase/properties-and-units.sql](supabase/properties-and-units.sql) once 
 - `unit_maintenance_notes`: Chronological maintenance history per unit tracking "Completed Work" and "Work to Consider" with cost, technician/vendor, and date.
 - Links tickets to units and properties with direct navigation from unit view to ticket queue.
 
+## Property Handbook Photos
+
+Run [supabase/property-handbooks.sql](supabase/property-handbooks.sql) in the Supabase SQL Editor to enable handbook records and public property photo storage. The script is safe to rerun and adds the photo URL column and storage bucket to existing installations.
+
 ## Tenant Portal, Contacts & Vendors
 
 Run [supabase/tenant-portal-and-contacts.sql](supabase/tenant-portal-and-contacts.sql) once in Supabase. It adds tenant avatars and improvement photos, per-property primary/secondary staff assignments, and approved vendor records.

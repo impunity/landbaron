@@ -315,7 +315,7 @@ export default function PropertyAnnouncementsPage() {
             <p className="mt-1 text-sm text-slate-600">{data?.property.name}{data?.property.address ? ` · ${data.property.address}` : ''}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <DashboardNavButtons current="properties" role={session.role} propertyId={propertyId} />
+            <DashboardNavButtons current="announcements" role={session.role} propertyId={propertyId} />
           </div>
         </header>
 
