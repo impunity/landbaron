@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Check, Copy, RefreshCw } from 'lucide-react';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
@@ -71,6 +72,8 @@ export default function OrganizationPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [generatingInviteCode, setGeneratingInviteCode] = useState(false);
+  const [inviteCodeCopied, setInviteCodeCopied] = useState(false);
 
   useEffect(() => {
     const client = supabase;
@@ -186,6 +189,41 @@ export default function OrganizationPage() {
   }, [session]);
 
   const isOwner = session?.role === 'owner';
+
+  const handleGenerateInviteCode = async () => {
+    if (!isOwner || !organization) return;
+    if (organization.invite_code && !window.confirm('Regenerate the invite code? The existing code will stop working.')) return;
+    setGeneratingInviteCode(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const accessToken = (await supabase?.auth.getSession())?.data.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+      const response = await fetch('/api/organization/invite-code', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || typeof result.inviteCode !== 'string') throw new Error(result.error || 'Invite code could not be generated.');
+      setOrganization({ ...organization, invite_code: result.inviteCode });
+      setSuccess(organization.invite_code ? 'Invite code regenerated. The previous code is no longer valid.' : 'Invite code generated.');
+    } catch (generateError) {
+      setError(generateError instanceof Error ? generateError.message : 'Invite code could not be generated.');
+    } finally {
+      setGeneratingInviteCode(false);
+    }
+  };
+
+  const handleCopyInviteCode = async () => {
+    if (!organization?.invite_code) return;
+    try {
+      await navigator.clipboard.writeText(organization.invite_code);
+      setInviteCodeCopied(true);
+      window.setTimeout(() => setInviteCodeCopied(false), 2000);
+    } catch {
+      setError('Invite code could not be copied. Select the code and copy it manually.');
+    }
+  };
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -313,11 +351,18 @@ export default function OrganizationPage() {
               )}
             </div>
 
-            {organization?.invite_code && (
+            {organization && (
               <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Access request invite code</p>
-                <p className="mt-1 font-mono text-lg font-semibold tracking-widest text-slate-900">{organization.invite_code}</p>
-                <p className="mt-1 text-xs text-slate-500">Share this code with people who need to request access to this organization.</p>
+                {organization.invite_code ? <>
+                  <p className="mt-1 font-mono text-lg font-semibold tracking-widest text-slate-900">{organization.invite_code}</p>
+                  <p className="mt-1 text-xs text-slate-500">Share this code with people who need to request access to this organization.</p>
+                </> : <p className="mt-1 text-sm text-slate-600">No invite code has been generated yet.</p>}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {isOwner && <button type="button" onClick={() => void handleGenerateInviteCode()} disabled={generatingInviteCode} className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"><RefreshCw size={15} className={generatingInviteCode ? 'animate-spin' : ''} />{generatingInviteCode ? 'Generating...' : organization.invite_code ? 'Regenerate code' : 'Generate invite code'}</button>}
+                  {organization.invite_code && <button type="button" onClick={() => void handleCopyInviteCode()} className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">{inviteCodeCopied ? <Check size={15} /> : <Copy size={15} />}{inviteCodeCopied ? 'Copied' : 'Copy code'}</button>}
+                  {!isOwner && !organization.invite_code && <p className="self-center text-xs text-slate-500">Ask the owner to generate one.</p>}
+                </div>
               </div>
             )}
 
