@@ -125,16 +125,24 @@ export default function PropertyHandbookPage() {
       {notice && <p role="status" className="mt-5 text-sm text-emerald-700">{notice}</p>}
       {loading ? <p className="mt-6 text-sm text-slate-500">Loading handbook...</p> : data && !data.property ? <p className="mt-6 text-sm text-slate-500">No accessible properties found.</p> : data?.property && <>
         {data.properties.length > 1 && <label className="mt-6 block max-w-md text-sm font-medium">Property<select className={`mt-1 ${inputClass}`} value={data.property.id} disabled={saving} onChange={(event) => void selectProperty(event.target.value)}>{data.properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select></label>}
-        <section className="mt-6 grid gap-6 border-t border-slate-300 bg-white px-5 py-5 sm:grid-cols-[1fr_minmax(250px,360px)] sm:px-6">
-          <div className="space-y-4">
-            <div><h2 className="text-xl font-semibold">{data.property.name}</h2><p className="mt-2 text-sm text-slate-600">{[data.property.address, data.property.city, data.property.state, data.property.postal_code].filter(Boolean).join(', ')}</p><p className="mt-3 text-sm"><span className="font-semibold">Units</span> {data.unitCount}</p>{data.handbook.updated_at && <p className="mt-3 text-xs text-slate-500">Updated {formatTimestamp(data.handbook.updated_at, timeFormat)}</p>}{previewUrl && <a className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-teal-800 underline" href={previewUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />View Google Doc</a>}</div>
-            {data.handbook.photo_url && <img src={data.handbook.photo_url} alt={`${data.property.name} property`} className="max-h-72 w-full rounded-lg object-cover" />}
-            {role && (role === 'owner' || role === 'manager') && <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">
-              <ImagePlus size={16} />{uploadingPhoto ? 'Uploading photo...' : data.handbook.photo_url ? 'Replace property photo' : 'Upload property photo'}
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif" disabled={uploadingPhoto || saving} onChange={(event) => void uploadPropertyPhoto(event)} className="sr-only" />
-            </label>}
+        <section className="mt-6 space-y-6 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
+          <div><h2 className="text-xl font-semibold">{data.property.name}</h2><p className="mt-2 text-sm text-slate-600">{[data.property.address, data.property.city, data.property.state, data.property.postal_code].filter(Boolean).join(', ')}</p><p className="mt-3 text-sm"><span className="font-semibold">Units</span> {data.unitCount}</p>{data.handbook.updated_at && <p className="mt-3 text-xs text-slate-500">Updated {formatTimestamp(data.handbook.updated_at, timeFormat)}</p>}{previewUrl && <a className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-teal-800 underline" href={previewUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />View Google Doc</a>}</div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <div className="mt-5 h-56 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                {data.handbook.photo_url
+                  ? <a href={data.handbook.photo_url} target="_blank" rel="noopener noreferrer" aria-label={`Open full-size photo of ${data.property.name}`} className="block h-full w-full">
+                    <img src={data.handbook.photo_url} alt={`${data.property.name} property`} className="h-full w-full object-cover" />
+                  </a>
+                  : <div className="grid h-full place-items-center text-sm text-slate-500">No property photo uploaded</div>}
+              </div>
+              {role && (role === 'owner' || role === 'manager') && <label className="mt-3 inline-flex w-fit cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50">
+                <ImagePlus size={16} />{uploadingPhoto ? 'Uploading photo...' : data.handbook.photo_url ? 'Replace property photo' : 'Upload property photo'}
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif" disabled={uploadingPhoto || saving} onChange={(event) => void uploadPropertyPhoto(event)} className="sr-only" />
+              </label>}
+            </div>
+            <PropertyMap address={data.property.address} city={data.property.city} state={data.property.state} postalCode={data.property.postal_code} latitude={data.property.latitude} longitude={data.property.longitude} />
           </div>
-          <div><PropertyMap address={data.property.address} city={data.property.city} state={data.property.state} postalCode={data.property.postal_code} latitude={data.property.latitude} longitude={data.property.longitude} /></div>
         </section>
         <form onSubmit={(event) => void save(event)} className="border-t border-slate-200 bg-white px-5 py-5 sm:px-6">
           <label htmlFor="handbook-body" className="block text-base font-semibold">General property information</label>
