@@ -4,74 +4,13 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketAssignmentEmail, sendTicketStatusChangeEmail } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getTicketCreatorLabels } from '@/lib/ticket-creators';
-
-const getDescriptionParts = (description?: string | null) => {
-  if (!description) {
-    return { base: '', notes: '', assignment: '', hasNotes: false, hasAssignment: false };
-  }
-
-  const cleaned = description.trim();
-  const sections = cleaned
-    .split(/\n{2,}/)
-    .map((section) => section.trim())
-    .filter(Boolean);
-
-  let assignment = '';
-  let notes = '';
-  const baseParts: string[] = [];
-
-  for (const section of sections) {
-    const assignmentMatch = section.match(/(?:^|\n)Assigned to:\s*([^\n]+)/i);
-    if (assignmentMatch) {
-      assignment = assignmentMatch[1].trim();
-      continue;
-    }
-
-    if (/^Owner notes:/i.test(section)) {
-      notes = section.replace(/^Owner notes:\s*/i, '').trim();
-      continue;
-    }
-
-    baseParts.push(section.replace(/^Owner notes:\s*/i, '').replace(/^Assigned to:\s*/i, '').trim());
-  }
-
-  return {
-    base: baseParts.filter(Boolean).join('\n\n').replace(/\n{3,}/g, '\n\n').trim(),
-    notes,
-    assignment,
-    hasNotes: Boolean(notes),
-    hasAssignment: Boolean(assignment),
-  };
-};
-
-const buildDescription = ({
-  baseDescription,
-  notes,
-  assignment,
-}: {
-  baseDescription: string;
-  notes?: string | null;
-  assignment?: string | null;
-}) => {
-  const nextDescriptionParts: string[] = [];
-
-  const nextAssignment = assignment?.trim();
-  if (nextAssignment) {
-    nextDescriptionParts.push(`Assigned to: ${nextAssignment}`);
-  }
-
-  const nextBaseDescription = baseDescription.trim();
-  if (nextBaseDescription) {
-    nextDescriptionParts.push(nextBaseDescription);
-  }
-
-  const nextNotes = notes?.trim();
-  if (nextNotes) {
-    nextDescriptionParts.push(`Owner notes:\n${nextNotes}`);
-  }
-
-  return nextDescriptionParts.join('\n\n') || null;
-};
+import {
+  buildTicketDescription,
+  deriveTicketTitle,
+  isDerivedTicketTitle,
+  MAX_TICKET_DESCRIPTION_LENGTH,
+  parseTicketDescription,
+} from '@/lib/ticket-description';
 
 const parseReporterEmailFromDescription = (description?: string | null) => {
   if (!description) {
@@ -205,7 +144,7 @@ export async function PATCH(
 ) {
   try {
     const { ticketId } = await params;
-    const { notes, status, assigned_to, labor_cost, materials_cost } = await request.json();
+    const { notes, status, assigned_to, labor_cost, materials_cost, description } = await request.json();
 
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -219,8 +158,23 @@ export async function PATCH(
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
     }
 
-    if (user.role === 'tenant') {
+    const descriptionOnly = typeof description === 'string'
+      && [notes, status, assigned_to, labor_cost, materials_cost].every((value) => value === undefined);
+
+    if (user.role === 'tenant' && !descriptionOnly) {
       return NextResponse.json({ error: 'Tenants cannot update tickets.' }, { status: 403 });
+    }
+
+    if (description !== undefined) {
+      if (typeof description !== 'string' || !description.trim()) {
+        return NextResponse.json({ error: 'Description cannot be empty.' }, { status: 400 });
+      }
+      if (description.trim().length > MAX_TICKET_DESCRIPTION_LENGTH) {
+        return NextResponse.json(
+          { error: `Description must be ${MAX_TICKET_DESCRIPTION_LENGTH} characters or fewer.` },
+          { status: 400 },
+        );
+      }
     }
 
     const validStatuses = ['Open', 'In Progress', 'Waiting on Parts', 'Resolved', 'Closed', 'Archived'];
@@ -260,12 +214,13 @@ export async function PATCH(
       description?: string | null;
       assigned_to?: string | null;
       status?: string | null;
+      created_by?: string | null;
     } | null = null;
     let hasAssignedToColumn = true;
 
     const { data: fetchedTicket, error: fetchError } = await supabaseAdmin
       .from('tickets')
-      .select('title, priority, description, assigned_to, status')
+      .select('title, priority, description, assigned_to, status, created_by')
       .eq('id', ticketId)
       .maybeSingle();
 
@@ -281,28 +236,49 @@ export async function PATCH(
     }
 
     const currentDescription = existingTicket?.description ?? '';
-    const parsedDescription = getDescriptionParts(currentDescription);
-    const baseDescription = parsedDescription.base;
-    const currentNotes = parsedDescription.notes;
-    const currentAssignment = parsedDescription.assignment;
+    const parsedDescription = parseTicketDescription(currentDescription);
     const existingAssignment = typeof existingTicket?.assigned_to === 'string' ? existingTicket.assigned_to.trim() : '';
+
+    if (typeof description === 'string') {
+      if (!existingTicket) {
+        return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
+      }
+      const isFiler = existingTicket.created_by
+        ? existingTicket.created_by === user.id
+        : Boolean(user.email && parsedDescription.email.toLowerCase() === user.email.toLowerCase());
+      if (user.role !== 'owner' && user.role !== 'manager' && !isFiler) {
+        return NextResponse.json(
+          { error: 'Only the person who filed this ticket, the owner, or a manager can edit its description.' },
+          { status: 403 },
+        );
+      }
+    }
 
     const nextAssignment =
       typeof assigned_to === 'string'
         ? assigned_to.trim()
-        : existingAssignment || currentAssignment || '';
+        : existingAssignment || parsedDescription.assignment || '';
     const nextNotes =
-      typeof notes === 'string' ? notes.trim().replace(/^Owner notes:\s*/i, '').trim() : currentNotes;
+      typeof notes === 'string' ? notes.trim().replace(/^Owner notes:\s*/i, '').trim() : parsedDescription.notes;
 
-    if (typeof assigned_to === 'string' || typeof notes === 'string') {
+    if (typeof assigned_to === 'string' || typeof notes === 'string' || typeof description === 'string') {
       if (hasAssignedToColumn && typeof assigned_to === 'string') {
         updates.assigned_to = nextAssignment || null;
       }
-      updates.description = buildDescription({
-        baseDescription,
+      const nextBody = typeof description === 'string' ? description.trim() : parsedDescription.body;
+      updates.description = buildTicketDescription({
+        ...parsedDescription,
+        body: nextBody,
         notes: nextNotes,
         assignment: nextAssignment,
       });
+      if (
+        typeof description === 'string'
+        && existingTicket
+        && isDerivedTicketTitle(existingTicket.title, parsedDescription.body)
+      ) {
+        updates.title = deriveTicketTitle(nextBody);
+      }
     }
 
     if (Object.keys(updates).length === 0) {

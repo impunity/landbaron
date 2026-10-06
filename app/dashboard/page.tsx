@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, getVisibleTickets, type SessionUser } from '@/lib/auth';
@@ -350,6 +350,7 @@ const statusOrder: Record<string, number> = {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const submittingTicketRef = useRef(false);
   const [session, setSessionState] = useState<SessionUser | null>(null);
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -360,7 +361,7 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
-  const [ticketPhotos, setTicketPhotos] = useState<File[]>([]);
+  const [ticketPhotos, setTicketPhotos] = useState<Array<{ file: File; uploadId: string }>>([]);
   const [propertyOptions, setPropertyOptions] = useState<PropertyOption[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>('date');
@@ -652,7 +653,7 @@ export default function DashboardPage() {
   };
 
   const handleTicketPhotosChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setTicketPhotos(Array.from(event.target.files ?? []));
+    setTicketPhotos(Array.from(event.target.files ?? [], (file) => ({ file, uploadId: crypto.randomUUID() })));
     setFormError(null);
   };
 
@@ -898,6 +899,7 @@ export default function DashboardPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (submittingTicketRef.current) return;
     if (!session) {
       setFormError('Sign in is required.');
       return;
@@ -925,6 +927,7 @@ export default function DashboardPage() {
       return;
     }
 
+    submittingTicketRef.current = true;
     setSubmitting(true);
     setFormError(null);
 
@@ -984,9 +987,10 @@ export default function DashboardPage() {
 
       const ticketId = typeof result.ticket?.id === 'string' ? result.ticket.id : '';
       if (ticketPhotos.length > 0 && ticketId) {
-        for (const photo of ticketPhotos) {
+        for (const { file: photo, uploadId } of ticketPhotos) {
           const photoData = new FormData();
           photoData.append('file', photo);
+          photoData.append('uploadId', uploadId);
 
           const photoResponse = await fetch(`/api/tickets/${ticketId}/photos`, {
             method: 'POST',
@@ -1020,6 +1024,7 @@ export default function DashboardPage() {
         : 'Ticket could not be submitted. Please try again.';
       setFormError(message);
     } finally {
+      submittingTicketRef.current = false;
       setSubmitting(false);
     }
   };

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
 import { canRemoveTicketAttachment, getTicketAttachmentObject } from '@/lib/ticket-attachments';
+import { buildTicketDescription, parseTicketDescription } from '@/lib/ticket-description';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -97,15 +98,23 @@ export async function POST(
       return NextResponse.json({ error: 'File must be 25MB or smaller.' }, { status: 400 });
     }
 
+    const requestedUploadId = formData.get('uploadId');
+    if (requestedUploadId !== null && (
+      typeof requestedUploadId !== 'string'
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedUploadId)
+    )) {
+      return NextResponse.json({ error: 'Upload ID must be a UUID.' }, { status: 400 });
+    }
+    const uploadId = typeof requestedUploadId === 'string' ? requestedUploadId : crypto.randomUUID();
     const uploadFile = isImage ? await prepareImageUpload(file) : file;
     const extension = uploadFile.name.includes('.') ? uploadFile.name.split('.').pop() : 'png';
-    const fileName = `ticket-attachments/${ticketId}/${user.id}/${crypto.randomUUID()}.${extension}`;
+    const fileName = `ticket-attachments/${ticketId}/${user.id}/${uploadId}.${extension}`;
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('ticket-photos')
       .upload(fileName, uploadFile, {
         cacheControl: '3600',
-        upsert: false,
+        upsert: true,
       });
 
     if (uploadError) {
@@ -128,23 +137,31 @@ export async function POST(
       throw fetchError;
     }
 
-    const existingDescription = existingTicket?.description ?? '';
+    const existingDescription = typeof existingTicket?.description === 'string' ? existingTicket.description : '';
     const photoLabel = file.name.trim() || (isVideo ? 'video' : 'photo');
     const attachmentType = isVideo ? 'Video' : 'Photo';
-    const nextDescription = existingDescription.trim()
-      ? `${existingDescription.trim()}\n\n${attachmentType}: ${photoLabel} | ${publicUrl}`
-      : `${attachmentType}: ${photoLabel} | ${publicUrl}`;
+    const alreadyAttached = existingDescription.split(/\n+/).some((line) => {
+      const match = line.match(/^(?:Photo|Video):\s*.*?\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+      return match?.[1].replace(/[.,;!?]+$/, '') === publicUrl;
+    });
+    if (!alreadyAttached) {
+      const parsedDescription = parseTicketDescription(existingDescription);
+      const nextDescription = buildTicketDescription({
+        ...parsedDescription,
+        attachments: [...parsedDescription.attachments, `${attachmentType}: ${photoLabel} | ${publicUrl}`],
+      });
 
-    const { error: updateError } = await supabaseAdmin
-      .from('tickets')
-      .update({ description: nextDescription })
-      .eq('id', ticketId);
+      const { error: updateError } = await supabaseAdmin
+        .from('tickets')
+        .update({ description: nextDescription })
+        .eq('id', ticketId);
 
-    if (updateError) {
-      throw updateError;
+      if (updateError) {
+        throw updateError;
+      }
     }
 
-    return NextResponse.json({ ok: true, url: publicUrl });
+    return NextResponse.json({ ok: true, url: publicUrl, duplicate: alreadyAttached });
   } catch (error) {
     console.error('POST /api/tickets/[ticketId]/photos failed:', error);
     return NextResponse.json(

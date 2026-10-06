@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 
@@ -8,6 +8,7 @@ import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
 import { canRemoveTicketAttachment, getTicketAttachmentObject } from '@/lib/ticket-attachments';
+import { MAX_TICKET_DESCRIPTION_LENGTH, parseTicketDescription } from '@/lib/ticket-description';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
 
@@ -76,17 +77,11 @@ const normalizePriority = (priority?: string | null) => {
 };
 
 const sanitizeTicketDescription = (description?: string | null) => {
-  if (!description) {
-    return '';
-  }
-
-  return description
-    .replace(/(^|\n)\s*Photo:\s*.*$/gim, '$1')
-    .replace(/(^|\n)\s*Video:\s*.*$/gim, '$1')
-    .replace(/(^|\n)\s*Assigned to:\s*.*$/gm, '$1')
-    .replace(/https?:\/\/[^\s)]+/gi, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const { email, address, body } = parseTicketDescription(description);
+  return [
+    [email && `Email: ${email}`, address && `Address: ${address}`].filter(Boolean).join('\n'),
+    body.replace(/https?:\/\/[^\s)]+/gi, '').replace(/\n{3,}/g, '\n\n').trim(),
+  ].filter(Boolean).join('\n\n');
 };
 
 const parsePhotoEntries = (description?: string | null) => {
@@ -118,7 +113,9 @@ const parsePhotoEntries = (description?: string | null) => {
     }
   }
 
-  return entries;
+  return entries.filter((entry, index, allEntries) => (
+    allEntries.findIndex((candidate) => candidate.url === entry.url) === index
+  ));
 };
 
 const getPhotoFileName = (photoUrl: string, fallbackName?: string) => {
@@ -196,6 +193,7 @@ const getTicketOpenedByLabel = (ticket: TicketRow) => ticket.opened_by_label || 
 
 export default function TicketDetailPage() {
   const router = useRouter();
+  const uploadingPhotoRef = useRef(false);
   const params = useParams<{ ticketId: string }>();
   const ticketId = params?.ticketId;
 
@@ -219,6 +217,8 @@ export default function TicketDetailPage() {
   const [reminderMessage, setReminderMessage] = useState<string | null>(null);
   const [photoDescriptionSaving, setPhotoDescriptionSaving] = useState<string | null>(null);
   const [photoDeleting, setPhotoDeleting] = useState<string | null>(null);
+  const [descriptionDraft, setDescriptionDraft] = useState<string | null>(null);
+  const [descriptionSaving, setDescriptionSaving] = useState(false);
 
   useEffect(() => {
     const client = supabase;
@@ -297,7 +297,6 @@ export default function TicketDetailPage() {
 
       const nextTicket = result.ticket ?? null;
       const description = nextTicket?.description ?? '';
-      const noteMatch = description.match(/Owner notes:\n([\s\S]*)$/i);
       const assignmentValue =
         typeof nextTicket?.assigned_to === 'string' && nextTicket.assigned_to.trim()
           ? nextTicket.assigned_to.trim()
@@ -312,7 +311,7 @@ export default function TicketDetailPage() {
 
       setTicket(nextTicket);
       setStatusDraft(normalizeStatus(nextTicket?.status ?? 'Open'));
-      setNoteDraft(noteMatch ? noteMatch[1].trim() : '');
+      setNoteDraft(parseTicketDescription(description).notes);
       setAssignedStaff(assignmentValue);
       setLaborCost(nextTicket?.labor_cost !== null && nextTicket?.labor_cost !== undefined ? String(nextTicket.labor_cost) : '');
       setMaterialsCost(nextTicket?.materials_cost !== null && nextTicket?.materials_cost !== undefined ? String(nextTicket.materials_cost) : '');
@@ -378,6 +377,47 @@ export default function TicketDetailPage() {
       ticket.created_by,
       storageObject.uploaderId,
     ));
+  };
+
+  const canEditDescription = Boolean(ticket && session && (
+    session.role === 'owner'
+    || session.role === 'manager'
+    || (ticket.created_by
+      ? ticket.created_by === session.id
+      : parseTicketDescription(ticket.description).email.toLowerCase() === session.email.toLowerCase())
+  ));
+
+  const handleDescriptionSave = async () => {
+    if (!ticketId || descriptionDraft === null) return;
+    if (!descriptionDraft.trim()) {
+      setError('Description cannot be empty.');
+      return;
+    }
+
+    setDescriptionSaving(true);
+    setError(null);
+    try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ description: descriptionDraft }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Description could not be updated.');
+      setDescriptionDraft(null);
+      await loadTicketDetail(ticketId);
+    } catch (descriptionError) {
+      setError(descriptionError instanceof Error ? descriptionError.message : 'Description could not be updated.');
+    } finally {
+      setDescriptionSaving(false);
+    }
   };
 
   const handlePhotoDelete = async (photoUrl: string) => {
@@ -535,10 +575,11 @@ export default function TicketDetailPage() {
   const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
-    if (!file || !ticketId) {
+    if (!file || !ticketId || uploadingPhotoRef.current) {
       return;
     }
 
+    uploadingPhotoRef.current = true;
     setUploadingPhoto(true);
     setPhotoUploadError(null);
 
@@ -552,6 +593,7 @@ export default function TicketDetailPage() {
 
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('uploadId', crypto.randomUUID());
 
       const response = await fetch(`/api/tickets/${ticketId}/photos`, {
         method: 'POST',
@@ -574,6 +616,7 @@ export default function TicketDetailPage() {
           : 'Photo upload failed. Please try again.',
       );
     } finally {
+      uploadingPhotoRef.current = false;
       setUploadingPhoto(false);
       event.target.value = '';
     }
@@ -736,10 +779,51 @@ export default function TicketDetailPage() {
           <div className="grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
             <div className="space-y-5">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Description</p>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                  {sanitizeTicketDescription(ticket.description) || 'No issue description provided.'}
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Description</p>
+                  {canEditDescription && descriptionDraft === null && (
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionDraft(parseTicketDescription(ticket.description).body)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                    >
+                      Edit description
+                    </button>
+                  )}
+                </div>
+                {descriptionDraft === null ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {sanitizeTicketDescription(ticket.description) || 'No issue description provided.'}
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <textarea
+                      value={descriptionDraft}
+                      onChange={(event) => setDescriptionDraft(event.target.value)}
+                      maxLength={MAX_TICKET_DESCRIPTION_LENGTH}
+                      rows={6}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-slate-500 focus:outline-none"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDescriptionDraft(null)}
+                        disabled={descriptionSaving}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDescriptionSave()}
+                        disabled={descriptionSaving || !descriptionDraft.trim()}
+                        className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        {descriptionSaving ? 'Saving...' : 'Save description'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {selectedPhotos.length > 0 && (
