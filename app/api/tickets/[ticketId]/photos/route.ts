@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
+import { canRemoveTicketAttachment, getTicketAttachmentObject } from '@/lib/ticket-attachments';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -98,7 +99,7 @@ export async function POST(
 
     const uploadFile = isImage ? await prepareImageUpload(file) : file;
     const extension = uploadFile.name.includes('.') ? uploadFile.name.split('.').pop() : 'png';
-    const fileName = `ticket-attachments/${ticketId}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
+    const fileName = `ticket-attachments/${ticketId}/${user.id}/${crypto.randomUUID()}.${extension}`;
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('ticket-photos')
@@ -150,6 +151,86 @@ export async function POST(
       { error: 'Photo upload failed. Please confirm the ticket-photos bucket exists in Supabase Storage.' },
       { status: 500 },
     );
+  }
+}
+
+const removePhotoFromDescription = (description: string, url: string) => {
+  let removed = false;
+  const nextDescription = description
+    .split('\n')
+    .filter((line) => {
+      const match = line.match(/^Photo:\s*.*?\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+      if (!match || match[1].replace(/[.,;!?]+$/, '') !== url) return true;
+      removed = true;
+      return false;
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return { removed, description: nextDescription || null };
+};
+
+const isPhotoAttachment = (description: string, url: string) =>
+  description.split('\n').some((line) => {
+    const match = line.match(/^Photo:\s*.*?\s*\|\s*(https?:\/\/[^\s)]+)\s*$/i);
+    return match?.[1].replace(/[.,;!?]+$/, '') === url;
+  });
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ ticketId: string }> },
+) {
+  try {
+    const { ticketId } = await params;
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Supabase service role is not configured.' }, { status: 500 });
+    }
+
+    const user = await getAuthenticatedRequestUser(request);
+    if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+
+    const body = await request.json();
+    const url = typeof body.url === 'string' ? body.url.trim() : '';
+    if (!url) return NextResponse.json({ error: 'Photo URL is required.' }, { status: 400 });
+
+    const { data: ticket, error: ticketError } = await supabaseAdmin.from('tickets')
+      .select('created_by, description')
+      .eq('id', ticketId)
+      .maybeSingle();
+    if (ticketError) throw ticketError;
+    if (!ticket) return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
+
+    const originalDescription = ticket.description ?? '';
+    if (!isPhotoAttachment(originalDescription, url)) {
+      return NextResponse.json({ error: 'Photo was not found on this ticket.' }, { status: 404 });
+    }
+    const { removed, description } = removePhotoFromDescription(originalDescription, url);
+    if (!removed) return NextResponse.json({ error: 'Photo could not be removed.' }, { status: 500 });
+
+    const storageObject = getTicketAttachmentObject(url, ticketId);
+    if (!storageObject || !canRemoveTicketAttachment(user.role, user.id, ticket.created_by, storageObject.uploaderId)) {
+      return NextResponse.json({ error: 'You cannot remove this photo.' }, { status: 403 });
+    }
+
+    const { error: updateError } = await supabaseAdmin.from('tickets')
+      .update({ description })
+      .eq('id', ticketId);
+    if (updateError) throw updateError;
+
+    const { error: storageError } = await supabaseAdmin.storage.from('ticket-photos').remove([storageObject.path]);
+    if (storageError) {
+      const { error: rollbackError } = await supabaseAdmin.from('tickets')
+        .update({ description: originalDescription || null })
+        .eq('id', ticketId);
+      if (rollbackError) console.error('Ticket photo deletion rollback failed:', rollbackError);
+      throw storageError;
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('DELETE /api/tickets/[ticketId]/photos failed:', error);
+    return NextResponse.json({ error: 'Photo could not be removed.' }, { status: 500 });
   }
 }
 

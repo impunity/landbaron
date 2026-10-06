@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
+import { canRemoveTicketAttachment, getTicketAttachmentObject } from '@/lib/ticket-attachments';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
 
@@ -14,6 +16,7 @@ type TicketRow = {
   ticket_number?: number | null;
   title: string;
   description: string | null;
+  created_by?: string | null;
   assigned_to?: string | null;
   status: string | null;
   priority: string | null;
@@ -215,6 +218,7 @@ export default function TicketDetailPage() {
   const [reminding, setReminding] = useState(false);
   const [reminderMessage, setReminderMessage] = useState<string | null>(null);
   const [photoDescriptionSaving, setPhotoDescriptionSaving] = useState<string | null>(null);
+  const [photoDeleting, setPhotoDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -364,6 +368,45 @@ export default function TicketDetailPage() {
   }, [ticketId, session]);
 
   const selectedPhotos = useMemo(() => parsePhotoEntries(ticket?.description ?? ''), [ticket]);
+
+  const canDeletePhoto = (photoUrl: string) => {
+    if (!ticket || !session) return false;
+    const storageObject = getTicketAttachmentObject(photoUrl, ticket.id);
+    return Boolean(storageObject && canRemoveTicketAttachment(
+      session.role,
+      session.id,
+      ticket.created_by,
+      storageObject.uploaderId,
+    ));
+  };
+
+  const handlePhotoDelete = async (photoUrl: string) => {
+    if (!ticketId || !window.confirm('Remove this photo from the ticket?')) return;
+
+    setPhotoDeleting(photoUrl);
+    setError(null);
+    try {
+      const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/tickets/${ticketId}/photos`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ url: photoUrl }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Photo could not be removed.');
+      await loadTicketDetail(ticketId);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Photo could not be removed.');
+    } finally {
+      setPhotoDeleting(null);
+    }
+  };
 
   const handlePhotoDescriptionUpdate = async (photoUrl: string, currentLabel: string) => {
     if (!ticketId) {
@@ -707,25 +750,23 @@ export default function TicketDetailPage() {
                       const photoName = getPhotoFileName(photoEntry.url, photoEntry.name);
 
                       return (
-                        <a
+                        <div
                           key={photoEntry.url}
-                          href={photoEntry.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+                          className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
                         >
-                          {photoEntry.type === 'video' ? (
-                            <video src={photoEntry.url} className="h-48 w-full object-cover" muted playsInline controls />
-                          ) : (
-                            <img src={photoEntry.url} alt={photoName} className="h-48 w-full object-cover" />
-                          )}
-                          <div className="border-t border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
-                            {photoName}
-                          </div>
+                          <a href={photoEntry.url} target="_blank" rel="noreferrer" className="block">
+                            {photoEntry.type === 'video' ? (
+                              <video src={photoEntry.url} className="h-48 w-full object-cover" muted playsInline controls />
+                            ) : (
+                              <img src={photoEntry.url} alt={photoName} className="h-48 w-full object-cover" />
+                            )}
+                            <div className="border-t border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
+                              {photoName}
+                            </div>
+                          </a>
                           <button
                             type="button"
-                            onClick={(event) => {
-                              event.preventDefault();
+                            onClick={() => {
                               void handlePhotoDescriptionUpdate(photoEntry.url, photoName);
                             }}
                             disabled={photoDescriptionSaving === photoEntry.url}
@@ -733,7 +774,18 @@ export default function TicketDetailPage() {
                           >
                             {photoDescriptionSaving === photoEntry.url ? 'Saving...' : 'Add/edit description'}
                           </button>
-                        </a>
+                          {photoEntry.type === 'image' && canDeletePhoto(photoEntry.url) && (
+                            <button
+                              type="button"
+                              onClick={() => void handlePhotoDelete(photoEntry.url)}
+                              disabled={photoDeleting === photoEntry.url}
+                              className="flex w-full items-center gap-2 border-t border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                            >
+                              <Trash2 size={14} />
+                              {photoDeleting === photoEntry.url ? 'Removing...' : 'Remove photo'}
+                            </button>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
