@@ -8,6 +8,7 @@ import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
+import { AvatarPhotoBadge } from '../avatar-photo-badge';
 
 type Organization = {
   id: string;
@@ -338,15 +339,18 @@ export default function OrganizationPage() {
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6 flex items-center gap-4">
-              <img
-                src={avatarSrc}
-                alt="Organization avatar"
-                className="h-20 w-20 rounded-full border border-slate-200 object-cover"
-              />
+              <label htmlFor={isOwner ? 'organization-avatar-upload' : undefined} title={isOwner ? 'Add or change the organization photo' : undefined} className={`relative block size-20 shrink-0 ${isOwner ? 'cursor-pointer' : ''}`}>
+                <img
+                  src={avatarSrc}
+                  alt="Organization avatar"
+                  className="h-20 w-20 rounded-full border border-slate-200 object-cover"
+                />
+                {isOwner && <AvatarPhotoBadge avatarUrl={organization?.avatar_url} />}
+              </label>
               {isOwner && (
                 <label className="cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
                   {uploadingAvatar ? 'Uploading...' : 'Change avatar'}
-                  <input type="file" accept="image/*,.heic,.heif" onChange={handleAvatarUpload} disabled={uploadingAvatar} className="hidden" />
+                  <input id="organization-avatar-upload" aria-label="Add or change the organization photo" type="file" accept="image/*,.heic,.heif" onChange={handleAvatarUpload} disabled={uploadingAvatar} className="sr-only" />
                 </label>
               )}
             </div>

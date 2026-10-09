@@ -195,6 +195,7 @@ export default function LoginPage() {
         </div>
         <p className="text-4xl font-bold tracking-[0.12em] text-slate-950 sm:text-5xl">LANDBARON</p>
         <p className="mt-2 text-sm font-medium text-slate-600">Maintenance Tracking for Awesome Tenants and Landlords that don&apos;t suck.</p>
+        <p className="mt-2 text-xs font-semibold uppercase tracking-wider text-slate-600">Always free for tenants. Free for landlords under 11 units.</p>
       </div>
 
       {unrecognizedUser && (

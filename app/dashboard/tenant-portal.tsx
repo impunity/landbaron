@@ -1,5 +1,7 @@
 'use client';
 
+import { AvatarPhotoBadge, hasAvatarPhoto } from './avatar-photo-badge';
+
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -291,7 +293,15 @@ export function TenantPortal({ session }: { session: SessionUser }) {
             <div className="p-6"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Your place</p><h2 className="mt-2 text-2xl font-semibold">Unit {data.unit.unit_number}</h2><p className="mt-1 text-slate-600">{address}</p></div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-4"><div className="relative"><img src={avatar} alt={`${data.tenant.name} avatar`} className="h-32 w-32 rounded-full object-cover ring-4 ring-slate-100" /><label className="absolute bottom-0 right-0 cursor-pointer rounded-full bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">{avatarUploading ? '...' : 'Replace'}<input type="file" accept="image/*" onChange={uploadAvatar} className="hidden" /></label></div><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Your info</p><h2 className="mt-1 text-xl font-semibold">{data.tenant.name}</h2></div></div>
+            <div className="flex items-center gap-4">
+              <label title="Add or change your photo" className={`relative block size-32 shrink-0 cursor-pointer ${avatarUploading ? 'pointer-events-none opacity-50' : ''}`}>
+                <img src={avatar} alt={`${data.tenant.name} avatar`} className="h-32 w-32 rounded-full object-cover ring-4 ring-slate-100" />
+                <AvatarPhotoBadge avatarUrl={data.tenant.avatar_url} />
+                {(avatarUploading || hasAvatarPhoto(data.tenant.avatar_url)) && <span className="absolute bottom-0 right-0 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">{avatarUploading ? '...' : 'Replace'}</span>}
+                <input aria-label="Add or change your photo" type="file" accept="image/*,.heic,.heif" onChange={uploadAvatar} disabled={avatarUploading} className="sr-only" />
+              </label>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Your info</p><h2 className="mt-1 text-xl font-semibold">{data.tenant.name}</h2></div>
+            </div>
             {editingContact ? (
               <form
                 className="mt-6 space-y-3 text-sm"

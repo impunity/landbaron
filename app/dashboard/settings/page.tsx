@@ -1,5 +1,7 @@
 'use client';
 
+import { AvatarPhotoBadge } from '../avatar-photo-badge';
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -269,8 +271,11 @@ export default function SettingsPage() {
         <h1 className="mt-3 text-2xl font-semibold">Settings</h1>
         {session && <div className="mt-4 flex flex-wrap gap-2"><DashboardNavButtons role={session.role} /></div>}
         <section className="mt-7 flex flex-wrap items-center gap-5 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
-          <img src={avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(session?.name ?? 'User')}&background=0f766e&color=fff&size=240`} alt={`${session?.name ?? 'User'} profile`} className="size-24 rounded-full border border-slate-200 object-cover" />
-          <div><h2 className="text-base font-semibold">Profile photo</h2><p className="mt-1 text-sm text-slate-600">Shown in your account avatar.</p><label className={`mt-3 inline-flex cursor-pointer items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 ${uploadingAvatar ? 'pointer-events-none opacity-50' : ''}`}>{uploadingAvatar ? 'Uploading...' : 'Upload new photo'}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif" className="sr-only" disabled={uploadingAvatar} onChange={(event) => void uploadAvatar(event)} /></label>{avatarError && <p role="alert" className="mt-2 text-sm text-rose-700">{avatarError}</p>}</div>
+          <label htmlFor="profile-avatar-upload" title="Add or change your profile photo" className={`relative block size-24 shrink-0 cursor-pointer ${uploadingAvatar ? 'pointer-events-none opacity-50' : ''}`}>
+            <img src={avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(session?.name ?? 'User')}&background=0f766e&color=fff&size=240`} alt={`${session?.name ?? 'User'} profile`} className="size-24 rounded-full border border-slate-200 object-cover" />
+            <AvatarPhotoBadge avatarUrl={avatarUrl} />
+          </label>
+          <div><h2 className="text-base font-semibold">Profile photo</h2><p className="mt-1 text-sm text-slate-600">Shown in your account avatar.</p><label className={`mt-3 inline-flex cursor-pointer items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 ${uploadingAvatar ? 'pointer-events-none opacity-50' : ''}`}>{uploadingAvatar ? 'Uploading...' : 'Upload new photo'}<input id="profile-avatar-upload" aria-label="Add or change your profile photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif" className="sr-only" disabled={uploadingAvatar} onChange={(event) => void uploadAvatar(event)} /></label>{avatarError && <p role="alert" className="mt-2 text-sm text-rose-700">{avatarError}</p>}</div>
         </section>
         <section className="mt-7 border-t border-slate-300 bg-white px-5 py-5 sm:px-6">
           <h2 className="text-base font-semibold">Time display</h2>

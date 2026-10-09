@@ -34,6 +34,8 @@ Run [supabase/property-handbooks.sql](supabase/property-handbooks.sql) in the Su
 
 Run [supabase/tenant-portal-and-contacts.sql](supabase/tenant-portal-and-contacts.sql) once in Supabase. It adds tenant avatars and improvement photos, per-property primary/secondary staff assignments, and approved vendor records.
 
+Editable initials-only avatars display a `+` photo-upload cue. Use the account avatar's `+` to open profile settings, or click an editable avatar to choose a photo. Tenants can change only their own photo; read-only avatars do not show upload controls.
+
 ## Getting Started ##
 
 First, run the development server:

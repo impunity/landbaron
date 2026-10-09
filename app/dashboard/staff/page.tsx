@@ -1,5 +1,7 @@
 'use client';
 
+import { AvatarPhotoBadge } from '../avatar-photo-badge';
+
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -669,10 +671,12 @@ export default function StaffPage() {
                   return (
                     <tr key={member.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3">
-                        <label className="relative block h-12 w-12 cursor-pointer overflow-hidden rounded-full ring-1 ring-slate-200 transition hover:opacity-90">
-                          <img src={avatarSource} alt={`${member.name} avatar`} className="h-full w-full object-cover" />
+                        <label title={`Add or change ${member.name}'s photo`} className="relative block h-12 w-12 cursor-pointer rounded-full ring-1 ring-slate-200 transition hover:opacity-90">
+                          <img src={avatarSource} alt={`${member.name} avatar`} className="h-full w-full rounded-full object-cover" />
+                          <AvatarPhotoBadge avatarUrl={member.avatar_url} />
                           <input
                             type="file"
+                            aria-label={`Add or change ${member.name}'s photo`}
                             accept="image/*,.heic,.heif"
                             className="hidden"
                             onChange={(event) => {
