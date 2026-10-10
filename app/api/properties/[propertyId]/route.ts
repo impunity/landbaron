@@ -77,6 +77,7 @@ export async function GET(
       .from('staff_members')
       .select('*')
       .eq('role', 'Maintenance')
+      .eq('organization_id', property.organization_id ?? organizationId ?? '')
       .order('name');
 
     if (staffError) throw staffError;

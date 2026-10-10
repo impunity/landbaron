@@ -38,7 +38,9 @@ export async function GET(request: NextRequest) {
       ...(Array.isArray(assignment.staff_members) ? assignment.staff_members[0] : assignment.staff_members) as Record<string, unknown>,
       assignment_type: assignment.assignment_type,
     }));
-    const owners = await supabaseAdmin.from('staff_members').select('*').eq('role', 'Owner').order('name');
+    const owners = property.organization_id
+      ? await supabaseAdmin.from('staff_members').select('*').eq('role', 'Owner').eq('organization_id', property.organization_id).order('name')
+      : { data: [] };
 
     return NextResponse.json({
       tenant,
