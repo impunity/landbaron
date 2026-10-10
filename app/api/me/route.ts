@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       email: user.email,
       role: user.role,
+      isPlatformAdmin: user.isPlatformAdmin,
       name,
       avatarUrl,
       organizationName: organization?.name ?? null,

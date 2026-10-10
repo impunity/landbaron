@@ -15,6 +15,7 @@ type MeProfile = {
   name: string | null;
   avatarUrl: string | null;
   organizationName: string | null;
+  isPlatformAdmin: boolean;
 };
 
 const getInitials = (name: string) => {
@@ -63,20 +64,15 @@ export function UserStatusBar() {
 
     void syncSession();
 
-    const { data: authListener } = client.auth.onAuthStateChange(async (event, nextSession) => {
+    const { data: authListener } = client.auth.onAuthStateChange((event, nextSession) => {
       const nextUser = nextSession?.user;
       if (!nextUser) {
         setSession(null);
         return;
       }
 
-      const role = await fetchUserRole(nextUser.email, client);
-      setSession({
-        id: nextUser.id,
-        name: nextUser.user_metadata?.full_name || nextUser.email || 'User',
-        email: nextUser.email || '',
-        role,
-      });
+      // Session lookups must run outside the awaited auth callback to avoid its lock.
+      void syncSession();
 
       if (event === 'SIGNED_IN' && nextSession?.access_token) {
         void fetch('/api/login-events', {
@@ -111,6 +107,7 @@ export function UserStatusBar() {
           name: result.name ?? null,
           avatarUrl: result.avatarUrl ?? null,
           organizationName: result.organizationName ?? null,
+          isPlatformAdmin: result.isPlatformAdmin === true,
         });
       }
     };
@@ -180,6 +177,11 @@ export function UserStatusBar() {
         )}
 
         <div className="flex items-center gap-3">
+        {currentProfile?.isPlatformAdmin && (
+          <Link href="/dashboard/platform-admin" className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-100">
+            Platform Admin
+          </Link>
+        )}
         <div className="relative size-9 shrink-0">
         <button type="button" onClick={() => router.push(unreadCount > 0 && unreadPropertyId ? `/dashboard/properties/${encodeURIComponent(unreadPropertyId)}/announcements` : '/dashboard/settings')} title={unreadCount > 0 ? 'Open unread discussions' : 'Profile settings'} aria-label={unreadCount > 0 ? `Open ${unreadCount} unread discussions` : 'Open profile settings'} className="relative size-9 shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
           <img
@@ -203,7 +205,7 @@ export function UserStatusBar() {
         <div className="text-right leading-tight">
           <p className="text-sm font-semibold text-slate-900">{displayName}</p>
           <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-            {getRoleLabel(session.role)}
+            {currentProfile?.isPlatformAdmin ? `Admin · ${getRoleLabel(session.role)}` : getRoleLabel(session.role)}
           </p>
         </div>
         <button type="button" onClick={() => router.push('/dashboard/settings')} title="Settings" aria-label="Settings" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900"><Settings size={19} aria-hidden="true" /></button>

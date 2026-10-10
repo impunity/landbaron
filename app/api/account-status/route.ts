@@ -4,8 +4,6 @@ import { getUserRoleByEmail } from '@/lib/auth';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-const adminEmail = 'scrosby@gmail.com';
-
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -40,11 +38,12 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     const configuredRole = getUserRoleByEmail(normalizedEmail);
-    const recognized = Boolean(tenant || staff || ownerOrganization || configuredRole !== 'tenant' || normalizedEmail === adminEmail);
+    const recognized = Boolean(tenant || staff || ownerOrganization || configuredRole !== 'tenant' || user.isPlatformAdmin);
 
     return NextResponse.json({
       recognized,
-      isAdmin: normalizedEmail === adminEmail,
+      isAdmin: user.isPlatformAdmin,
+      isPlatformAdmin: user.isPlatformAdmin,
       role: staff?.role ? String(staff.role).toLowerCase() : ownerOrganization || configuredRole !== 'tenant' ? 'owner' : tenant ? 'tenant' : null,
       organizationId: staff?.organization_id ?? ownerOrganization?.id ?? null,
     });

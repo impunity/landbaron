@@ -16,6 +16,24 @@ The `landbaron.app` sender domain must be verified in Resend. When configured, f
 
 Run [supabase/ticket-ownership.sql](supabase/ticket-ownership.sql) once in the Supabase SQL Editor before deploying tenant access control. It records the authenticated creator of each new ticket so tenants can create tickets and view only tickets they created. Existing tickets without a `created_by` value remain available to staff and owners but are not visible to tenants.
 
+## Platform Admin
+
+Set the server-only `PLATFORM_ADMIN_EMAILS` environment variable to a comma-separated allowlist of platform administrators. For the initial administrators:
+
+```bash
+PLATFORM_ADMIN_EMAILS=scrosby@gmail.com,scrosby@statebeach.com
+```
+
+Configure this in Vercel as well as local development, then redeploy/restart. Do not use a `NEXT_PUBLIC_` prefix. Access is checked against the authenticated Supabase user's email on every Platform Admin API request; neither organization owners nor staff records can grant this access. An unset/empty allowlist disables platform access.
+
+Admins land on `/dashboard/platform-admin` after sign-in and have a Platform Admin link in the account bar. This tier is separate from organization roles: existing permissions within an admin's own organization remain unchanged, while platform-wide access is **read-only**. No impersonation or organization switching is performed.
+
+The overview lists every organization, its owner contacts, property/unit totals, tenant records (including inactive records), owners, managers, maintenance staff, contractors, and days since the most recent recorded member login. Every metric column is sortable; organizations with no recorded login show "Never recorded" and sort last. Statistics page through all source rows rather than relying on Supabase's default row limit.
+
+Click an organization to browse its records, discussions, photos, receipts, codes, financial records, handbooks, legal documents, solar integration status, and login history in paginated read-only sections. Private legal files use five-minute signed links. OAuth credentials, access-request tokens, invite codes, and authentication records are not exposed. Missing feature migrations produce an explicit section error rather than an empty success result. The existing organization/feature migrations are required; this feature needs no new database migration.
+
+Run the focused authorization, aggregation, sorting, scoping, and pagination tests with `node --test tests/platform-admin.test.mjs`.
+
 ## Properties, Units, Tenants & Maintenance History
 
 Run [supabase/properties-and-units.sql](supabase/properties-and-units.sql) once in the Supabase SQL Editor. It creates tables for:

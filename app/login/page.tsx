@@ -78,7 +78,7 @@ export default function LoginPage() {
             setSetupDraft((current) => ({ ...current, contact_email: email, name }));
             setRequestDraft((current) => ({ ...current, name }));
           } else {
-            router.replace(role === 'tenant' ? '/dashboard' : '/dashboard/properties');
+            router.replace(status.isPlatformAdmin ? '/dashboard/platform-admin' : role === 'tenant' ? '/dashboard' : '/dashboard/properties');
           }
         }
       })

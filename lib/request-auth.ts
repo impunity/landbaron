@@ -1,10 +1,12 @@
 import { getUserRoleByEmail, type UserRole } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { isPlatformAdminEmail } from '@/lib/platform-admin-auth';
 
 export type AuthenticatedRequestUser = {
   id: string;
   email: string;
   role: UserRole;
+  isPlatformAdmin: boolean;
 };
 
 export async function getAuthenticatedRequestUser(request: Request) {
@@ -63,5 +65,6 @@ export async function getAuthenticatedRequestUser(request: Request) {
     id: data.user.id,
     email,
     role,
+    isPlatformAdmin: isPlatformAdminEmail(email),
   } satisfies AuthenticatedRequestUser;
 }
