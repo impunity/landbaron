@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
@@ -8,6 +9,7 @@ import { DashboardNavButtons } from '../../nav-buttons';
 
 type DirectoryEntry = {
   id: string;
+  is_self?: boolean;
   name: string;
   unit_number: string;
   avatar_url: string | null;
@@ -58,16 +60,19 @@ export default function TenantDirectoryPage() {
         ) : error ? (
           <div className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{error}</div>
         ) : tenants.length === 0 ? (
-          <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500">No other tenants are listed at this property yet.</div>
+          <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500">No tenants are listed at this property yet.</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {tenants.map((tenant) => (
-              <div key={tenant.id} className="flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div key={tenant.id} className={`flex min-w-0 items-center gap-4 rounded-2xl border bg-white p-5 shadow-sm ${tenant.is_self ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200'}`}>
                 <img src={tenant.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(tenant.name)}&background=0f766e&color=fff&size=160`} alt={`${tenant.name} avatar`} className="h-20 w-20 shrink-0 rounded-full object-cover" />
                 <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
-                  <p className="font-semibold">{tenant.name}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-semibold">
+                    {tenant.name}
+                    {tenant.is_self && <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-teal-700">You</span>}
+                  </p>
                   {tenant.unit_number && <p className="text-xs uppercase tracking-wider text-slate-500">Unit {tenant.unit_number}</p>}
-                  {tenant.shared ? (
+                  {tenant.shared || tenant.is_self ? (
                     <>
                       {tenant.email && <a className="mt-2 block w-max text-sm text-slate-700 underline" href={`mailto:${tenant.email}`}>{tenant.email}</a>}
                       {tenant.phone && <a className="block w-max text-sm text-slate-700 underline" href={`tel:${tenant.phone}`}>{tenant.phone}</a>}
@@ -75,6 +80,12 @@ export default function TenantDirectoryPage() {
                     </>
                   ) : (
                     <p className="mt-2 text-sm italic text-slate-500">Contact info not shared</p>
+                  )}
+                  {tenant.is_self && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      {!tenant.shared && <span className="italic">Your contact info is hidden from neighbors. </span>}
+                      <Link href="/dashboard" className="font-medium text-teal-700 underline">Edit my info</Link>
+                    </p>
                   )}
                 </div>
               </div>

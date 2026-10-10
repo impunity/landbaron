@@ -29,26 +29,28 @@ export async function GET(request: NextRequest) {
       .from('tenants')
       .select('id, name, email, phone, instagram_handle, avatar_url, share_contact_info, units!inner(unit_number, property_id)')
       .eq('units.property_id', unit.property_id)
-      .eq('status', 'active')
-      .neq('id', tenant.id);
+      .eq('status', 'active');
     if (neighborsError) throw neighborsError;
 
     const directory = (neighbors ?? [])
       .map((neighbor) => {
         const neighborUnit = Array.isArray(neighbor.units) ? neighbor.units[0] : neighbor.units;
+        const isSelf = neighbor.id === tenant.id;
         const shared = neighbor.share_contact_info !== false;
+        const visible = shared || isSelf;
         return {
+          is_self: isSelf,
           id: neighbor.id,
           name: neighbor.name,
           unit_number: neighborUnit?.unit_number ?? '',
           avatar_url: neighbor.avatar_url ?? null,
           shared,
-          email: shared ? neighbor.email ?? null : null,
-          phone: shared ? neighbor.phone ?? null : null,
-          instagram_handle: shared ? neighbor.instagram_handle ?? null : null,
+          email: visible ? neighbor.email ?? null : null,
+          phone: visible ? neighbor.phone ?? null : null,
+          instagram_handle: visible ? neighbor.instagram_handle ?? null : null,
         };
       })
-      .sort((a, b) => a.unit_number.localeCompare(b.unit_number, undefined, { numeric: true }) || a.name.localeCompare(b.name));
+      .sort((a, b) => Number(b.is_self) - Number(a.is_self) || a.unit_number.localeCompare(b.unit_number, undefined, { numeric: true }) || a.name.localeCompare(b.name));
 
     return NextResponse.json({ property: property ? { id: unit.property_id, ...property } : null, tenants: directory });
   } catch (error) {
