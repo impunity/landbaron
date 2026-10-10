@@ -18,10 +18,10 @@ Run [supabase/ticket-ownership.sql](supabase/ticket-ownership.sql) once in the S
 
 ## Platform Admin
 
-Set the server-only `PLATFORM_ADMIN_EMAILS` environment variable to a comma-separated allowlist of platform administrators. For the initial administrators:
+Set the server-only `PLATFORM_ADMIN_EMAILS` environment variable to a comma-separated allowlist of platform administrators. Currently, only `scrosby@gmail.com` should have Platform Admin access:
 
 ```bash
-PLATFORM_ADMIN_EMAILS=scrosby@gmail.com,scrosby@statebeach.com
+PLATFORM_ADMIN_EMAILS=scrosby@gmail.com
 ```
 
 Configure this in Vercel as well as local development, then redeploy/restart. Do not use a `NEXT_PUBLIC_` prefix. Access is checked against the authenticated Supabase user's email on every Platform Admin API request; neither organization owners nor staff records can grant this access. An unset/empty allowlist disables platform access.
