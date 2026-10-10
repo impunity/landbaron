@@ -8,6 +8,7 @@ import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { getUnitTotalRent } from '@/lib/rent';
 import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
+import { formatMegabytes, MAX_SERVER_UPLOAD_BYTES, shrinkImageForUpload } from '@/lib/client-image';
 import { Breadcrumbs } from '../../../../breadcrumbs';
 import { DashboardNavButtons } from '../../../../nav-buttons';
 
@@ -496,8 +497,15 @@ export default function UnitDetailPage() {
 
       if (!accessToken) throw new Error('Sign in is required.');
 
+      const uploadFile = await shrinkImageForUpload(file);
+      if (uploadFile.size > MAX_SERVER_UPLOAD_BYTES) {
+        throw new Error(
+          `This photo is ${formatMegabytes(file.size)} and couldn't be reduced below the ${formatMegabytes(MAX_SERVER_UPLOAD_BYTES)} upload limit. Try exporting it at a smaller size or as a JPEG.`,
+        );
+      }
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
       if (photoCaption.trim()) {
         formData.append('caption', photoCaption.trim());
       }
@@ -507,6 +515,12 @@ export default function UnitDetailPage() {
         headers: { Authorization: `Bearer ${accessToken}` },
         body: formData,
       });
+
+      if (response.status === 413) {
+        throw new Error(
+          `This photo is too large to upload (${formatMegabytes(uploadFile.size)}). Photos must be ${formatMegabytes(MAX_SERVER_UPLOAD_BYTES)} or smaller.`,
+        );
+      }
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -1043,7 +1057,7 @@ export default function UnitDetailPage() {
                     Unit Photos ({(unit.unit_photos ?? []).length})
                   </h2>
                   <p className="text-xs text-slate-500">
-                    JPG, PNG, WEBP, GIF • Max 10 MB per file
+                    JPG, PNG, WEBP, GIF, HEIC • Large photos are resized automatically (max 4 MB after resizing)
                   </p>
                 </div>
                 <label className="cursor-pointer rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 text-center">

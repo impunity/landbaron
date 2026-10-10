@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, getVisibleTickets, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { prepareFileForUpload, uploadTooLargeMessage } from '@/lib/client-image';
 import { Breadcrumbs } from './breadcrumbs';
 import { DashboardNavButtons } from './nav-buttons';
 import { TenantPortal } from './tenant-portal';
@@ -954,6 +955,7 @@ export default function DashboardPage() {
     descriptionParts.push(trimmedDescription);
 
     try {
+      const preparedPhotos = await Promise.all(ticketPhotos.map(async (entry) => ({ ...entry, file: await prepareFileForUpload(entry.file) })));
       const { data: authData } = await supabase?.auth.getSession() ?? { data: { session: null } };
       const accessToken = authData.session?.access_token;
 
@@ -986,8 +988,8 @@ export default function DashboardPage() {
       }
 
       const ticketId = typeof result.ticket?.id === 'string' ? result.ticket.id : '';
-      if (ticketPhotos.length > 0 && ticketId) {
-        for (const { file: photo, uploadId } of ticketPhotos) {
+      if (preparedPhotos.length > 0 && ticketId) {
+        for (const { file: photo, uploadId } of preparedPhotos) {
           const photoData = new FormData();
           photoData.append('file', photo);
           photoData.append('uploadId', uploadId);
@@ -998,6 +1000,7 @@ export default function DashboardPage() {
             body: photoData,
           });
 
+          if (photoResponse.status === 413) throw new Error(`Ticket created, but ${uploadTooLargeMessage(photo)}`);
           if (!photoResponse.ok) {
             const photoResult = await photoResponse.json().catch(() => ({}));
             throw new Error(photoResult?.error || 'Ticket created, but one or more photos could not be uploaded.');
@@ -1211,7 +1214,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <label className="mb-1 block text-sm font-medium text-slate-700">Photos/Videos</label>
                   <span className="text-xs text-slate-500">
-                    Images or videos • Max 25MB per file
+                    Images or videos • Photos resized automatically • Max 4 MB per file
                   </span>
                 </div>
                 <input

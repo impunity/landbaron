@@ -7,6 +7,7 @@ import { Trash2 } from 'lucide-react';
 import { fetchUserRole, type SessionUser } from '@/lib/auth';
 import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
+import { prepareFileForUpload, uploadTooLargeMessage } from '@/lib/client-image';
 import { canRemoveTicketAttachment, getTicketAttachmentObject } from '@/lib/ticket-attachments';
 import { MAX_TICKET_DESCRIPTION_LENGTH, parseTicketDescription } from '@/lib/ticket-description';
 import { Breadcrumbs } from '../../breadcrumbs';
@@ -591,8 +592,9 @@ export default function TicketDetailPage() {
         throw new Error('Sign in is required.');
       }
 
+      const uploadFile = await prepareFileForUpload(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
       formData.append('uploadId', crypto.randomUUID());
 
       const response = await fetch(`/api/tickets/${ticketId}/photos`, {
@@ -601,6 +603,7 @@ export default function TicketDetailPage() {
         body: formData,
       });
 
+      if (response.status === 413) throw new Error(uploadTooLargeMessage(uploadFile));
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
@@ -880,7 +883,7 @@ export default function TicketDetailPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <label className="block text-sm font-medium text-slate-700">Upload photo</label>
                   <span className="text-xs text-slate-500">
-                    JPG, PNG, WEBP, GIF • Max 8 MB
+                    JPG, PNG, WEBP, GIF, HEIC • Resized automatically • Max 4 MB
                   </span>
                 </div>
                 <input

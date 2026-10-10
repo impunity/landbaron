@@ -7,7 +7,7 @@ import { buildTicketDescription, parseTicketDescription } from '@/lib/ticket-des
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024;
+const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // Vercel's serverless request body limit
 
 const updateAttachmentDescription = (description: string, url: string, label: string) => {
   const trimmedLabel = label.trim() || 'Attachment';
@@ -95,7 +95,7 @@ export async function POST(
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'File must be 25MB or smaller.' }, { status: 400 });
+      return NextResponse.json({ error: 'File must be 4 MB or smaller.' }, { status: 400 });
     }
 
     const requestedUploadId = formData.get('uploadId');

@@ -37,6 +37,7 @@ type Property = {
   state?: string | null;
   postal_code?: string | null;
   notes?: string | null;
+  photo_url?: string | null;
   created_at: string;
   units?: UnitSummary[];
 };
@@ -513,11 +514,7 @@ export default function PropertiesPage() {
               );
               const totalRent = (prop.units ?? []).reduce((sum, unit) => sum + getUnitTotalRent(unit), 0);
 
-              // Find first available photo from the property's units
-              const firstUnitWithPhoto = (prop.units ?? []).find(
-                (u) => (u.unit_photos?.length ?? 0) > 0,
-              );
-              const propertyThumbnail = firstUnitWithPhoto?.unit_photos?.[0]?.photo_url;
+              const propertyThumbnail = prop.photo_url;
 
               return (
                 <div
@@ -533,9 +530,6 @@ export default function PropertiesPage() {
                         alt={prop.name}
                         className="h-full w-full object-cover transition group-hover:scale-105"
                       />
-                      <div className="absolute bottom-2 left-2 rounded-lg bg-slate-900/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-                        Unit {firstUnitWithPhoto?.unit_number} photo
-                      </div>
                     </div>
                   ) : (
                     <div className="flex h-28 w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 text-3xl text-slate-300">

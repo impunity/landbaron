@@ -5,7 +5,7 @@ import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // Vercel's serverless request body limit
 
 export async function POST(
   request: NextRequest,
@@ -43,7 +43,7 @@ export async function POST(
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'Photo must be 10MB or smaller.' }, { status: 400 });
+      return NextResponse.json({ error: 'Photo must be 4 MB or smaller.' }, { status: 400 });
     }
 
     const uploadFile = await prepareImageUpload(file);

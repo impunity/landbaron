@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     const { data: properties, error: propError } = await supabaseAdmin
       .from('properties')
-      .select('*, units(id, unit_number, rent_amount, has_garage, garage_rent, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone, avatar_url), unit_photos(id, photo_url, caption, is_primary, created_at), unit_fees(id, label, amount, created_at)), property_income_sources(id, label, amount, created_at)')
+      .select('*, units(id, unit_number, rent_amount, has_garage, garage_rent, bedrooms, bathrooms, square_feet, status, tenants(id, name, email, phone, avatar_url), unit_photos(id, photo_url, caption, is_primary, created_at), unit_fees(id, label, amount, created_at)), property_income_sources(id, label, amount, created_at), property_handbooks(photo_url)')
       .eq('organization_id', organizationId ?? '')
       .order('name', { ascending: true });
 
@@ -63,8 +63,12 @@ export async function GET(request: NextRequest) {
           }))
         : [];
 
+      const { property_handbooks: handbooks, ...propertyFields } = prop as typeof prop & { property_handbooks?: unknown };
+      const handbook = (Array.isArray(handbooks) ? handbooks[0] : handbooks) as { photo_url?: string | null } | null | undefined;
+
       return {
-        ...prop,
+        ...propertyFields,
+        photo_url: handbook?.photo_url ?? null,
         units,
         property_income_sources: user.role === 'owner' || user.role === 'manager' ? (prop.property_income_sources ?? []) : [],
       };
