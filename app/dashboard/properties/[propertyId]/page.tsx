@@ -69,7 +69,11 @@ type MaintenanceStaff = {
   email: string;
   phone_number?: string | null;
   avatar_url?: string | null;
+  role?: string | null;
 };
+
+const staffOptionLabel = (member: MaintenanceStaff) =>
+  member.role && member.role !== 'Maintenance' ? `${member.name} (${member.role})` : member.name;
 
 type PropertyAssignment = {
   assignment_type: 'primary' | 'secondary';
@@ -1075,7 +1079,7 @@ export default function PropertyDetailPage() {
                     >
                       <option value="">None assigned</option>
                       {maintenanceStaff.map((member) => (
-                        <option key={member.id} value={member.id}>{member.name} {member.phone_number ? `(${member.phone_number})` : ''}</option>
+                        <option key={member.id} value={member.id}>{staffOptionLabel(member)} {member.phone_number ? `(${member.phone_number})` : ''}</option>
                       ))}
                     </select>
                   </label>
@@ -1088,7 +1092,7 @@ export default function PropertyDetailPage() {
                     >
                       <option value="">None assigned</option>
                       {maintenanceStaff.map((member) => (
-                        <option key={member.id} value={member.id}>{member.name} {member.phone_number ? `(${member.phone_number})` : ''}</option>
+                        <option key={member.id} value={member.id}>{staffOptionLabel(member)} {member.phone_number ? `(${member.phone_number})` : ''}</option>
                       ))}
                     </select>
                   </label>
@@ -1248,7 +1252,7 @@ export default function PropertyDetailPage() {
                       <option value="">None</option>
                       {maintenanceStaff.map((staffMember) => (
                         <option key={staffMember.id} value={staffMember.id}>
-                          {staffMember.name}
+                          {staffOptionLabel(staffMember)}
                         </option>
                       ))}
                     </select>
@@ -1267,7 +1271,7 @@ export default function PropertyDetailPage() {
                       <option value="">None</option>
                       {maintenanceStaff.map((staffMember) => (
                         <option key={staffMember.id} value={staffMember.id}>
-                          {staffMember.name}
+                          {staffOptionLabel(staffMember)}
                         </option>
                       ))}
                     </select>

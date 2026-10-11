@@ -76,7 +76,7 @@ export async function GET(
     const { data: maintenanceStaff, error: staffError } = await supabaseAdmin
       .from('staff_members')
       .select('*')
-      .eq('role', 'Maintenance')
+      .in('role', ['Maintenance', 'Contractor', 'Manager', 'Owner'])
       .eq('organization_id', property.organization_id ?? organizationId ?? '')
       .order('name');
 
