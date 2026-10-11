@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isTicketInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -18,6 +19,10 @@ export async function POST(
 
     const user = await getAuthenticatedRequestUser(request);
     if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
+    }
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Only staff can upload receipts.' }, { status: 403 });
     }
@@ -76,6 +81,10 @@ export async function DELETE(
 
     const user = await getAuthenticatedRequestUser(request);
     if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
+    }
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Only staff can delete receipts.' }, { status: 403 });
     }

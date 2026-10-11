@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getAssignedGarages } from '@/lib/assigned-garages';
-import { getRequestOrganizationId } from '@/lib/organization-context';
+import { getRequestOrganizationId, isPropertyInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -140,6 +140,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
     }
 
+    if (!(await isPropertyInRequestOrganization(user, propertyId))) {
+      return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
+    }
+
     const body = await request.json();
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -168,6 +172,20 @@ export async function PATCH(
     const secondaryStaffId = typeof body.secondary_staff_id === 'string' && body.secondary_staff_id.trim()
       ? body.secondary_staff_id.trim()
       : null;
+
+    const organizationId = await getRequestOrganizationId(user);
+    const requestedStaffIds = [primaryStaffId, secondaryStaffId].filter((id): id is string => Boolean(id));
+    if (requestedStaffIds.length > 0) {
+      const { data: staffRows, error: staffLookupError } = await supabaseAdmin
+        .from('staff_members')
+        .select('id')
+        .in('id', requestedStaffIds)
+        .eq('organization_id', organizationId ?? '');
+      if (staffLookupError) throw staffLookupError;
+      if ((staffRows ?? []).length !== new Set(requestedStaffIds).size) {
+        return NextResponse.json({ error: 'Assigned staff must belong to your organization.' }, { status: 400 });
+      }
+    }
 
     const { data, error } = await supabaseAdmin
       .from('properties')
@@ -233,6 +251,10 @@ export async function DELETE(
 
     if (user.role !== 'owner' && user.role !== 'manager') {
       return NextResponse.json({ error: 'Only owners or managers can delete properties.' }, { status: 403 });
+    }
+
+    if (!(await isPropertyInRequestOrganization(user, propertyId))) {
+      return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     }
 
     const { error } = await supabaseAdmin

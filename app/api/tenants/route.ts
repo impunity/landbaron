@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
-import { getOrganizationPropertyIds, getRequestOrganizationId } from '@/lib/organization-context';
+import { getOrganizationPropertyIds, getRequestOrganizationId, isUnitInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -88,6 +88,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Get property_id for this unit
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
+    }
+
     const { data: unitData } = await supabaseAdmin
       .from('units')
       .select('property_id, organization_id')

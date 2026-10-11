@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isTicketInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketCreatedEmails } from '@/lib/ticket-assignment-email';
 
@@ -18,6 +19,10 @@ export async function POST(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
     const { data: ticket, error } = await supabaseAdmin

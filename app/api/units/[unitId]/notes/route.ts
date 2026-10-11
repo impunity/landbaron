@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isUnitInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function POST(
@@ -24,6 +25,10 @@ export async function POST(
 
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
     }
 
     const body = await request.json();
@@ -95,6 +100,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
     }
 
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
+    }
+
     const body = await request.json();
     const noteId = String(body?.id ?? '').trim();
 
@@ -152,6 +161,10 @@ export async function DELETE(
 
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
     }
 
     const noteId = new URL(request.url).searchParams.get('noteId');

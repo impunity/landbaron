@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isImageUpload, prepareImageUpload } from '@/lib/image-upload';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isUnitInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // Vercel's serverless request body limit
@@ -28,6 +29,10 @@ export async function POST(
 
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
     }
 
     const formData = await request.formData();
@@ -130,6 +135,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
     }
 
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
+    }
+
     const body = await request.json();
     const photoId = String(body?.photoId ?? '').trim();
 
@@ -203,6 +212,10 @@ export async function DELETE(
 
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
     }
 
     const photoId = new URL(request.url).searchParams.get('photoId');

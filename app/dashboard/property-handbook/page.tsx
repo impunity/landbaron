@@ -7,6 +7,7 @@ import { ExternalLink, ImagePlus, Save } from 'lucide-react';
 import { fetchUserRole, type UserRole } from '@/lib/auth';
 import { googleDocPreview } from '@/lib/property-handbook';
 import { supabase } from '@/lib/supabase';
+import { prepareFileForUpload, uploadTooLargeMessage } from '@/lib/client-image';
 import { formatTimestamp, useTimeFormat } from '@/lib/time-format';
 import { Breadcrumbs } from '../breadcrumbs';
 import { DashboardNavButtons } from '../nav-buttons';
@@ -96,15 +97,17 @@ export default function PropertyHandbookPage() {
     try {
       const token = (await supabase?.auth.getSession())?.data.session?.access_token;
       if (!token) throw new Error('Sign in is required.');
+      const uploadFile = await prepareFileForUpload(file);
       const formData = new FormData();
       formData.append('propertyId', data.property.id);
-      formData.append('file', file);
+      formData.append('file', uploadFile);
       const response = await fetch('/api/property-handbook', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      const result = await response.json();
+      if (response.status === 413) throw new Error(uploadTooLargeMessage(uploadFile));
+      const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Property photo could not be uploaded.');
       setData({ ...data, handbook: result.handbook });
       setNotice('Property photo uploaded.');

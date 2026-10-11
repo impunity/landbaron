@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isTicketInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketAssignmentEmail, sendTicketStatusChangeEmail } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
@@ -38,6 +39,10 @@ export async function GET(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
     let query = supabaseAdmin
@@ -156,6 +161,10 @@ export async function PATCH(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
     const descriptionOnly = typeof description === 'string'
@@ -357,6 +366,10 @@ export async function DELETE(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
     if (user.role === 'tenant') {

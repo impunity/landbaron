@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getAssignedGarages } from '@/lib/assigned-garages';
-import { getRequestOrganizationId } from '@/lib/organization-context';
+import { getRequestOrganizationId, isUnitInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -152,6 +152,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
     }
 
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
+    }
+
     const body = await request.json();
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -226,6 +230,10 @@ export async function DELETE(
 
     if (user.role !== 'owner' && user.role !== 'manager') {
       return NextResponse.json({ error: 'Only owners or managers can delete units.' }, { status: 403 });
+    }
+
+    if (!(await isUnitInRequestOrganization(user, unitId))) {
+      return NextResponse.json({ error: 'Unit not found.' }, { status: 404 });
     }
 
     const { error } = await supabaseAdmin

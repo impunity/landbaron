@@ -67,6 +67,14 @@ const getUnitThumbnail = (unit: UnitSummary) => {
   return sorted[0]?.photo_url ?? null;
 };
 
+// Used until a dedicated property photo is uploaded; a unit's primary photo wins over other unit photos.
+const getFallbackUnitPhoto = (units: UnitSummary[]) => {
+  const unitWithPrimary = units.find((unit) => unit.unit_photos?.some((photo) => photo.is_primary));
+  const unit = unitWithPrimary ?? units.find((candidate) => (candidate.unit_photos?.length ?? 0) > 0);
+  const photoUrl = unit ? getUnitThumbnail(unit) : null;
+  return unit && photoUrl ? { unit_number: unit.unit_number, photo_url: photoUrl } : null;
+};
+
 const getUnitFeesTotal = (unit: UnitSummary) =>
   (unit.unit_fees ?? []).reduce((sum, fee) => sum + Number(fee.amount ?? 0), 0);
 
@@ -514,7 +522,8 @@ export default function PropertiesPage() {
               );
               const totalRent = (prop.units ?? []).reduce((sum, unit) => sum + getUnitTotalRent(unit), 0);
 
-              const propertyThumbnail = prop.photo_url;
+              const fallbackPhoto = getFallbackUnitPhoto(prop.units ?? []);
+              const propertyThumbnail = prop.photo_url || fallbackPhoto?.photo_url;
 
               return (
                 <div
@@ -530,6 +539,11 @@ export default function PropertiesPage() {
                         alt={prop.name}
                         className="h-full w-full object-cover transition group-hover:scale-105"
                       />
+                      {!prop.photo_url && fallbackPhoto && (
+                        <div className="absolute bottom-2 left-2 rounded-lg bg-slate-900/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                          Unit {fallbackPhoto.unit_number} photo
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex h-28 w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 text-3xl text-slate-300">

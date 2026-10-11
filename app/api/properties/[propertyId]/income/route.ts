@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isPropertyInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function POST(
@@ -21,6 +22,10 @@ export async function POST(
 
     if (user.role !== 'owner' && user.role !== 'manager') {
       return NextResponse.json({ error: 'Owner or manager access is required.' }, { status: 403 });
+    }
+
+    if (!(await isPropertyInRequestOrganization(user, propertyId))) {
+      return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     }
 
     const { label, amount } = await request.json();
@@ -65,6 +70,10 @@ export async function DELETE(
 
     if (user.role !== 'owner' && user.role !== 'manager') {
       return NextResponse.json({ error: 'Owner or manager access is required.' }, { status: 403 });
+    }
+
+    if (!(await isPropertyInRequestOrganization(user, propertyId))) {
+      return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     }
 
     const incomeId = request.nextUrl.searchParams.get('incomeId');

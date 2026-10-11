@@ -48,6 +48,10 @@ Run [supabase/properties-and-units.sql](supabase/properties-and-units.sql) once 
 
 Run [supabase/property-handbooks.sql](supabase/property-handbooks.sql) in the Supabase SQL Editor to enable handbook records and public property photo storage. The script is safe to rerun and adds the photo URL column and storage bucket to existing installations.
 
+## Property Photos
+
+Run [supabase/property-photos.sql](supabase/property-photos.sql) in the Supabase SQL Editor to enable the property photo shown on the Properties page. Owners and managers upload it from a property's detail page; it is stored separately from the Property Handbook photo. Until one is uploaded, the Properties page shows a unit photo (a unit's primary photo first) labeled with its unit number.
+
 ## Tenant Portal, Contacts & Vendors
 
 Run [supabase/tenant-portal-and-contacts.sql](supabase/tenant-portal-and-contacts.sql) once in Supabase. It adds tenant avatars and improvement photos, per-property primary/secondary staff assignments, and approved vendor records.

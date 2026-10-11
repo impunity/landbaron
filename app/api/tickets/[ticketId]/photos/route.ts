@@ -5,6 +5,7 @@ import { canRemoveTicketAttachment, getTicketAttachmentObject } from '@/lib/tick
 import { buildTicketDescription, parseTicketDescription } from '@/lib/ticket-description';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isTicketInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // Vercel's serverless request body limit
@@ -66,6 +67,10 @@ export async function POST(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
     if (user.role === 'tenant') {
@@ -207,6 +212,10 @@ export async function DELETE(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
 
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
+    }
+
     const body = await request.json();
     const url = typeof body.url === 'string' ? body.url.trim() : '';
     if (!url) return NextResponse.json({ error: 'Photo URL is required.' }, { status: 400 });
@@ -269,6 +278,10 @@ export async function PATCH(
     const user = await getAuthenticatedRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
+    }
+
+    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
     if (typeof url !== 'string' || !url.trim()) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isTenantInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -34,6 +35,10 @@ export async function GET(
 
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    if (!(await isTenantInRequestOrganization(user, tenantId))) {
+      return NextResponse.json({ error: 'Tenant not found.' }, { status: 404 });
     }
 
     const { data: tenant, error } = await supabaseAdmin
@@ -81,6 +86,10 @@ export async function PATCH(
 
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    if (!(await isTenantInRequestOrganization(user, tenantId))) {
+      return NextResponse.json({ error: 'Tenant not found.' }, { status: 404 });
     }
 
     const body = await request.json();
@@ -145,6 +154,10 @@ export async function DELETE(
 
     if (user.role === 'tenant') {
       return NextResponse.json({ error: 'Access denied.' }, { status: 403 });
+    }
+
+    if (!(await isTenantInRequestOrganization(user, tenantId))) {
+      return NextResponse.json({ error: 'Tenant not found.' }, { status: 404 });
     }
 
     const { error } = await supabaseAdmin

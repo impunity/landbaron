@@ -61,3 +61,57 @@ export async function getOrganizationPropertyIds(organizationId: string | null):
 
   return (data ?? []).map((property) => property.id as string);
 }
+
+// Guards writes addressed by id: the record must belong to the caller's organization.
+export async function isPropertyInRequestOrganization(user: AuthenticatedRequestUser, propertyId: string): Promise<boolean> {
+  if (!supabaseAdmin || !propertyId) return false;
+  const organizationId = await getRequestOrganizationId(user);
+  if (!organizationId) return false;
+
+  const { data, error } = await supabaseAdmin
+    .from('properties')
+    .select('organization_id')
+    .eq('id', propertyId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.organization_id === organizationId;
+}
+
+export async function isUnitInRequestOrganization(user: AuthenticatedRequestUser, unitId: string): Promise<boolean> {
+  if (!supabaseAdmin || !unitId) return false;
+
+  const { data, error } = await supabaseAdmin
+    .from('units')
+    .select('property_id')
+    .eq('id', unitId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.property_id ? isPropertyInRequestOrganization(user, data.property_id as string) : false;
+}
+
+export async function isTenantInRequestOrganization(user: AuthenticatedRequestUser, tenantId: string): Promise<boolean> {
+  if (!supabaseAdmin || !tenantId) return false;
+
+  const { data, error } = await supabaseAdmin
+    .from('tenants')
+    .select('property_id, unit_id')
+    .eq('id', tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.property_id) return isPropertyInRequestOrganization(user, data.property_id as string);
+  return data?.unit_id ? isUnitInRequestOrganization(user, data.unit_id as string) : false;
+}
+
+export async function isTicketInRequestOrganization(user: AuthenticatedRequestUser, ticketId: string): Promise<boolean> {
+  if (!supabaseAdmin || !ticketId) return false;
+  const organizationId = await getRequestOrganizationId(user);
+  if (!organizationId) return false;
+
+  const { data, error } = await supabaseAdmin
+    .from('tickets')
+    .select('organization_id')
+    .eq('id', ticketId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.organization_id === organizationId;
+}

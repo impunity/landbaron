@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
+import { isPropertyInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest) {
         { error: 'Property and unit number are required.' },
         { status: 400 },
       );
+    }
+
+    if (!(await isPropertyInRequestOrganization(user, propertyId))) {
+      return NextResponse.json({ error: 'Property not found.' }, { status: 404 });
     }
 
     const { data: parentProperty } = await supabaseAdmin

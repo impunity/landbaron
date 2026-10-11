@@ -8,6 +8,7 @@ import { calculateEstimatedMarketRent } from '@/lib/market-rent';
 import { getUnitTotalRent } from '@/lib/rent';
 import { formatCurrency } from '@/lib/format-currency';
 import { supabase } from '@/lib/supabase';
+import { prepareFileForUpload, uploadTooLargeMessage } from '@/lib/client-image';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
 import { PropertyMap } from '../../property-map';
@@ -56,6 +57,7 @@ type PropertyWithUnits = {
   notes?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  photo_url?: string | null;
   created_at: string;
   units?: UnitDetail[];
   property_income_sources?: PropertyIncomeSource[];
@@ -123,6 +125,7 @@ export default function PropertyDetailPage() {
   const [lookingUpCoordinates, setLookingUpCoordinates] = useState(false);
   const [maintenanceStaff, setMaintenanceStaff] = useState<MaintenanceStaff[]>([]);
   const [propertyAssignments, setPropertyAssignments] = useState<PropertyAssignment[]>([]);
+  const [propertyPhotoBusy, setPropertyPhotoBusy] = useState(false);
   const [newIncomeLabel, setNewIncomeLabel] = useState('Laundry');
   const [newIncomeAmount, setNewIncomeAmount] = useState('');
   const [savingIncome, setSavingIncome] = useState(false);
@@ -186,6 +189,61 @@ export default function PropertyDetailPage() {
       authListener.subscription.unsubscribe();
     };
   }, [router]);
+
+  const handlePropertyPhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !propertyId || propertyPhotoBusy) return;
+
+    setPropertyPhotoBusy(true);
+    setError(null);
+    try {
+      const uploadFile = await prepareFileForUpload(file);
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      const response = await fetch(`/api/properties/${propertyId}/photo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      });
+      if (response.status === 413) throw new Error(uploadTooLargeMessage(uploadFile));
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Property photo could not be uploaded.');
+      setProperty((current) => (current ? { ...current, photo_url: result.photo_url } : current));
+    } catch (photoError) {
+      setError(photoError instanceof Error ? photoError.message : 'Property photo could not be uploaded.');
+    } finally {
+      setPropertyPhotoBusy(false);
+    }
+  };
+
+  const handlePropertyPhotoRemove = async () => {
+    if (!propertyId || propertyPhotoBusy || !window.confirm('Remove this property photo?')) return;
+
+    setPropertyPhotoBusy(true);
+    setError(null);
+    try {
+      const { data: authData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in is required.');
+
+      const response = await fetch(`/api/properties/${propertyId}/photo`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Property photo could not be removed.');
+      setProperty((current) => (current ? { ...current, photo_url: null } : current));
+    } catch (photoError) {
+      setError(photoError instanceof Error ? photoError.message : 'Property photo could not be removed.');
+    } finally {
+      setPropertyPhotoBusy(false);
+    }
+  };
 
   const loadProperty = async () => {
     if (!propertyId) return;
@@ -540,6 +598,43 @@ export default function PropertyDetailPage() {
         {/* Property Overview Header Card */}
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            {(property.photo_url || session.role === 'owner' || session.role === 'manager') && (
+              <div className="w-full shrink-0 sm:w-48">
+                {property.photo_url ? (
+                  <a href={property.photo_url} target="_blank" rel="noopener noreferrer" title="Open full-size photo">
+                    <img
+                      src={property.photo_url}
+                      alt={`${property.name} photo`}
+                      className="h-32 w-full rounded-xl border border-slate-200 object-cover"
+                    />
+                  </a>
+                ) : (
+                  <div className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-3xl text-slate-300">
+                    🏢
+                  </div>
+                )}
+                {(session.role === 'owner' || session.role === 'manager') && (
+                  <div className="mt-2 flex items-center gap-3 text-xs font-medium">
+                    <label className={`cursor-pointer text-slate-700 underline ${propertyPhotoBusy ? 'pointer-events-none opacity-50' : ''}`}>
+                      {propertyPhotoBusy ? 'Saving…' : property.photo_url ? 'Replace photo' : 'Add property photo'}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,.heic,.heif"
+                        className="hidden"
+                        disabled={propertyPhotoBusy}
+                        onChange={(event) => void handlePropertyPhotoUpload(event)}
+                      />
+                    </label>
+                    {property.photo_url && !propertyPhotoBusy && (
+                      <button type="button" onClick={() => void handlePropertyPhotoRemove()} className="text-rose-700 underline">
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                 Property Details
@@ -553,6 +648,7 @@ export default function PropertyDetailPage() {
                   {[property.city, property.state, property.postal_code].filter(Boolean).join(', ')}
                 </p>
               )}
+            </div>
             </div>
 
             <div className="flex gap-4">

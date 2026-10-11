@@ -167,27 +167,43 @@ export async function POST(request: NextRequest) {
       ? description.replace(/(^|\n)Email:\s*[^\n]*/i, `$1Email: ${reporterEmail}`)
       : description;
 
-    const { data: ticket, error } = await supabaseAdmin
+    const ticketRow = {
+      title,
+      description: normalizedDescription,
+      status,
+      priority,
+      assigned_to: normalizedAssignee || null,
+      cc_staff_emails: normalizedCcEmails,
+      created_by: user.id,
+      organization_id: organizationId,
+      property_id: typeof property_id === 'string' && property_id.trim() ? property_id.trim() : null,
+      unit_id: typeof unit_id === 'string' && unit_id.trim() ? unit_id.trim() : null,
+    };
+    const ticketColumns = 'id, ticket_number, title, priority, description, unit_id';
+
+    let { data: ticket, error } = await supabaseAdmin
       .from('tickets')
-      .insert([
-        {
-          title,
-          description: normalizedDescription,
-          status,
-          priority,
-          assigned_to: normalizedAssignee || null,
-          cc_staff_emails: normalizedCcEmails,
-          created_by: user.id,
-          organization_id: organizationId,
-          property_id: typeof property_id === 'string' && property_id.trim() ? property_id.trim() : null,
-          unit_id: typeof unit_id === 'string' && unit_id.trim() ? unit_id.trim() : null,
-        },
-      ])
-      .select('id, ticket_number, title, priority, description, unit_id, cc_staff_emails')
+      .insert([ticketRow])
+      .select(`${ticketColumns}, cc_staff_emails`)
       .single();
 
-    if (error) {
-      throw error;
+    // Databases without the supabase/ticket-ownership.sql migration lack cc_staff_emails;
+    // CC recipients are still emailed, they just aren't stored on the ticket.
+    if (error && /cc_staff_emails/.test(error.message ?? '')) {
+      console.warn('tickets.cc_staff_emails column is missing; run supabase/ticket-ownership.sql.');
+      const rowWithoutCc: Partial<typeof ticketRow> = { ...ticketRow };
+      delete rowWithoutCc.cc_staff_emails;
+      const retry = await supabaseAdmin
+        .from('tickets')
+        .insert([rowWithoutCc])
+        .select(ticketColumns)
+        .single();
+      ticket = retry.data ? { ...retry.data, cc_staff_emails: normalizedCcEmails } : null;
+      error = retry.error;
+    }
+
+    if (error || !ticket) {
+      throw error ?? new Error('Ticket was not created.');
     }
 
     const { data: unitPhoto } = ticket.unit_id
