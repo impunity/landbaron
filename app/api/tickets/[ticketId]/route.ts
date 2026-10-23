@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendTicketAssignmentEmail, sendTicketStatusChangeEmail } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getTicketCreatorLabels } from '@/lib/ticket-creators';
+import { canAccessTicket } from '@/lib/ticket-access';
 import {
   buildTicketDescription,
   deriveTicketTitle,
@@ -133,7 +134,26 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ ticket: { ...data, property_label: propertyLabel, unit_label: unitLabel, opened_by_label: openedByLabel }, receipts: receipts ?? [] });
+    const messages: Array<{ id: string; parent_id: string | null; author_name: string; body: string; created_at: string }> = [];
+    let conversationError: string | null = null;
+    for (let start = 0; ; start += 500) {
+      const { data: page, error: messagesError } = await supabaseAdmin.from('ticket_messages')
+        .select('id, parent_id, author_name, body, created_at').eq('ticket_id', ticketId)
+        .order('created_at').order('id').range(start, start + 499);
+      if (messagesError) {
+        console.error('Ticket conversation could not be loaded:', messagesError);
+        conversationError = 'Conversation unavailable. Apply supabase/ticket-conversations-and-resolvers.sql and reload.';
+        break;
+      }
+      messages.push(...page);
+      if (page.length < 500) break;
+    }
+    return NextResponse.json({
+      ticket: { ...data, property_label: propertyLabel, unit_label: unitLabel, opened_by_label: openedByLabel },
+      receipts: receipts ?? [],
+      messages: conversationError ? null : messages,
+      conversationError,
+    });
   } catch (error) {
     console.error('GET /api/tickets/[ticketId] failed:', error);
     return NextResponse.json(
@@ -163,15 +183,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Sign in is required.' }, { status: 401 });
     }
 
-    if (!(await isTicketInRequestOrganization(user, ticketId))) {
+    if (!(await canAccessTicket(user, ticketId))) {
       return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
     }
 
     const descriptionOnly = typeof description === 'string'
       && [notes, status, assigned_to, labor_cost, materials_cost].every((value) => value === undefined);
 
-    if (user.role === 'tenant' && !descriptionOnly) {
-      return NextResponse.json({ error: 'Tenants cannot update tickets.' }, { status: 403 });
+    const lifecycleOnly = (status === 'Resolved' || status === 'Open')
+      && [notes, assigned_to, labor_cost, materials_cost, description].every((value) => value === undefined);
+    if (user.role === 'tenant' && !descriptionOnly && !lifecycleOnly) {
+      return NextResponse.json({ error: 'Tenants can edit their description, resolve, or re-open their own tickets.' }, { status: 403 });
     }
 
     if (description !== undefined) {
@@ -196,8 +218,9 @@ export async function PATCH(
       }
       updates.status = normalizedStatus;
 
-      if (normalizedStatus === 'Resolved' || normalizedStatus === 'Closed') {
-        updates.resolved_at = new Date().toISOString();
+      if (normalizedStatus === 'Resolved') {
+        updates.resolved_by = user.id;
+        updates.resolved_by_name = (await getTicketCreatorLabels([user.id])).get(user.id) ?? user.email;
       }
     }
 
@@ -229,20 +252,17 @@ export async function PATCH(
 
     const { data: fetchedTicket, error: fetchError } = await supabaseAdmin
       .from('tickets')
-      .select('title, priority, description, assigned_to, status, created_by')
+      .select('*')
       .eq('id', ticketId)
       .maybeSingle();
 
     if (fetchError) {
-      const errorText = String(fetchError.message ?? '');
-      if (errorText.toLowerCase().includes('assigned_to') || errorText.toLowerCase().includes('column')) {
-        hasAssignedToColumn = false;
-      } else {
-        throw fetchError;
-      }
+      throw fetchError;
     } else {
       existingTicket = fetchedTicket ?? null;
+      hasAssignedToColumn = Boolean(fetchedTicket && 'assigned_to' in fetchedTicket);
     }
+    if (!existingTicket) return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
 
     const currentDescription = existingTicket?.description ?? '';
     const parsedDescription = parseTicketDescription(currentDescription);

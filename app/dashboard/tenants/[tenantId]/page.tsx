@@ -10,6 +10,8 @@ import { DashboardNavButtons } from '../../nav-buttons';
 
 
 type Tenant = {
+  about_me?: string | null;
+  zodiac_sign?: string | null;
   id: string;
   name: string;
   email?: string | null;
@@ -100,6 +102,8 @@ export default function TenantEditPage() {
         <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Edit tenant</p>
           <h1 className="mt-2 text-2xl font-semibold">{tenant?.name}</h1>
+          {tenant?.zodiac_sign && <p className="mt-1 text-sm text-teal-700">{tenant.zodiac_sign}</p>}
+          {tenant?.about_me && <div className="mt-4 rounded-xl bg-slate-50 p-4"><h2 className="text-xs font-semibold text-slate-500">30 Words About Me</h2><p className="mt-1 whitespace-pre-wrap break-words text-sm">{tenant.about_me}</p></div>}
           {tenant?.units && <p className="mt-1 text-sm text-slate-500">{tenant.units.properties?.name} · Unit {tenant.units.unit_number}</p>}
           {error && <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
           <div className="mt-6 grid gap-4 sm:grid-cols-2">

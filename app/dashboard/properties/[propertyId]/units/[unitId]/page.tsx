@@ -14,6 +14,8 @@ import { DashboardNavButtons } from '../../../../nav-buttons';
 
 
 type Tenant = {
+  about_me?: string | null;
+  zodiac_sign?: string | null;
   id: string;
   unit_id: string;
   name: string;
@@ -763,7 +765,6 @@ export default function UnitDetailPage() {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <DashboardNavButtons current="properties" role={session.role} propertyId={unit.property_id} />
             <button
               type="button"
               onClick={() => router.push(`/dashboard?propertyId=${unit.property_id}&unitId=${unit.id}`)}
@@ -778,6 +779,7 @@ export default function UnitDetailPage() {
             >
               Edit unit
             </button>
+            <DashboardNavButtons current="properties" role={session.role} propertyId={unit.property_id} />
           </div>
         </div>
 
@@ -974,6 +976,8 @@ export default function UnitDetailPage() {
                             </span>
                           </div>
 
+                          {t.zodiac_sign && <p className="mt-1 text-xs text-teal-700">{t.zodiac_sign}</p>}
+                          {t.about_me && <div className="mt-2 text-xs"><p className="font-semibold text-slate-500">30 Words About Me</p><p className="mt-1 whitespace-pre-wrap break-words">{t.about_me}</p></div>}
                           <div className="mt-2 space-y-1 text-xs text-slate-600">
                             {t.email && (
                               <p>

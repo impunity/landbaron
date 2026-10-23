@@ -10,6 +10,8 @@ import { DashboardNavButtons } from '../nav-buttons';
 
 
 type TenantWithUnit = {
+  about_me?: string | null;
+  zodiac_sign?: string | null;
   id: string;
   unit_id: string;
   name: string;
@@ -419,6 +421,8 @@ export default function TenantsPage() {
                           {formatTenantName(t.name)}
                         </button>
                         {t.notes && <p className="text-xs font-normal text-slate-500 italic mt-0.5">{t.notes}</p>}
+                        {t.zodiac_sign && <p className="mt-1 text-xs font-normal text-teal-700">{t.zodiac_sign}</p>}
+                        {t.about_me && <div className="mt-2 text-xs font-normal"><p className="font-semibold text-slate-500">30 Words About Me</p><p className="mt-1 whitespace-pre-wrap break-words">{t.about_me}</p></div>}
                       </td>
                       <td className="px-5 py-4 text-slate-700">
                         {t.units ? (

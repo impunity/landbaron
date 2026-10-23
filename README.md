@@ -16,6 +16,24 @@ The `landbaron.app` sender domain must be verified in Resend. When configured, f
 
 Run [supabase/ticket-ownership.sql](supabase/ticket-ownership.sql) once in the Supabase SQL Editor before deploying tenant access control. It records the authenticated creator of each new ticket so tenants can create tickets and view only tickets they created. Existing tickets without a `created_by` value remain available to staff and owners but are not visible to tenants.
 
+## Ticket Conversations and Leaderboard
+
+After the existing ticket ownership, organization, and archiving migrations, run [supabase/ticket-conversations-and-resolvers.sql](supabase/ticket-conversations-and-resolvers.sql) in the Supabase SQL Editor before deploying.
+
+Ticket details now include a threaded conversation for all organization staff and the tenant who created the ticket. Previous Owner Notes (both description-embedded notes and any separate owner-notes field) remain unchanged and appear as retained notes in the conversation. Messages are append-only, can reply to other messages on the same ticket, and remain available on resolved or archived tickets.
+
+All staff and the ticket's tenant can resolve or re-open a ticket, including archived tickets. Re-opening clears its current resolution credit; resolving again credits the new resolver. Re-saving an already resolved status cannot change credit or reset its resolution time. Archiving preserves resolution credit.
+
+The Ticket Leaderboard button appears only on Maintenance Tickets, for every role. Rankings cover the caller's organization, including tenants who resolve their own tickets. Each currently resolved ticket counts once (including archived resolutions), with credit going to the person who clicked Resolve, not the assignee. Percentages use all resolved tickets as the denominator, including historical tickets without known resolvers. Average age measures elapsed days from creation to resolution, shown to one decimal. Ties sort by shorter average age, then name and ID. Dismissed and re-opened tickets do not count. Historical resolver identities are not guessed.
+
+## Tenant Introductions
+
+After [supabase/user-preferences.sql](supabase/user-preferences.sql), run [supabase/tenant-introductions.sql](supabase/tenant-introductions.sql). Tenants can use **Edit my info** on their own portal card to add **30 Words About Me**, limited to both 30 whitespace-separated words and 250 characters. Clearing the field removes the introduction.
+
+Introductions appear on tenant cards in the portal, neighbor directory, staff tenant list/detail, and unit resident cards, even when contact sharing is disabled. A birthday saved in account Settings adds the tenant's zodiac sign to those cards. The server derives the sign from account preferences without sending birthdays to other users. The birthday lookup function is restricted to the service role.
+
+Run focused feature tests with `node --test tests/ticket-community.test.mjs`.
+
 ## Platform Admin
 
 Set the server-only `PLATFORM_ADMIN_EMAILS` environment variable to a comma-separated allowlist of platform administrators. Currently, only `scrosby@gmail.com` should have Platform Admin access:

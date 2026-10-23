@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getOrganizationPropertyIds, getRequestOrganizationId, isUnitInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { withTenantZodiacSigns } from '@/lib/tenant-zodiac';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error && typeof error === 'object') {
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    return NextResponse.json({ tenants: tenants ?? [] });
+    return NextResponse.json({ tenants: await withTenantZodiacSigns(tenants ?? []) });
   } catch (error) {
     console.error('GET /api/tenants failed:', error);
     return NextResponse.json(

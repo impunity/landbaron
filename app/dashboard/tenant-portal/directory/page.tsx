@@ -17,6 +17,8 @@ type DirectoryEntry = {
   email: string | null;
   phone: string | null;
   instagram_handle: string | null;
+  about_me: string | null;
+  zodiac_sign: string | null;
 };
 
 export default function TenantDirectoryPage() {
@@ -72,6 +74,8 @@ export default function TenantDirectoryPage() {
                     {tenant.is_self && <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-teal-700">You</span>}
                   </p>
                   {tenant.unit_number && <p className="text-xs uppercase tracking-wider text-slate-500">Unit {tenant.unit_number}</p>}
+                  {tenant.zodiac_sign && <p className="mt-1 text-xs text-teal-700">{tenant.zodiac_sign}</p>}
+                  {tenant.about_me && <div className="mt-3"><p className="text-xs font-semibold text-slate-500">30 Words About Me</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{tenant.about_me}</p></div>}
                   {tenant.shared || tenant.is_self ? (
                     <>
                       {tenant.email && <a className="mt-2 block w-max text-sm text-slate-700 underline" href={`mailto:${tenant.email}`}>{tenant.email}</a>}

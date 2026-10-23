@@ -4,6 +4,7 @@ import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getAssignedGarages } from '@/lib/assigned-garages';
 import { getRequestOrganizationId, isUnitInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { withTenantZodiacSigns } from '@/lib/tenant-zodiac';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error && typeof error === 'object') {
@@ -111,6 +112,7 @@ export async function GET(
     return NextResponse.json({
       unit: {
         ...unit,
+        tenants: await withTenantZodiacSigns(unit.tenants ?? []),
         rent_amount: user.role === 'owner' || user.role === 'manager' ? unit.rent_amount : null,
         garage_rent: user.role === 'owner' || user.role === 'manager' ? unit.garage_rent : null,
         garages: canSeeRent ? garagesByUnit.get(unitId) ?? [] : [],

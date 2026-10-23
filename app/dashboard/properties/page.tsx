@@ -301,7 +301,6 @@ export default function PropertiesPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <DashboardNavButtons current="properties" role={session.role} />
             <button
               type="button"
               onClick={() => setShowAddModal(true)}
@@ -309,6 +308,7 @@ export default function PropertiesPage() {
             >
               + Add property
             </button>
+            <DashboardNavButtons current="properties" role={session.role} />
           </div>
         </header>
 

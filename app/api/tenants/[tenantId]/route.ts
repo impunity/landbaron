@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { isTenantInRequestOrganization } from '@/lib/organization-context';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { withTenantZodiacSigns } from '@/lib/tenant-zodiac';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error && typeof error === 'object') {
@@ -55,7 +56,7 @@ export async function GET(
       return NextResponse.json({ error: 'Tenant not found.' }, { status: 404 });
     }
 
-    return NextResponse.json({ tenant });
+    return NextResponse.json({ tenant: (await withTenantZodiacSigns([tenant]))[0] });
   } catch (error) {
     console.error('GET /api/tenants/[tenantId] failed:', error);
     return NextResponse.json(

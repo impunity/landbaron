@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { withTenantZodiacSigns } from '@/lib/tenant-zodiac';
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,12 +28,12 @@ export async function GET(request: NextRequest) {
 
     const { data: neighbors, error: neighborsError } = await supabaseAdmin
       .from('tenants')
-      .select('id, name, email, phone, instagram_handle, avatar_url, share_contact_info, units!inner(unit_number, property_id)')
+      .select('id, name, email, phone, instagram_handle, avatar_url, share_contact_info, about_me, units!inner(unit_number, property_id)')
       .eq('units.property_id', unit.property_id)
       .eq('status', 'active');
     if (neighborsError) throw neighborsError;
 
-    const directory = (neighbors ?? [])
+    const directory = (await withTenantZodiacSigns(neighbors ?? []))
       .map((neighbor) => {
         const neighborUnit = Array.isArray(neighbor.units) ? neighbor.units[0] : neighbor.units;
         const isSelf = neighbor.id === tenant.id;
@@ -44,6 +45,8 @@ export async function GET(request: NextRequest) {
           name: neighbor.name,
           unit_number: neighborUnit?.unit_number ?? '',
           avatar_url: neighbor.avatar_url ?? null,
+          about_me: neighbor.about_me ?? null,
+          zodiac_sign: neighbor.zodiac_sign,
           shared,
           email: visible ? neighbor.email ?? null : null,
           phone: visible ? neighbor.phone ?? null : null,

@@ -10,10 +10,11 @@ import { supabase } from '@/lib/supabase';
 import { prepareFileForUpload, uploadTooLargeMessage } from '@/lib/client-image';
 import { Breadcrumbs } from './breadcrumbs';
 import { DashboardNavButtons } from './nav-buttons';
+import { countWords, validateAboutMe } from '@/lib/tenant-introductions';
 
 
 type PortalData = {
-  tenant: { id: string; unit_id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null; instagram_handle?: string | null; share_contact_info?: boolean | null };
+  tenant: { id: string; unit_id: string; name: string; email?: string | null; phone?: string | null; avatar_url?: string | null; instagram_handle?: string | null; share_contact_info?: boolean | null; about_me?: string | null; zodiac_sign?: string | null };
   unit: { unit_number: string; unit_photos?: Array<{ photo_url: string; caption?: string | null }> };
   property: { id: string; name: string; address: string; city?: string | null; state?: string | null; postal_code?: string | null; solar_enabled?: boolean };
   unitPhotos: Array<{ photo_url: string; caption?: string | null }>;
@@ -98,7 +99,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
   const [tickets, setTickets] = useState<TenantTicket[]>([]);
   const [showArchivedTickets, setShowArchivedTickets] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
-  const [contactDraft, setContactDraft] = useState({ phone: '', instagram_handle: '' });
+  const [contactDraft, setContactDraft] = useState({ phone: '', instagram_handle: '', about_me: '' });
   const [savingContact, setSavingContact] = useState(false);
 
   const loadPortal = async () => {
@@ -164,10 +165,14 @@ export function TenantPortal({ session }: { session: SessionUser }) {
     }
   };
 
-  const updateContact = async (updates: { phone?: string; instagram_handle?: string; share_contact_info?: boolean }) => {
+  const updateContact = async (updates: { phone?: string; instagram_handle?: string; share_contact_info?: boolean; about_me?: string }) => {
     setSavingContact(true);
     setError(null);
     try {
+      if (updates.about_me !== undefined) {
+        const validationError = validateAboutMe(updates.about_me);
+        if (validationError) throw new Error(validationError);
+      }
       const token = (await supabase?.auth.getSession())?.data.session?.access_token;
       const response = await fetch('/api/tenant-portal', {
         method: 'PATCH',
@@ -303,7 +308,7 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                 {(avatarUploading || hasAvatarPhoto(data.tenant.avatar_url)) && <span className="absolute bottom-0 right-0 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">{avatarUploading ? '...' : 'Replace'}</span>}
                 <input aria-label="Add or change your photo" type="file" accept="image/*,.heic,.heif" onChange={uploadAvatar} disabled={avatarUploading} className="sr-only" />
               </label>
-              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Your info</p><h2 className="mt-1 text-xl font-semibold">{data.tenant.name}</h2></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Your info</p><h2 className="mt-1 text-xl font-semibold">{data.tenant.name}</h2>{data.tenant.zodiac_sign && <p className="mt-1 text-sm text-teal-700">{data.tenant.zodiac_sign}</p>}</div>
             </div>
             {editingContact ? (
               <form
@@ -316,12 +321,14 @@ export function TenantPortal({ session }: { session: SessionUser }) {
                 <div className="flex min-w-0 justify-between gap-4"><span className="text-slate-500">Email</span><span className="min-w-0 overflow-x-auto whitespace-nowrap">{data.tenant.email || session.email}</span></div>
                 <label className="block"><span className="text-slate-500">Phone</span><input type="tel" maxLength={30} value={contactDraft.phone} onChange={(event) => setContactDraft({ ...contactDraft, phone: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" /></label>
                 <label className="block"><span className="text-slate-500">Instagram</span><div className="mt-1 flex items-center rounded-xl border border-slate-300 px-3"><span className="text-slate-400">@</span><input type="text" maxLength={30} value={contactDraft.instagram_handle} onChange={(event) => setContactDraft({ ...contactDraft, instagram_handle: event.target.value })} className="w-full py-2 pl-1 outline-none" /></div></label>
+                <label className="block"><span className="text-slate-500">30 Words About Me</span><textarea rows={3} maxLength={250} value={contactDraft.about_me} onChange={(event) => setContactDraft({ ...contactDraft, about_me: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" /><span className={countWords(contactDraft.about_me) > 30 ? 'text-rose-700' : 'text-slate-500'}>{countWords(contactDraft.about_me)}/30 words, {contactDraft.about_me.length}/250 characters. Visible to staff and neighbors, even if contact info is hidden.</span></label>
                 <div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingContact(false)} className="rounded-xl border border-slate-300 px-3 py-1.5 font-medium">Cancel</button><button type="submit" disabled={savingContact} className="rounded-xl bg-slate-900 px-3 py-1.5 font-medium text-white disabled:opacity-60">{savingContact ? 'Saving...' : 'Save'}</button></div>
               </form>
             ) : (
               <>
                 <dl className="mt-6 min-w-0 space-y-3 text-sm"><div className="flex min-w-0 justify-between gap-4"><dt className="text-slate-500">Email</dt><dd className="min-w-0 overflow-x-auto whitespace-nowrap">{data.tenant.email || session.email}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Phone</dt><dd>{data.tenant.phone || 'Not provided'}</dd></div><div className="flex min-w-0 justify-between gap-4"><dt className="text-slate-500">Instagram</dt><dd className="min-w-0 overflow-x-auto whitespace-nowrap">{data.tenant.instagram_handle ? <a href={`https://instagram.com/${encodeURIComponent(data.tenant.instagram_handle)}`} target="_blank" rel="noopener noreferrer" className="underline">@{data.tenant.instagram_handle}</a> : 'Not provided'}</dd></div></dl>
-                <div className="mt-3 flex justify-end"><button type="button" onClick={() => { setContactDraft({ phone: data.tenant.phone ?? '', instagram_handle: data.tenant.instagram_handle ?? '' }); setEditingContact(true); }} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm font-medium">Edit contact info</button></div>
+                {data.tenant.about_me && <div className="mt-4"><p className="text-xs font-semibold text-slate-500">30 Words About Me</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{data.tenant.about_me}</p></div>}
+                <div className="mt-3 flex justify-end"><button type="button" onClick={() => { setContactDraft({ phone: data.tenant.phone ?? '', instagram_handle: data.tenant.instagram_handle ?? '', about_me: data.tenant.about_me ?? '' }); setEditingContact(true); }} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm font-medium">Edit my info</button></div>
               </>
             )}
             <label className="mt-4 flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={data.tenant.share_contact_info === false} disabled={savingContact} onChange={(event) => void updateContact({ share_contact_info: !event.target.checked })} className="h-4 w-4" />Don&apos;t share my contact info with other tenants</label>

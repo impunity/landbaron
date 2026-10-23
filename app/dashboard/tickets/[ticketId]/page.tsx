@@ -12,6 +12,7 @@ import { canRemoveTicketAttachment, getTicketAttachmentObject } from '@/lib/tick
 import { MAX_TICKET_DESCRIPTION_LENGTH, parseTicketDescription } from '@/lib/ticket-description';
 import { Breadcrumbs } from '../../breadcrumbs';
 import { DashboardNavButtons } from '../../nav-buttons';
+import { TicketConversation, type TicketMessage } from './ticket-conversation';
 
 type TicketRow = {
   id: string;
@@ -203,7 +204,8 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detailSaving, setDetailSaving] = useState(false);
-  const [noteDraft, setNoteDraft] = useState('');
+  const [messages, setMessages] = useState<TicketMessage[]>([]);
+  const [conversationError, setConversationError] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState<string>('Open');
   const [assignedStaff, setAssignedStaff] = useState('');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -303,16 +305,10 @@ export default function TicketDetailPage() {
           ? nextTicket.assigned_to.trim()
           : parseAssignment(description).value;
 
-      if (session?.role === 'tenant') {
-        const allowed = description.toLowerCase().includes(`email: ${session.email.toLowerCase()}`);
-        if (!allowed) {
-          throw new Error('You can only view your own tickets.');
-        }
-      }
-
       setTicket(nextTicket);
       setStatusDraft(normalizeStatus(nextTicket?.status ?? 'Open'));
-      setNoteDraft(parseTicketDescription(description).notes);
+      setMessages(result.messages ?? []);
+      setConversationError(result.conversationError ?? null);
       setAssignedStaff(assignmentValue);
       setLaborCost(nextTicket?.labor_cost !== null && nextTicket?.labor_cost !== undefined ? String(nextTicket.labor_cost) : '');
       setMaterialsCost(nextTicket?.materials_cost !== null && nextTicket?.materials_cost !== undefined ? String(nextTicket.materials_cost) : '');
@@ -517,6 +513,7 @@ export default function TicketDetailPage() {
       }
 
       await loadTicketDetail(ticketId);
+      if (result.notificationError) setError(result.notificationError);
     } catch (updateError) {
       console.error(updateError);
       setError(
@@ -901,36 +898,13 @@ export default function TicketDetailPage() {
                 )}
               </div>
 
-              {session.role !== 'tenant' && (
-                <div className="rounded-xl border border-slate-200 p-4">
-                <label className="mb-2 block text-sm font-medium text-slate-700">Owner notes</label>
-                <textarea
-                  rows={5}
-                  value={noteDraft}
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                  placeholder="Add internal notes for the owner or maintenance team..."
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                />
-                <div className="mt-3 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleTicketUpdate({ notes: '' })}
-                    disabled={detailSaving || !noteDraft.trim()}
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {detailSaving ? 'Clearing...' : 'Clear notes'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTicketUpdate({ notes: noteDraft })}
-                    disabled={detailSaving}
-                    className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {detailSaving ? 'Saving...' : 'Save notes'}
-                  </button>
-                </div>
-                </div>
-              )}
+              <TicketConversation
+                ticketId={ticket.id}
+                messages={messages}
+                legacyNotes={[...new Set([parseTicketDescription(ticket.description).notes, ticket.owner_notes ?? ''].filter((note) => note.trim()))]}
+                loadError={conversationError}
+                onMessage={(message) => setMessages((current) => [...current, message])}
+              />
 
               {session.role !== 'tenant' && (
                 <div className="rounded-xl border border-slate-200 p-4">
@@ -991,7 +965,7 @@ export default function TicketDetailPage() {
                     onChange={(event) => {
                       const nextValue = event.target.value;
                       setAssignedStaff(nextValue);
-                      void handleTicketUpdate({ assigned_to: nextValue, status: statusDraft, notes: noteDraft });
+                      void handleTicketUpdate({ assigned_to: nextValue });
                     }}
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                   >
@@ -1063,27 +1037,21 @@ export default function TicketDetailPage() {
                 </div>
               )}
 
-              {session.role !== 'tenant' && (
-                <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3">
+                {['Resolved', 'Closed', 'Archived'].includes(normalizeStatus(ticket.status)) ? (
+                  <button type="button" onClick={() => void handleTicketUpdate({ status: 'Open' })} disabled={detailSaving} className="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60">{detailSaving ? 'Updating...' : 'Re-open ticket'}</button>
+                ) : (
+                  <button type="button" onClick={() => void handleTicketUpdate({ status: 'Resolved' })} disabled={detailSaving} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60">{detailSaving ? 'Updating...' : 'Resolve ticket'}</button>
+                )}
+                {session.role !== 'tenant' && <>
                 <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => handleTicketUpdate({ status: statusDraft, notes: noteDraft, assigned_to: assignedStaff })}
+                    onClick={() => handleTicketUpdate({ status: statusDraft, assigned_to: assignedStaff })}
                     disabled={detailSaving}
                     className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {detailSaving ? 'Updating...' : 'Save changes'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusDraft('Resolved');
-                      handleTicketUpdate({ status: 'Resolved', notes: noteDraft });
-                    }}
-                    disabled={detailSaving}
-                    className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {detailSaving ? 'Updating...' : 'Resolve ticket'}
                   </button>
                 </div>
 
@@ -1092,7 +1060,7 @@ export default function TicketDetailPage() {
                     type="button"
                     onClick={() => {
                       setStatusDraft('Closed');
-                      handleTicketUpdate({ status: 'Closed', notes: noteDraft || 'Dismissed by maintenance.' });
+                      handleTicketUpdate({ status: 'Closed' });
                     }}
                     disabled={detailSaving}
                     className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1106,7 +1074,7 @@ export default function TicketDetailPage() {
                     type="button"
                     onClick={() => {
                       setStatusDraft('Archived');
-                      void handleTicketUpdate({ status: 'Archived', notes: noteDraft, assigned_to: assignedStaff });
+                      void handleTicketUpdate({ status: 'Archived' });
                     }}
                     disabled={detailSaving || statusDraft === 'Archived'}
                     className="rounded-xl border border-stone-300 bg-stone-100 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1125,8 +1093,8 @@ export default function TicketDetailPage() {
                     {detailSaving ? 'Deleting...' : 'Delete ticket'}
                   </button>
                 )}
-                </div>
-              )}
+                </>}
+              </div>
             </aside>
           </div>
         </section>

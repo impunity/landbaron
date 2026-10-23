@@ -420,7 +420,6 @@ export default function StaffPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <DashboardNavButtons current="staff" role={session.role} />
             <button
               type="button"
               onClick={() => setShowAddForm((current) => !current)}
@@ -428,6 +427,7 @@ export default function StaffPage() {
             >
               ADD STAFF
             </button>
+            <DashboardNavButtons current="staff" role={session.role} />
           </div>
         </header>
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { validateAboutMe } from '@/lib/tenant-introductions';
+import { withTenantZodiacSigns } from '@/lib/tenant-zodiac';
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
       : { data: [] };
 
     return NextResponse.json({
-      tenant,
+      tenant: (await withTenantZodiacSigns([tenant]))[0],
       unit,
       property: { ...property, solar_enabled: solarIntegration?.enabled ?? false },
       unitPhotos: unit.unit_photos ?? [],
@@ -66,6 +68,12 @@ export async function PATCH(request: NextRequest) {
     if (user.role !== 'tenant') return NextResponse.json({ error: 'Tenant access only.' }, { status: 403 });
     const body = await request.json();
     const updates: Record<string, unknown> = {};
+
+    if (body.about_me !== undefined) {
+      const error = validateAboutMe(body.about_me);
+      if (error) return NextResponse.json({ error }, { status: 400 });
+      updates.about_me = body.about_me.trim() || null;
+    }
 
     if (typeof body.avatar_url === 'string') {
       updates.avatar_url = body.avatar_url.trim() || null;
