@@ -12,9 +12,54 @@ create table if not exists public.ticket_messages (
   author_name text not null,
   body text not null check (char_length(btrim(body)) between 1 and 5000),
   created_at timestamptz not null default now(),
-  unique (ticket_id, id),
-  foreign key (ticket_id, parent_id) references public.ticket_messages(ticket_id, id)
+  constraint ticket_messages_ticket_id_id_key unique (ticket_id, id),
+  constraint ticket_messages_thread_parent_fkey
+    foreign key (ticket_id, parent_id) references public.ticket_messages(ticket_id, id)
 );
+
+-- Earlier installations used sender_type instead of author fields.
+alter table public.ticket_messages
+  add column if not exists parent_id uuid,
+  add column if not exists author_user_id uuid references auth.users(id) on delete set null,
+  add column if not exists author_name text;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'ticket_messages' and column_name = 'sender_type'
+  ) then
+    update public.ticket_messages
+    set author_name = case
+      when nullif(btrim(sender_type), '') is not null
+        then 'Previous message (' || initcap(btrim(sender_type)) || ')'
+      else 'Previous message'
+    end
+    where author_name is null;
+    alter table public.ticket_messages alter column sender_type drop not null;
+  end if;
+
+  update public.ticket_messages set author_name = 'Previous message' where author_name is null;
+  alter table public.ticket_messages alter column author_name set not null;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.ticket_messages'::regclass and conname = 'ticket_messages_ticket_id_id_key'
+  ) then
+    alter table public.ticket_messages
+      add constraint ticket_messages_ticket_id_id_key unique (ticket_id, id);
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.ticket_messages'::regclass and conname = 'ticket_messages_thread_parent_fkey'
+  ) then
+    alter table public.ticket_messages
+      add constraint ticket_messages_thread_parent_fkey
+      foreign key (ticket_id, parent_id) references public.ticket_messages(ticket_id, id);
+  end if;
+end;
+$$;
+
 create index if not exists ticket_messages_ticket_created_idx
   on public.ticket_messages(ticket_id, created_at);
 alter table public.ticket_messages enable row level security;
@@ -50,5 +95,7 @@ $$;
 drop trigger if exists track_ticket_resolution on public.tickets;
 create trigger track_ticket_resolution before update of status on public.tickets
   for each row execute function public.track_ticket_resolution();
+
+notify pgrst, 'reload schema';
 
 commit;

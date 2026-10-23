@@ -6,10 +6,9 @@ import { sendTicketAssignmentEmail, sendTicketStatusChangeEmail } from '@/lib/ti
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getTicketCreatorLabels } from '@/lib/ticket-creators';
 import { canAccessTicket } from '@/lib/ticket-access';
+import { getTicketConversationError } from '@/lib/ticket-conversation-errors';
 import {
   buildTicketDescription,
-  deriveTicketTitle,
-  isDerivedTicketTitle,
   MAX_TICKET_DESCRIPTION_LENGTH,
   parseTicketDescription,
 } from '@/lib/ticket-description';
@@ -142,7 +141,7 @@ export async function GET(
         .order('created_at').order('id').range(start, start + 499);
       if (messagesError) {
         console.error('Ticket conversation could not be loaded:', messagesError);
-        conversationError = 'Conversation unavailable. Apply supabase/ticket-conversations-and-resolvers.sql and reload.';
+        conversationError = getTicketConversationError(messagesError, 'load');
         break;
       }
       messages.push(...page);
@@ -301,13 +300,6 @@ export async function PATCH(
         notes: nextNotes,
         assignment: nextAssignment,
       });
-      if (
-        typeof description === 'string'
-        && existingTicket
-        && isDerivedTicketTitle(existingTicket.title, parsedDescription.body)
-      ) {
-        updates.title = deriveTicketTitle(nextBody);
-      }
     }
 
     if (Object.keys(updates).length === 0) {

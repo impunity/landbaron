@@ -5,10 +5,15 @@ import { useRouter } from 'next/navigation';
 
 import { fetchUserRole, getVisibleTickets, type SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { prepareFileForUpload, uploadTooLargeMessage } from '@/lib/client-image';
+import { prepareFileForUpload } from '@/lib/client-image';
 import { Breadcrumbs } from './breadcrumbs';
 import { DashboardNavButtons } from './nav-buttons';
 import { TenantPortal } from './tenant-portal';
+import { TicketSummaryField } from './ticket-summary-field';
+import { TicketSubmissionThanks, type TicketSubmissionConfirmation } from './ticket-submission-thanks';
+import { validateTicketSummary } from '@/lib/ticket-summary';
+import { pickReadingRecommendation } from '@/lib/reading-recommendations';
+import { uploadSubmittedTicketFiles } from '@/lib/ticket-submission';
 
 type TicketStatus = 'Open' | 'In Progress' | 'Waiting on Parts' | 'Resolved' | 'Closed' | 'Archived';
 
@@ -31,6 +36,7 @@ type TicketRow = {
 };
 
 type TicketFormState = {
+  summary: string;
   severity: string;
   email: string;
   address: string;
@@ -286,6 +292,7 @@ const getTicketAssignmentLabel = (ticket?: Pick<TicketRow, 'assigned_to' | 'desc
 };
 
 const initialFormState: TicketFormState = {
+  summary: '',
   severity: '',
   email: '',
   address: '',
@@ -362,6 +369,7 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [submissionConfirmation, setSubmissionConfirmation] = useState<TicketSubmissionConfirmation | null>(null);
   const [ticketPhotos, setTicketPhotos] = useState<Array<{ file: File; uploadId: string }>>([]);
   const [propertyOptions, setPropertyOptions] = useState<PropertyOption[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -909,6 +917,11 @@ export default function DashboardPage() {
     const trimmedEmail = session.role === 'tenant' ? session.email.trim() : formState.email.trim();
     const trimmedAddress = formState.address.trim();
     const trimmedDescription = formState.description.trim();
+    const summaryError = validateTicketSummary(formState.summary);
+    if (summaryError) {
+      setFormError(summaryError);
+      return;
+    }
     const assignedTo = formState.assigned_to.trim();
     const numericSeverity = Number(formState.severity);
 
@@ -942,7 +955,7 @@ export default function DashboardPage() {
 
     const priority = priorityMap[numericSeverity as 1 | 2 | 3 | 4 | 5];
     const status = 'Open';
-    const title = trimmedDescription.length > 50 ? `${trimmedDescription.slice(0, 47)}...` : trimmedDescription;
+    const title = formState.summary.trim();
     const descriptionParts = [
       ...(trimmedEmail ? [`Email: ${trimmedEmail}`] : []),
       `Address: ${trimmedAddress}`,
@@ -988,25 +1001,8 @@ export default function DashboardPage() {
       }
 
       const ticketId = typeof result.ticket?.id === 'string' ? result.ticket.id : '';
-      if (preparedPhotos.length > 0 && ticketId) {
-        for (const { file: photo, uploadId } of preparedPhotos) {
-          const photoData = new FormData();
-          photoData.append('file', photo);
-          photoData.append('uploadId', uploadId);
-
-          const photoResponse = await fetch(`/api/tickets/${ticketId}/photos`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
-            body: photoData,
-          });
-
-          if (photoResponse.status === 413) throw new Error(`Ticket created, but ${uploadTooLargeMessage(photo)}`);
-          if (!photoResponse.ok) {
-            const photoResult = await photoResponse.json().catch(() => ({}));
-            throw new Error(photoResult?.error || 'Ticket created, but one or more photos could not be uploaded.');
-          }
-        }
-      }
+      const attachmentWarning = await uploadSubmittedTicketFiles(ticketId, preparedPhotos, accessToken);
+      const warning = [result.notificationError, attachmentWarning].filter(Boolean).join(' ') || null;
 
       setFormState(initialFormState);
       setTicketPhotos([]);
@@ -1018,6 +1014,7 @@ export default function DashboardPage() {
             ? 'Ticket created successfully. Email notification accepted by Resend.'
             : 'Ticket created successfully.',
       );
+      setSubmissionConfirmation({ ticketId, book: pickReadingRecommendation(), warning });
       setLoading(true);
       await loadTickets();
     } catch (submitError) {
@@ -1193,6 +1190,13 @@ export default function DashboardPage() {
                   placeholder="123 Main St, Apt 4B, Springfield, IL"
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500"
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <TicketSummaryField value={formState.summary} onChange={(summary) => {
+                  setFormState((current) => ({ ...current, summary }));
+                  setFormError(null);
+                }} disabled={submitting} />
               </div>
 
               <div className="md:col-span-2">
@@ -1469,6 +1473,11 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
+        {submissionConfirmation && <TicketSubmissionThanks confirmation={submissionConfirmation} onContinue={() => {
+          const ticketId = submissionConfirmation.ticketId;
+          setSubmissionConfirmation(null);
+          router.push(`/dashboard/tickets/${ticketId}`);
+        }} />}
       </div>
     </main>
   );

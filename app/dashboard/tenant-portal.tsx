@@ -7,10 +7,15 @@ import { useRouter } from 'next/navigation';
 
 import type { SessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { prepareFileForUpload, uploadTooLargeMessage } from '@/lib/client-image';
+import { prepareFileForUpload } from '@/lib/client-image';
 import { Breadcrumbs } from './breadcrumbs';
 import { DashboardNavButtons } from './nav-buttons';
 import { countWords, validateAboutMe } from '@/lib/tenant-introductions';
+import { TicketSummaryField } from './ticket-summary-field';
+import { TicketSubmissionThanks, type TicketSubmissionConfirmation } from './ticket-submission-thanks';
+import { validateTicketSummary } from '@/lib/ticket-summary';
+import { pickReadingRecommendation } from '@/lib/reading-recommendations';
+import { uploadSubmittedTicketFiles } from '@/lib/ticket-submission';
 
 
 type PortalData = {
@@ -93,7 +98,8 @@ export function TenantPortal({ session }: { session: SessionUser }) {
   const [uploading, setUploading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
-  const [requestDraft, setRequestDraft] = useState({ severity: '', description: '' });
+  const [requestDraft, setRequestDraft] = useState({ severity: '', summary: '', description: '' });
+  const [submissionConfirmation, setSubmissionConfirmation] = useState<TicketSubmissionConfirmation | null>(null);
   const [requestFiles, setRequestFiles] = useState<Array<{ file: File; uploadId: string }>>([]);
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [tickets, setTickets] = useState<TenantTicket[]>([]);
@@ -114,15 +120,16 @@ export function TenantPortal({ session }: { session: SessionUser }) {
 
   const loadTickets = async () => {
     const token = (await supabase?.auth.getSession())?.data.session?.access_token;
-    if (!token) return;
+    if (!token) throw new Error('Sign in is required.');
     const response = await fetch('/api/tickets', { headers: { Authorization: `Bearer ${token}` } });
     const result = await response.json().catch(() => ({}));
-    if (response.ok) setTickets(result.tickets ?? []);
+    if (!response.ok) throw new Error(result?.error || 'Tickets could not be loaded.');
+    setTickets(result.tickets ?? []);
   };
 
   useEffect(() => {
     void loadPortal().catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Tenant portal could not be loaded.')).finally(() => setLoading(false));
-    void loadTickets();
+    void loadTickets().catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Tickets could not be loaded.'));
   }, []);
 
   const uploadImprovement = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,18 +201,31 @@ export function TenantPortal({ session }: { session: SessionUser }) {
   const submitRequest = async (event: React.FormEvent) => {
     event.preventDefault();
     if (submittingRequestRef.current) return;
-    if (!data || !requestDraft.severity || !requestDraft.description.trim()) return;
+    if (!data) {
+      setError('Your tenant information has not loaded. Reload and try again.');
+      return;
+    }
+    const summaryError = validateTicketSummary(requestDraft.summary);
+    if (summaryError) {
+      setError(summaryError);
+      return;
+    }
+    if (!requestDraft.severity || !requestDraft.description.trim()) {
+      setError('Please complete the severity and description fields.');
+      return;
+    }
     submittingRequestRef.current = true;
     setSubmittingRequest(true);
     setError(null);
     try {
       const preparedFiles = await Promise.all(requestFiles.map(async (entry) => ({ ...entry, file: await prepareFileForUpload(entry.file) })));
       const token = (await supabase?.auth.getSession())?.data.session?.access_token;
+      if (!token) throw new Error('Sign in is required.');
       const response = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          title: requestDraft.description.trim().slice(0, 50),
+          title: requestDraft.summary.trim(),
           description: `Email: ${session.email}\nAddress: ${data.property.address}, Unit ${data.unit.unit_number}\n\n${requestDraft.description.trim()}`,
           status: 'Open',
           priority: ({ '1': 'Low', '2': 'Low', '3': 'Medium', '4': 'High', '5': 'Emergency' } as Record<string, string>)[requestDraft.severity],
@@ -216,27 +236,13 @@ export function TenantPortal({ session }: { session: SessionUser }) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || 'Maintenance request could not be submitted.');
       const ticketId = typeof result.ticket?.id === 'string' ? result.ticket.id : '';
-      if (preparedFiles.length > 0 && ticketId) {
-        for (const { file, uploadId } of preparedFiles) {
-          const fileBody = new FormData();
-          fileBody.append('file', file);
-          fileBody.append('uploadId', uploadId);
-          const fileResponse = await fetch(`/api/tickets/${ticketId}/photos`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: fileBody,
-          });
-          if (fileResponse.status === 413) throw new Error(`Request submitted, but ${uploadTooLargeMessage(file)}`);
-          if (!fileResponse.ok) {
-            const fileResult = await fileResponse.json().catch(() => ({}));
-            throw new Error(fileResult?.error || 'Request submitted, but one or more files could not be uploaded.');
-          }
-        }
-      }
-      setRequestDraft({ severity: '', description: '' });
+      const attachmentWarning = await uploadSubmittedTicketFiles(ticketId, preparedFiles, token);
+      const warning = [result.notificationError, attachmentWarning].filter(Boolean).join(' ') || null;
+      setRequestDraft({ severity: '', summary: '', description: '' });
       setRequestFiles([]);
       setShowRequestForm(false);
-      router.push(`/dashboard/tickets/${ticketId}`);
+      setSubmissionConfirmation({ ticketId, book: pickReadingRecommendation(), warning });
+      void loadTickets().catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Tickets could not be refreshed.'));
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Maintenance request could not be submitted.');
     } finally {
@@ -408,7 +414,39 @@ export function TenantPortal({ session }: { session: SessionUser }) {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">Improvements you have made</h2><p className="mt-1 text-sm text-slate-500">Share photos of voluntary improvements or upgrades in your unit.</p></div><label className="cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">{uploading ? 'Uploading...' : 'Upload improvement photo'}<input type="file" accept="image/*" onChange={uploadImprovement} disabled={uploading} className="hidden" /></label></div>{data.improvements.length === 0 ? <p className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No improvement photos uploaded yet.</p> : <div className="mt-6 grid gap-4 sm:grid-cols-2">{data.improvements.map((photo) => <div key={photo.id} className="overflow-hidden rounded-xl border border-slate-200"><img src={photo.photo_url} alt={photo.caption || 'Tenant improvement'} className="h-40 w-full object-cover" /><p className="p-3 text-xs text-slate-600">{photo.caption}</p></div>)}</div>}</div>
         </section>
 
-        {showRequestForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><form onSubmit={submitRequest} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"><h2 className="text-xl font-semibold">Submit Maintenance Request</h2><label className="mt-5 block text-sm font-medium">Severity<select required value={requestDraft.severity} onChange={(event) => setRequestDraft({ ...requestDraft, severity: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5"><option value="">Select severity</option><option value="1">1 - Nice to have</option><option value="2">2 - Minor issue</option><option value="3">3 - Important</option><option value="4">4 - Major issue</option><option value="5">5 - Emergency</option></select></label><label className="mt-4 block text-sm font-medium">What needs attention?<textarea required rows={5} value={requestDraft.description} onChange={(event) => setRequestDraft({ ...requestDraft, description: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" /></label>        <div className="mt-4"><div className="flex items-center justify-between"><label className="block text-sm font-medium">Photos/Videos</label><span className="text-xs text-slate-500">Photos resized automatically • Max 4 MB per file</span></div><input type="file" accept="image/*,video/*" multiple onChange={(event) => setRequestFiles(Array.from(event.target.files ?? [], (file) => ({ file, uploadId: crypto.randomUUID() })))} className="mt-1 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium text-white hover:file:bg-slate-700" />{requestFiles.length > 0 && <p className="mt-2 text-xs text-slate-500">{requestFiles.length} file{requestFiles.length === 1 ? '' : 's'} selected</p>}</div>{error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}<div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => { setShowRequestForm(false); setRequestFiles([]); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancel</button><button type="submit" disabled={submittingRequest} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">{submittingRequest ? 'Submitting...' : 'Submit request'}</button></div></form></div>}
+        {showRequestForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <form onSubmit={submitRequest} className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+              <h2 className="text-xl font-semibold">Submit Maintenance Request</h2>
+              <label className="mt-5 block text-sm font-medium">Severity
+                <select required value={requestDraft.severity} onChange={(event) => setRequestDraft({ ...requestDraft, severity: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5">
+                  <option value="">Select severity</option><option value="1">1 - Nice to have</option><option value="2">2 - Minor issue</option><option value="3">3 - Important</option><option value="4">4 - Major issue</option><option value="5">5 - Emergency</option>
+                </select>
+              </label>
+              <div className="mt-4">
+                <TicketSummaryField value={requestDraft.summary} onChange={(summary) => setRequestDraft({ ...requestDraft, summary })} disabled={submittingRequest} />
+              </div>
+              <label className="mt-4 block text-sm font-medium">What needs attention?
+                <textarea required rows={5} value={requestDraft.description} onChange={(event) => setRequestDraft({ ...requestDraft, description: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" />
+              </label>
+              <div className="mt-4">
+                <div className="flex items-center justify-between"><label className="block text-sm font-medium">Photos/Videos</label><span className="text-xs text-slate-500">Photos resized automatically • Max 4 MB per file</span></div>
+                <input type="file" accept="image/*,video/*" multiple onChange={(event) => setRequestFiles(Array.from(event.target.files ?? [], (file) => ({ file, uploadId: crypto.randomUUID() })))} className="mt-1 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700" />
+                {requestFiles.length > 0 && <p className="mt-2 text-xs text-slate-500">{requestFiles.length} file{requestFiles.length === 1 ? '' : 's'} selected</p>}
+              </div>
+              {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+              <div className="mt-5 flex justify-end gap-3">
+                <button type="button" disabled={submittingRequest} onClick={() => { setShowRequestForm(false); setRequestFiles([]); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm disabled:opacity-60">Cancel</button>
+                <button type="submit" disabled={submittingRequest} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60">{submittingRequest ? 'Submitting...' : 'Submit request'}</button>
+              </div>
+            </form>
+          </div>
+        )}
+        {submissionConfirmation && <TicketSubmissionThanks confirmation={submissionConfirmation} onContinue={() => {
+          const ticketId = submissionConfirmation.ticketId;
+          setSubmissionConfirmation(null);
+          router.push(`/dashboard/tickets/${ticketId}`);
+        }} />}
       </div>
     </main>
   );

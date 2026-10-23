@@ -4,6 +4,7 @@ import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { canAccessTicket } from '@/lib/ticket-access';
 import { getTicketCreatorLabels } from '@/lib/ticket-creators';
+import { getTicketConversationError } from '@/lib/ticket-conversation-errors';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ ticketId: string }> }) {
   try {
@@ -34,6 +35,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ message }, { status: 201 });
   } catch (error) {
     console.error('POST ticket message failed:', error);
-    return NextResponse.json({ error: 'Message could not be saved. Verify supabase/ticket-conversations-and-resolvers.sql has been applied.' }, { status: 500 });
+    return NextResponse.json({ error: getTicketConversationError(error, 'save') }, { status: 500 });
   }
 }

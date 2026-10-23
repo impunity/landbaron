@@ -6,6 +6,7 @@ import { sendTicketCreatedEmails } from '@/lib/ticket-assignment-email';
 import { getAuthenticatedRequestUser } from '@/lib/request-auth';
 import { getRequestOrganizationId } from '@/lib/organization-context';
 import { getTicketCreatorLabels } from '@/lib/ticket-creators';
+import { validateTicketSummary } from '@/lib/ticket-summary';
 
 const parseReporterEmailFromDescription = (description?: string | null) => {
   if (!description) {
@@ -114,9 +115,11 @@ export async function POST(request: NextRequest) {
   try {
     const { title, description, status, priority, assigned_to, cc_staff_emails, property_id, unit_id } = await request.json();
 
-    if (!title || !description || !status || !priority) {
+    const summaryError = validateTicketSummary(title);
+    if (summaryError) return NextResponse.json({ error: summaryError }, { status: 400 });
+    if (typeof description !== 'string' || !description.trim() || !status || !priority) {
       return NextResponse.json(
-        { error: 'Title, description, status, and priority are required.' },
+        { error: 'Description, status, and priority are required.' },
         { status: 400 },
       );
     }
@@ -168,7 +171,7 @@ export async function POST(request: NextRequest) {
       : description;
 
     const ticketRow = {
-      title,
+      title: title.trim(),
       description: normalizedDescription,
       status,
       priority,

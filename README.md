@@ -16,9 +16,19 @@ The `landbaron.app` sender domain must be verified in Resend. When configured, f
 
 Run [supabase/ticket-ownership.sql](supabase/ticket-ownership.sql) once in the Supabase SQL Editor before deploying tenant access control. It records the authenticated creator of each new ticket so tenants can create tickets and view only tickets they created. Existing tickets without a `created_by` value remain available to staff and owners but are not visible to tenants.
 
+## Ticket Submission and Reading Recommendations
+
+Both tenant and staff submission forms require a **Summary** above the description, with a 255-character limit and remaining-character countdown. The trimmed Summary is saved as the ticket title and is not regenerated when the description changes. Existing ticket titles remain unchanged. No database migration is required for this field.
+
+After a successful submission, every role sees a **Thank you!** interstitial with **For your reading consideration...** and a random book from a curated set of historical National Book Award winners. Each recommendation includes its cover thumbnail, title, author, award, an original one-sentence description, and a link to the National Book Foundation's full summary. The catalog is maintained in [lib/reading-recommendations.ts](lib/reading-recommendations.ts); cover thumbnails are requested from Open Library by ISBN. No live book lookup is needed to submit a ticket, and a failed cover load is explicitly labeled without preventing continuation.
+
+**Continue to ticket** (or Escape) opens the new ticket. Attachment or notification failures after ticket creation appear as warnings in the interstitial, rather than prompting another submission of a ticket that was already saved.
+
 ## Ticket Conversations and Leaderboard
 
 After the existing ticket ownership, organization, and archiving migrations, run [supabase/ticket-conversations-and-resolvers.sql](supabase/ticket-conversations-and-resolvers.sql) in the Supabase SQL Editor before deploying.
+
+If you already ran an earlier version but see a missing `parent_id` or author-column error, rerun the updated script. It also upgrades legacy `ticket_messages` tables that used `sender_type`, preserving message bodies, IDs, timestamps, and sender types. Old messages receive a label based on their recorded sender type rather than an invented author identity. The script is safe to rerun and requests a Supabase API schema-cache refresh.
 
 Ticket details now include a threaded conversation for all organization staff and the tenant who created the ticket. Previous Owner Notes (both description-embedded notes and any separate owner-notes field) remain unchanged and appear as retained notes in the conversation. Messages are append-only, can reply to other messages on the same ticket, and remain available on resolved or archived tickets.
 

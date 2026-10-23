@@ -92,7 +92,7 @@ export const deriveTicketTitle = (body: string) => {
   return trimmed.length > 50 ? `${trimmed.slice(0, 47)}...` : trimmed;
 };
 
-// Matches the title formats the dashboard and tenant portal generate at ticket creation.
+// Matches the legacy title formats generated before explicit ticket summaries.
 export const isDerivedTicketTitle = (title: string | null | undefined, body: string) => {
   const current = (title ?? '').trim();
   return current === deriveTicketTitle(body) || current === body.trim().slice(0, 50).trim();

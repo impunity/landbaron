@@ -26,6 +26,9 @@ const leaderboard = load('lib/ticket-leaderboard.ts');
 const introductions = load('lib/tenant-introductions.ts');
 const insights = load('lib/profile-insights.ts');
 const descriptions = load('lib/ticket-description.ts');
+const conversationErrors = load('lib/ticket-conversation-errors.ts');
+const summaries = load('lib/ticket-summary.ts');
+const recommendations = load('lib/reading-recommendations.ts');
 const tenant = { id: 'tenant-user', email: 'tenant@example.test', role: 'tenant' };
 const owner = { id: 'owner-user', email: 'owner@example.test', role: 'owner' };
 const ticketId = '11111111-1111-4111-8111-111111111111';
@@ -59,11 +62,11 @@ function database(tables = {}, failure = null) {
         maybeSingle() { single = true; return query; },
         single() { single = true; return query; },
         update(updates) { writes.push({ table, updates }); return query; },
-        insert(value) { writes.push({ table, value }); rows = [{ id: 'new-message', ...value }]; return query; },
+        insert(value) { writes.push({ table, value }); rows = [{ id: 'new-message', ...(Array.isArray(value) ? value[0] : value) }]; return query; },
         then(resolve, reject) {
           return Promise.resolve({
             data: failure?.table === table ? null : single ? rows[0] ?? null : rows.slice(start, end + 1),
-            error: failure?.table === table ? { message: 'Database unavailable' } : null,
+            error: failure?.table === table ? { message: 'Database unavailable', code: failure.code } : null,
           }).then(resolve, reject);
         },
       };
@@ -81,6 +84,7 @@ function ticketRoute(user, db, accessible = true) {
     '@/lib/ticket-access': { canAccessTicket: async () => accessible },
     '@/lib/ticket-creators': { getTicketCreatorLabels: async () => new Map([[user?.id, 'Test Resolver']]) },
     '@/lib/ticket-description': descriptions,
+    '@/lib/ticket-conversation-errors': conversationErrors,
     '@/lib/ticket-assignment-email': { sendTicketAssignmentEmail: async () => {}, sendTicketStatusChangeEmail: async () => {} },
   });
 }
@@ -182,6 +186,7 @@ function messageRoute(user, db, accessible = true) {
     '@/lib/supabase-admin': { supabaseAdmin: db },
     '@/lib/ticket-access': { canAccessTicket: async () => accessible },
     '@/lib/ticket-creators': { getTicketCreatorLabels: async () => new Map([[user?.id, 'Verified Author']]) },
+    '@/lib/ticket-conversation-errors': conversationErrors,
   });
 }
 
@@ -217,11 +222,44 @@ test('conversation read paginates beyond default row limits and preserves every 
 });
 
 test('missing conversation migration produces a visible error without hiding retained notes', async () => {
-  const db = database({ tickets: [storedTicket] }, { table: 'ticket_messages' });
+  const db = database({ tickets: [storedTicket] }, { table: 'ticket_messages', code: '42P01' });
   const result = await (await ticketRoute(tenant, db).GET({}, context)).json();
   assert.equal(result.messages, null);
-  assert.match(result.conversationError, /Apply supabase/);
+  assert.match(result.conversationError, /Run the updated supabase/);
   assert.equal(result.ticket.description, storedTicket.description);
+});
+
+test('legacy message columns produce actionable upgrade instructions and retain ticket notes', async () => {
+  const db = database({ tickets: [storedTicket] }, { table: 'ticket_messages', code: '42703' });
+  const result = await (await ticketRoute(tenant, db).GET({}, context)).json();
+  assert.equal(result.messages, null);
+  assert.match(result.conversationError, /schema is missing or out of date/);
+  assert.match(result.conversationError, /without deleting messages/);
+  assert.equal(result.ticket.description, storedTicket.description);
+});
+
+test('conversation errors distinguish schema, permissions and temporary failures without leaking database details', () => {
+  for (const code of ['42703', '42P01', 'PGRST204', 'PGRST205']) {
+    for (const action of ['load', 'save']) {
+      assert.match(conversationErrors.getTicketConversationError({ code }, action), /Run the updated supabase/);
+    }
+  }
+  for (const action of ['load', 'save']) {
+    const denied = conversationErrors.getTicketConversationError({ code: '42501' }, action);
+    assert.match(denied, /access was denied/);
+    assert.doesNotMatch(denied, /Run the updated/);
+    const temporary = conversationErrors.getTicketConversationError({ code: '57014', message: 'Private database details' }, action);
+    assert.match(temporary, action === 'load' ? /could not be loaded/ : /could not be saved/);
+    assert.doesNotMatch(temporary, /supabase|Private database details/);
+  }
+  assert.match(conversationErrors.getTicketConversationError(null, 'load'), /could not be loaded/);
+});
+
+test('saving against a legacy table reports the schema upgrade, not a generic save failure', async () => {
+  const db = database({}, { table: 'ticket_messages', code: '42703' });
+  const response = await messageRoute(tenant, db).POST(request({ body: 'Repair update' }), context);
+  assert.equal(response.status, 500);
+  assert.match((await response.json()).error, /Run the updated supabase/);
 });
 
 test('leaderboard endpoint paginates and exposes aggregates only within the organization for tenants', async () => {
@@ -402,4 +440,279 @@ test('page-specific header actions never follow the canonical navigation and Leg
   }
   inspect(path.resolve(import.meta.dirname, '../app/dashboard'));
   assert.deepEqual(violations, []);
+});
+
+test('Summary requires nonblank text and accepts exactly 255 characters but rejects 256', () => {
+  for (const value of [undefined, null, 123, {}, '', ' \n\t ']) assert.equal(summaries.validateTicketSummary(value), 'Summary is required.');
+  assert.equal(summaries.validateTicketSummary('a'.repeat(255)), null);
+  assert.match(summaries.validateTicketSummary('a'.repeat(256)), /255 characters/);
+});
+
+function creationRoute(user, db) {
+  return load('app/api/tickets/route.ts', {
+    'next/server': { NextResponse: Response },
+    '@/lib/supabase': { supabase: null },
+    '@/lib/supabase-admin': { supabaseAdmin: db },
+    '@/lib/request-auth': { getAuthenticatedRequestUser: async () => user },
+    '@/lib/organization-context': { getRequestOrganizationId: async () => 'org-a' },
+    '@/lib/ticket-creators': {},
+    '@/lib/ticket-summary': summaries,
+    '@/lib/ticket-assignment-email': { sendTicketCreatedEmails: async () => ({ results: [{ sent: true }] }) },
+  });
+}
+
+test('ticket creation enforces Summary limits server-side and saves the trimmed Summary as title for every role', async () => {
+  for (const role of ['owner', 'manager', 'maintenance', 'contractor', 'tenant']) {
+    for (const title of ['', '   ', 123, 'x'.repeat(256)]) {
+      const db = database();
+      const response = await creationRoute({ ...tenant, role }, db).POST(request({ title, description: 'Repair description', status: 'Open', priority: 'Medium' }));
+      assert.equal(response.status, 400);
+      assert.equal(db.writes.length, 0);
+    }
+    const db = database();
+    const response = await creationRoute({ ...tenant, role }, db).POST(request({
+      title: '  Kitchen sink leak  ', description: `Email: ${tenant.email}\n\nLong repair description`, status: 'Open', priority: 'Medium',
+    }));
+    assert.equal(response.status, 200);
+    assert.equal(db.writes[0].value[0].title, 'Kitchen sink leak');
+    assert.match(db.writes[0].value[0].description, /Long repair description/);
+    assert.equal((await response.json()).ticket.title, 'Kitchen sink leak');
+    const boundary = database();
+    assert.equal((await creationRoute({ ...tenant, role }, boundary).POST(request({
+      title: 'x'.repeat(255), description: 'Description', status: 'Open', priority: 'Medium',
+    }))).status, 200);
+  }
+});
+
+test('editing the description never replaces a chosen Summary even when it matches the old generated title', async () => {
+  const db = database({ tickets: [{ ...storedTicket, title: 'Repair' }] });
+  const response = await ticketRoute(tenant, db).PATCH(request({ description: 'A different description' }), context);
+  assert.equal(response.status, 200);
+  assert.equal(db.writes[0].updates.title, undefined);
+});
+
+test('Summary field shows a required 255-character input and correct countdown at both boundaries', () => {
+  const { TicketSummaryField } = load('app/dashboard/ticket-summary-field.tsx', { '@/lib/ticket-summary': summaries });
+  for (const length of [0, 10, 255]) {
+    const markup = renderToStaticMarkup(React.createElement(TicketSummaryField, { value: 'a'.repeat(length), onChange() {} }));
+    assert.match(markup, /maxLength="255"/i);
+    assert.match(markup, /required=""/);
+    assert.ok(markup.includes(`<span>${255 - length}</span>`));
+    assert.match(markup, /characters remaining/);
+    assert.match(markup, /aria-describedby="ticket-summary-count"/);
+  }
+});
+
+test('curated recommendations are unique historical winners with valid ISBNs, original blurbs, and official summary links', () => {
+  const books = recommendations.READING_RECOMMENDATIONS;
+  assert.equal(books.length, 9);
+  assert.equal(new Set(books.map((book) => book.title)).size, books.length);
+  const verifiedWinners = [
+    ['James', 2024, 'Fiction'], ['Interior Chinatown', 2020, 'Fiction'], ['The Friend', 2018, 'Fiction'],
+    ['The Good Lord Bird', 2013, 'Fiction'], ['The Echo Maker', 2006, 'Fiction'],
+    ['Between the World and Me', 2015, 'Nonfiction'], ['Just Kids', 2010, 'Nonfiction'],
+    ['The Poet X', 2018, "Young People's Literature"], ['Brown Girl Dreaming', 2014, "Young People's Literature"],
+  ];
+  assert.deepEqual(books.map((book) => [book.title, book.year, book.category]), verifiedWinners);
+  for (const book of books) {
+    assert.match(book.isbn, /^\d{13}$/);
+    const isbnSum = [...book.isbn].reduce((sum, digit, index) => sum + Number(digit) * (index % 2 ? 3 : 1), 0);
+    assert.equal(isbnSum % 10, 0, book.title);
+    assert.match(book.url, /^https:\/\/www\.nationalbook\.org\/books\/[a-z-]+\/$/);
+    assert.ok(book.summary.length > 30 && book.summary.length < 160);
+    assert.match(recommendations.getBookCoverUrl(book), new RegExp(`/isbn/${book.isbn}-M.jpg\\?default=false$`));
+  }
+});
+
+test('random selection can reach every book and changes only when a new recommendation is picked', () => {
+  const books = recommendations.READING_RECOMMENDATIONS;
+  for (let index = 0; index < books.length; index++) {
+    assert.equal(recommendations.pickReadingRecommendation(() => (index + 0.5) / books.length), books[index]);
+  }
+  assert.equal(recommendations.pickReadingRecommendation(() => 0), books[0]);
+  assert.equal(recommendations.pickReadingRecommendation(() => 0.999999), books.at(-1));
+});
+
+test('thank-you screen includes exact requested copy, linked cover and blurb, warnings, and explicit continuation', () => {
+  const { TicketSubmissionThanks } = load('app/dashboard/ticket-submission-thanks.tsx', {
+    'next/image': { default: (props) => {
+      const imageProps = { ...props };
+      delete imageProps.unoptimized;
+      return React.createElement('img', imageProps);
+    } },
+    '@/lib/reading-recommendations': recommendations,
+  });
+  const book = recommendations.READING_RECOMMENDATIONS[0];
+  const markup = renderToStaticMarkup(React.createElement(TicketSubmissionThanks, {
+    confirmation: { ticketId, book, warning: 'Ticket saved, but the email failed.' }, onContinue() {},
+  }));
+  assert.match(markup, /<dialog/);
+  assert.match(markup, /Thank you!/);
+  assert.match(markup, /For your reading consideration\.\.\./);
+  assert.ok(markup.includes(book.summary));
+  assert.ok(markup.includes(`href="${book.url}"`));
+  assert.match(markup, /James book cover/);
+  assert.match(markup, /width="96" height="144"/);
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /Ticket saved, but the email failed\./);
+  assert.match(markup, /Continue to ticket/);
+});
+
+test('attachment failures after ticket creation are surfaced without losing successful uploads or asking to resubmit', async () => {
+  const { uploadSubmittedTicketFiles } = load('lib/ticket-submission.ts', {
+    '@/lib/client-image': { uploadTooLargeMessage: (file) => `${file.name} is too large.` },
+  });
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) return new Response('', { status: 413 });
+    if (calls.length === 2) throw new Error('Connection lost');
+    return Response.json({ ok: true });
+  };
+  try {
+    const files = ['large.jpg', 'network.jpg', 'good.jpg'].map((name) => ({ file: new File(['photo'], name), uploadId: name }));
+    const warning = await uploadSubmittedTicketFiles(ticketId, files, 'test-token');
+    assert.match(warning, /Your ticket was saved/);
+    assert.match(warning, /large.jpg is too large/);
+    assert.match(warning, /Connection lost/);
+    assert.match(warning, /do not submit another ticket/);
+    assert.equal(calls.length, 3);
+    assert.equal(calls[0].options.headers.Authorization, 'Bearer test-token');
+    assert.equal(calls[2].options.body.get('uploadId'), 'good.jpg');
+    assert.equal(await uploadSubmittedTicketFiles(ticketId, [], 'test-token'), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+function submissionHarness(isTenant, { role = 'owner', summary = '  Leaking kitchen tap  ', uploadWarning = null } = {}) {
+  const file = isTenant ? 'app/dashboard/tenant-portal.tsx' : 'app/dashboard/page.tsx';
+  const source = fs.readFileSync(path.resolve(import.meta.dirname, '..', file), 'utf8');
+  const stateNames = [...source.matchAll(/const \[(\w+),\s*\w+\] = useState/g)].map((match) => match[1]);
+  const state = new Map(Object.entries(isTenant ? {
+    data: {
+      tenant: { id: 'tenant', name: 'Test Tenant', unit_id: 'unit' },
+      unit: { unit_number: '1' }, property: { id: 'property', name: 'Test Property', address: '123 Main St' },
+      unitPhotos: [], improvements: [], primaryStaff: [], secondaryStaff: [], owners: [],
+    },
+    loading: false, showRequestForm: true,
+    requestDraft: { severity: '3', summary, description: 'The tap drips all night.' },
+  } : {
+    session: { ...owner, role }, loading: false, showForm: true,
+    formState: { severity: '3', summary, description: 'The tap drips all night.', email: 'staff@example.test', address: '123 Main St', assigned_to: '', cc_staff_emails: [], property_id: 'property', unit_id: 'unit' },
+  }));
+  const navigations = [];
+  let index = 0;
+  let selections = 0;
+  const SummaryField = () => null;
+  const Thanks = () => null;
+  const exports = load(file, {
+    react: {
+      ...React, useEffect() {}, useMemo: (fn) => fn(), useRef: (value) => ({ current: value }),
+      useState(initial) {
+        const name = stateNames[index++];
+        assert.ok(name, 'Every state hook has a name');
+        if (!state.has(name)) state.set(name, typeof initial === 'function' ? initial() : initial);
+        return [state.get(name), (value) => state.set(name, typeof value === 'function' ? value(state.get(name)) : value)];
+      },
+    },
+    'next/navigation': { useRouter: () => ({ push: (url) => navigations.push(url) }) },
+    '@/lib/auth': { getVisibleTickets: (tickets) => tickets },
+    '@/lib/supabase': { supabase: { auth: { getSession: async () => ({ data: { session: { access_token: 'test-token' } } }) } } },
+    '@/lib/client-image': { prepareFileForUpload: async (file) => file },
+    './breadcrumbs': { Breadcrumbs: () => null },
+    './nav-buttons': { DashboardNavButtons: () => null },
+    './tenant-portal': { TenantPortal: () => null },
+    './avatar-photo-badge': { AvatarPhotoBadge: () => null, hasAvatarPhoto: () => false },
+    '@/lib/tenant-introductions': introductions,
+    './ticket-summary-field': { TicketSummaryField: SummaryField },
+    './ticket-submission-thanks': { TicketSubmissionThanks: Thanks },
+    '@/lib/ticket-summary': summaries,
+    '@/lib/reading-recommendations': { pickReadingRecommendation: () => { selections++; return recommendations.READING_RECOMMENDATIONS[0]; } },
+    '@/lib/ticket-submission': { uploadSubmittedTicketFiles: async () => uploadWarning },
+  });
+  const render = () => {
+    index = 0;
+    return isTenant ? exports.TenantPortal({ session: tenant }) : exports.default();
+  };
+  const find = (tree, predicate) => {
+    if (!React.isValidElement(tree)) return null;
+    if (predicate(tree)) return tree;
+    for (const child of React.Children.toArray(tree.props.children)) {
+      const found = find(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  };
+  return { render, find, state, navigations, SummaryField, Thanks, selections: () => selections };
+}
+
+test('all role submission forms send Summary as title and wait on thank-you before navigating', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const role of ['owner', 'manager', 'maintenance', 'contractor', 'tenant']) {
+      const isTenant = role === 'tenant';
+      const harness = submissionHarness(isTenant, { role, uploadWarning: 'One photo could not be uploaded.' });
+      const posts = [];
+      globalThis.fetch = async (_url, options) => {
+        if (options.method === 'POST') {
+          posts.push(JSON.parse(options.body));
+          return Response.json({ ticket: { id: ticketId }, notificationError: 'Email delivery failed.' });
+        }
+        return Response.json({ tickets: [] });
+      };
+      const tree = harness.render();
+      const field = harness.find(tree, (node) => node.type === harness.SummaryField);
+      assert.ok(field, role);
+      assert.equal(field.props.value, '  Leaking kitchen tap  ');
+      const form = harness.find(tree, (node) => node.type === 'form' && node.props.onSubmit);
+      assert.ok(form, role);
+      await form.props.onSubmit({ preventDefault() {} });
+      assert.equal(posts.length, 1, role);
+      assert.equal(posts[0].title, 'Leaking kitchen tap');
+      assert.match(posts[0].description, /The tap drips all night\./);
+      assert.deepEqual(harness.navigations, []);
+      assert.equal(harness.selections(), 1);
+      const nextTree = harness.render();
+      const thanks = harness.find(nextTree, (node) => node.type === harness.Thanks);
+      assert.ok(thanks, role);
+      assert.equal(thanks.props.confirmation.ticketId, ticketId);
+      assert.match(thanks.props.confirmation.warning, /Email delivery failed/);
+      assert.match(thanks.props.confirmation.warning, /One photo could not be uploaded/);
+      assert.equal(harness.state.get(isTenant ? 'showRequestForm' : 'showForm'), false);
+      assert.equal(harness.state.get(isTenant ? 'requestDraft' : 'formState').summary, '');
+      harness.render();
+      assert.equal(harness.selections(), 1, 'Re-render must not choose another book');
+      thanks.props.onContinue();
+      assert.deepEqual(harness.navigations, [`/dashboard/tickets/${ticketId}`]);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('submission validation and rejected requests keep both forms open without a thank-you or navigation', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const isTenant of [false, true]) {
+      for (const summary of ['', 'x'.repeat(256), 'Valid summary']) {
+        let requests = 0;
+        globalThis.fetch = async () => { requests++; return Response.json({ error: 'Submission was rejected.' }, { status: 400 }); };
+        const harness = submissionHarness(isTenant, { summary });
+        const tree = harness.render();
+        const form = harness.find(tree, (node) => node.type === 'form' && node.props.onSubmit);
+        await form.props.onSubmit({ preventDefault() {} });
+        assert.equal(requests, summary === 'Valid summary' ? 1 : 0);
+        assert.equal(harness.state.get(isTenant ? 'showRequestForm' : 'showForm'), true);
+        assert.equal(harness.state.get(isTenant ? 'requestDraft' : 'formState').summary, summary);
+        assert.equal(harness.state.get(isTenant ? 'error' : 'formError'), summary === '' ? 'Summary is required.' : summary.length > 255 ? 'Summary must be 255 characters or fewer.' : 'Submission was rejected.');
+        assert.equal(harness.selections(), 0);
+        assert.deepEqual(harness.navigations, []);
+        assert.equal(harness.find(harness.render(), (node) => node.type === harness.Thanks), null);
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
